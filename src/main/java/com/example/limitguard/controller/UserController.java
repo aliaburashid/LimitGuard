@@ -1,5 +1,6 @@
 package com.example.limitguard.controller;
 
+import com.example.limitguard.dto.LoginResponse;
 import com.example.limitguard.dto.RegisterRequest;
 import com.example.limitguard.dto.RegisterResponse;
 import com.example.limitguard.service.UserService;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import com.example.limitguard.dto.LoginRequest;
+import com.example.limitguard.dto.LoginResponse;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -47,11 +49,22 @@ public class UserController {
 
     @PostMapping("/login")
     // Takes the login JSON and checks the validation rules
-    public ResponseEntity<String> loginUser(@Valid @RequestBody LoginRequest loginDetails) {
+    public ResponseEntity<LoginResponse> loginUser(@Valid @RequestBody LoginRequest loginDetails) {
         // Send the login details to the service
-        String loginResponse = userService.loginUser(loginDetails);
+        LoginResponse loginResponse = userService.loginUser(loginDetails);
         // Return the login response with status 200 OK
         return new ResponseEntity<>(loginResponse, HttpStatus.OK);
+    }
+
+    // Temporary endpoint used to test JWT authentication
+    @GetMapping("/test")
+    public ResponseEntity<String> testJwt() {
+
+        // If we reach here, Spring Security accepted the JWT
+        return new ResponseEntity<>(
+                "JWT authentication successful",
+                HttpStatus.OK
+        );
     }
 
 }

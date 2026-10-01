@@ -1,9 +1,11 @@
 package com.example.limitguard.security;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -20,6 +22,10 @@ import org.springframework.security.web.SecurityFilterChain;
 // Allows us to use annotations such as @PreAuthorize later
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfiguration {
+
+    // Gives Spring Security access to our JWT filter
+    @Autowired
+    private JwtRequestFilter jwtRequestFilter;
 
     // Creates the password encoder that will hash users passwords
     @Bean
@@ -54,6 +60,12 @@ public class SecurityConfiguration {
 
                         // Every other endpoint requires the user to be authenticated
                         .anyRequest().authenticated()
+                )
+
+                // check for a JWT before Springs username/password filter
+                .addFilterBefore(
+                        jwtRequestFilter,
+                        UsernamePasswordAuthenticationFilter.class
                 );
 
         // Builds and returns the security configuration

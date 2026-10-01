@@ -10,6 +10,8 @@ import com.example.limitguard.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.example.limitguard.dto.RegisterResponse;
@@ -21,6 +23,9 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import com.example.limitguard.exception.EmailNotVerifiedException;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import com.example.limitguard.security.JWTUtils;
+import com.example.limitguard.security.MyUserDetails;
+import com.example.limitguard.dto.LoginResponse;
 
 // Class that contains business logic
 // Create and manage an object of this class for me
@@ -50,6 +55,10 @@ public class UserService {
     // Gives the service access to Spring Security's authentication system
     @Autowired
     private AuthenticationManager authenticationManager;
+
+    // Gives this service access to the JWT methods
+    @Autowired
+    private JWTUtils jwtUtils;
 
     //-------------------------------------------------------------------------------------------------
 
@@ -152,7 +161,7 @@ public class UserService {
     }
 
     // Logs a user into LimitGuard
-    public String loginUser(LoginRequest loginDetails) {
+    public LoginResponse loginUser(LoginRequest loginDetails) {
         // Find the user using the email they entered
         User userFound = findUserByEmail(loginDetails.getEmail());
 
@@ -163,13 +172,23 @@ public class UserService {
 
         // Ask Spring Security to check the email and password
         // Basically saying: Spring, here is the email and password the person entered. Please authenticate them.
-        authenticationManager.authenticate(
+        Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         loginDetails.getEmail(),
                         loginDetails.getPassword()
                 )
         );
 
-        return "Login successful";
+        // Store the authenticated user in Spring Security
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        // Get the authenticated user's details
+        MyUserDetails userDetails = (MyUserDetails) authentication.getPrincipal();
+
+        // Generate a JWT token for the logged-in user
+        String jwtToken = jwtUtils.generateJwtToken(userDetails);
+
+        // Return the JWT inside the login response
+        return new LoginResponse(jwtToken);
     }
 }
