@@ -2,6 +2,8 @@ package com.example.limitguard.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -46,7 +48,8 @@ public class SecurityConfiguration {
                         // These endpoints can be accessed without logging in
                         .requestMatchers(
                                 "/api/auth/users/register",
-                                "/api/auth/users/verify-email"
+                                "/api/auth/users/verify-email",
+                                "/api/auth/users/login"
                         ).permitAll()
 
                         // Every other endpoint requires the user to be authenticated
@@ -55,5 +58,13 @@ public class SecurityConfiguration {
 
         // Builds and returns the security configuration
         return http.build();
+    }
+
+    // Creates the AuthenticationManager that handles user authentication
+    // when a user tries to log in
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
+        // Gets Spring Security's configured AuthenticationManager
+        return authConfig.getAuthenticationManager();
     }
 }

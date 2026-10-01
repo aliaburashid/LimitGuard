@@ -1,5 +1,6 @@
 package com.example.limitguard.service;
 
+import com.example.limitguard.dto.LoginRequest;
 import com.example.limitguard.dto.RegisterRequest;
 import com.example.limitguard.model.FinancialInstitution;
 import com.example.limitguard.model.User;
@@ -7,6 +8,8 @@ import com.example.limitguard.model.UserTokenType;
 import com.example.limitguard.repository.FinancialInstitutionRepository;
 import com.example.limitguard.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.example.limitguard.dto.RegisterResponse;
@@ -14,6 +17,8 @@ import com.example.limitguard.exception.EmailAlreadyExistsException;
 import com.example.limitguard.model.UserToken;
 import com.example.limitguard.repository.UserTokenRepository;
 import com.example.limitguard.exception.InvalidTokenException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import com.example.limitguard.exception.EmailNotVerifiedException;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -42,6 +47,9 @@ public class UserService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    // Gives the service access to Spring Security's authentication system
+    @Autowired
+    private AuthenticationManager authenticationManager;
 
     //-------------------------------------------------------------------------------------------------
 
@@ -133,5 +141,35 @@ public class UserService {
         // Save the changes
         userRepository.save(userToVerify);
         userTokenRepository.save(verificationToken);
+    }
+
+    // Finds a user by their email address
+    public User findUserByEmail(String email) {
+        // Search for the user in the database
+        return userRepository.findByEmail(email)
+                // exception from spring security
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+    }
+
+    // Logs a user into LimitGuard
+    public String loginUser(LoginRequest loginDetails) {
+        // Find the user using the email they entered
+        User userFound = findUserByEmail(loginDetails.getEmail());
+
+        // Do not allow the user to log in until their email is verified
+        if (!userFound.isEmailVerified()) {
+            throw new EmailNotVerifiedException("Please verify your email before logging in");
+        }
+
+        // Ask Spring Security to check the email and password
+        // Basically saying: Spring, here is the email and password the person entered. Please authenticate them.
+        authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(
+                        loginDetails.getEmail(),
+                        loginDetails.getPassword()
+                )
+        );
+
+        return "Login successful";
     }
 }

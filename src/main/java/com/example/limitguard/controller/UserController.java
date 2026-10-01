@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import com.example.limitguard.dto.LoginRequest;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -43,4 +44,14 @@ public class UserController {
         // Tell the user that their email was verified successfully
         return new ResponseEntity<>("Email verified successfully", HttpStatus.OK);
     }
+
+    @PostMapping("/login")
+    // Takes the login JSON and checks the validation rules
+    public ResponseEntity<String> loginUser(@Valid @RequestBody LoginRequest loginDetails) {
+        // Send the login details to the service
+        String loginResponse = userService.loginUser(loginDetails);
+        // Return the login response with status 200 OK
+        return new ResponseEntity<>(loginResponse, HttpStatus.OK);
+    }
+
 }
