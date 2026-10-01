@@ -56,15 +56,4 @@ public class UserController {
         return new ResponseEntity<>(loginResponse, HttpStatus.OK);
     }
 
-    // Temporary endpoint used to test JWT authentication
-    @GetMapping("/test")
-    public ResponseEntity<String> testJwt() {
-
-        // If we reach here, Spring Security accepted the JWT
-        return new ResponseEntity<>(
-                "JWT authentication successful",
-                HttpStatus.OK
-        );
-    }
-
 }
