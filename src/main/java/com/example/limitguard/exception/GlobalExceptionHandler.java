@@ -2,12 +2,14 @@ package com.example.limitguard.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 // Handles exceptions from all controllers in the application
@@ -67,5 +69,28 @@ public class GlobalExceptionHandler {
         errorResponse.put("message", "Invalid email or password");
         // Incorrect login details should return 401 Unauthorized
         return new ResponseEntity<>(errorResponse, HttpStatus.UNAUTHORIZED);
+    }
+
+    // Validation annotations in RegisterRequest, such as @NotBlank,@Email, and @NotNull.
+    // When one fails, Spring throws a MethodArgumentNotValidException
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, String>> handleValidationErrors(
+            MethodArgumentNotValidException exception) {
+
+        // Store each invalid field and its error message
+        Map<String, String> errors = new LinkedHashMap<>();
+
+        // Go through all validation errors
+        exception.getBindingResult()
+                .getFieldErrors()
+                .forEach(error ->
+                        errors.put(
+                                error.getField(),
+                                error.getDefaultMessage()
+                        )
+                );
+
+        // Return the validation errors with 400 Bad Request
+        return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
     }
 }

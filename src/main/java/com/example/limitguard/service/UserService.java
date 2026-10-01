@@ -128,14 +128,30 @@ public class UserService {
                 .findByToken(token)
                 .orElseThrow(() -> new InvalidTokenException("Verification token not found"));
 
+        // make sure this token is specifically for email verification
+        if (verificationToken.getTokenType() != UserTokenType.EMAIL_VERIFICATION) {
+            throw new InvalidTokenException(
+                    "Invalid email verification token"
+            );
+        }
+
         // Check if the token has already been used
         if (verificationToken.isUsed()) {
-            throw new InvalidTokenException("Verification token has already been used");
+            throw new InvalidTokenException(
+                    "Verification token has already been used"
+            );
         }
 
         // Check if the token has expired
         if (verificationToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new InvalidTokenException("Verification token has expired");
+            throw new InvalidTokenException(
+                    "Verification token has expired"
+            );
+        }
+
+        // Check if the token has already been used
+        if (verificationToken.isUsed()) {
+            throw new InvalidTokenException("Verification token has already been used");
         }
 
         // Get the user that belongs to this token
