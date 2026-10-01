@@ -3,6 +3,7 @@ package com.example.limitguard.service;
 import com.example.limitguard.dto.RegisterRequest;
 import com.example.limitguard.model.FinancialInstitution;
 import com.example.limitguard.model.User;
+import com.example.limitguard.model.UserTokenType;
 import com.example.limitguard.repository.FinancialInstitutionRepository;
 import com.example.limitguard.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +11,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.example.limitguard.dto.RegisterResponse;
 import com.example.limitguard.exception.EmailAlreadyExistsException;
+import com.example.limitguard.model.UserToken;
+import com.example.limitguard.repository.UserTokenRepository;
+import com.example.limitguard.exception.InvalidTokenException;
+import java.time.LocalDateTime;
+import java.util.UUID;
 
 // Class that contains business logic
 // Create and manage an object of this class for me
@@ -24,9 +30,18 @@ public class UserService {
     @Autowired
     private FinancialInstitutionRepository financialInstitutionRepository;
 
+    // Gives this service access to user tokens in the database
+    @Autowired
+    private UserTokenRepository userTokenRepository;
+
+    // Gives this service access to the email service
+    @Autowired
+    private EmailService emailService;
+
     // Used to hash the user's password before saving it
     @Autowired
     private PasswordEncoder passwordEncoder;
+
 
     //-------------------------------------------------------------------------------------------------
 
@@ -57,6 +72,22 @@ public class UserService {
         newUser.setFinancialInstitution(selectedFinancialInstitution);
         User savedUser = userRepository.save(newUser);
 
+        // Create a new token for email verification
+        UserToken verificationToken = new UserToken();
+        // Generate a random unique difficult-to-guess token
+        verificationToken.setToken(UUID.randomUUID().toString());
+        // This token will be used to verify the user's email
+        verificationToken.setTokenType(UserTokenType.EMAIL_VERIFICATION);
+        // The verification link will expire after 24 hours
+        verificationToken.setExpiresAt(LocalDateTime.now().plusHours(24));
+        // Connect the token to the newly registered user
+        verificationToken.setUser(savedUser);
+        // Save the verification token in the database
+        userTokenRepository.save(verificationToken);
+
+        // send the verification link to the users email
+        emailService.SendVerificationEmail(savedUser.getEmail(), verificationToken.getToken());
+
         // response that will be sent back after registration
         RegisterResponse registerResponse = new RegisterResponse();
 
@@ -69,5 +100,38 @@ public class UserService {
         registerResponse.setEmailVerified(savedUser.isEmailVerified());
 
         return registerResponse;
+    }
+
+
+    // Verifies a users email using their verification token
+    public void verifyEmail(String token) {
+
+        // Find the verification token in the database
+        UserToken verificationToken = userTokenRepository
+                .findByToken(token)
+                .orElseThrow(() -> new InvalidTokenException("Verification token not found"));
+
+        // Check if the token has already been used
+        if (verificationToken.isUsed()) {
+            throw new InvalidTokenException("Verification token has already been used");
+        }
+
+        // Check if the token has expired
+        if (verificationToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new InvalidTokenException("Verification token has expired");
+        }
+
+        // Get the user that belongs to this token
+        User userToVerify = verificationToken.getUser();
+
+        // Mark the users email as verified
+        userToVerify.setEmailVerified(true);
+
+        // Mark the token as used so it cannot be used again
+        verificationToken.setUsed(true);
+
+        // Save the changes
+        userRepository.save(userToVerify);
+        userTokenRepository.save(verificationToken);
     }
 }

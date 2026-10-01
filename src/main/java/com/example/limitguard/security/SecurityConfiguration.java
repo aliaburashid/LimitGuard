@@ -44,7 +44,10 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(auth -> auth
 
                         // These endpoints can be accessed without logging in
-                        .requestMatchers("/api/auth/users/register").permitAll()
+                        .requestMatchers(
+                                "/api/auth/users/register",
+                                "/api/auth/users/verify-email"
+                        ).permitAll()
 
                         // Every other endpoint requires the user to be authenticated
                         .anyRequest().authenticated()

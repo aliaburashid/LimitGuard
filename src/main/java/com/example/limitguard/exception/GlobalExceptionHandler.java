@@ -14,8 +14,7 @@ public class GlobalExceptionHandler {
 
     // If an EmailAlreadyExistsException happens, run this method
     @ExceptionHandler(EmailAlreadyExistsException.class)
-    public ResponseEntity<Map<String, String>> handleEmailAlreadyExists(
-            EmailAlreadyExistsException exception) {
+    public ResponseEntity<Map<String, String>> handleEmailAlreadyExists(EmailAlreadyExistsException exception) {
 
         // Create JSON containing the error response
         Map<String, String> errorResponse = new HashMap<>();
@@ -25,5 +24,20 @@ public class GlobalExceptionHandler {
 
         // Return the error with status 409 CONFLICT
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+
+    //  If an InvalidTokenException happens, run this method
+    @ExceptionHandler(InvalidTokenException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidToken(InvalidTokenException exception) {
+
+        // Create the error response
+        Map<String, String> errorResponse = new HashMap<>();
+
+        // Add the exception message to the response
+        errorResponse.put("message", exception.getMessage());
+
+        // Return the error with status 400 BAD REQUEST
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 }

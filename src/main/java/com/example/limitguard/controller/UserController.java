@@ -5,12 +5,11 @@ import com.example.limitguard.dto.RegisterResponse;
 import com.example.limitguard.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 
 // tells Spring that this class contains API endpoints
@@ -33,5 +32,15 @@ public class UserController {
 
         // Returns the created user with HTTP status 201 CREATED
         return new ResponseEntity<>(newUser, HttpStatus.CREATED);
+    }
+
+
+    // Handles email verification using the token sent to the users email
+    @GetMapping("/verify-email")
+    public ResponseEntity<String> verifyEmail(@RequestParam String token) {
+        // Send the verification token to the service
+        userService.verifyEmail(token);
+        // Tell the user that their email was verified successfully
+        return new ResponseEntity<>("Email verified successfully", HttpStatus.OK);
     }
 }
