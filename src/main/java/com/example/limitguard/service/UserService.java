@@ -26,6 +26,7 @@ import java.util.UUID;
 import com.example.limitguard.security.JWTUtils;
 import com.example.limitguard.security.MyUserDetails;
 import com.example.limitguard.dto.LoginResponse;
+import com.example.limitguard.exception.FinancialInstitutionNotFoundException;
 
 // Class that contains business logic
 // Create and manage an object of this class for me
@@ -74,7 +75,7 @@ public class UserService {
         // Find the financial institution selected during registration
         FinancialInstitution selectedFinancialInstitution = financialInstitutionRepository
                 .findById(registrationDetails.getFinancialInstitutionId())
-                .orElseThrow(() -> new RuntimeException("Financial institution not found"));
+                .orElseThrow(() -> new FinancialInstitutionNotFoundException("Financial institution not found"));
 
         // Create a new user
         User newUser = new User();

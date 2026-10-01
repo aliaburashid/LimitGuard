@@ -93,4 +93,16 @@ public class GlobalExceptionHandler {
         // Return the validation errors with 400 Bad Request
         return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
     }
+
+
+    //  If an FinancialInstitutionNotFoundException happens, run this method
+    @ExceptionHandler(FinancialInstitutionNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleFinancialInstitutionNotFound(
+            FinancialInstitutionNotFoundException exception) {
+        Map<String, String> errorResponse = new HashMap<>();
+        // Add the error message to the response
+        errorResponse.put("message", exception.getMessage());
+        // Return 404 because the financial institution was not found
+        return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+    }
 }
