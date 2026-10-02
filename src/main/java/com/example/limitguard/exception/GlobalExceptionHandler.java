@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.authentication.DisabledException;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -74,22 +75,14 @@ public class GlobalExceptionHandler {
     // Validation annotations in RegisterRequest, such as @NotBlank,@Email, and @NotNull.
     // When one fails, Spring throws a MethodArgumentNotValidException
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, String>> handleValidationErrors(
-            MethodArgumentNotValidException exception) {
-
+    public ResponseEntity<Map<String, String>> handleValidationErrors(MethodArgumentNotValidException exception) {
         // Store each invalid field and its error message
         Map<String, String> errors = new LinkedHashMap<>();
-
         // Go through all validation errors
         exception.getBindingResult()
                 .getFieldErrors()
                 .forEach(error ->
-                        errors.put(
-                                error.getField(),
-                                error.getDefaultMessage()
-                        )
-                );
-
+                        errors.put(error.getField(), error.getDefaultMessage()));
         // Return the validation errors with 400 Bad Request
         return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
     }
@@ -104,5 +97,15 @@ public class GlobalExceptionHandler {
         errorResponse.put("message", exception.getMessage());
         // Return 404 because the financial institution was not found
         return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+    }
+
+    // Handles login attempts from deactivated user accounts
+    @ExceptionHandler(DisabledException.class)
+    public ResponseEntity<Map<String, String>> handleDisabledUser(DisabledException exception) {
+        Map<String, String> errorResponse = new HashMap<>();
+        // Explain why the user cannot log in
+        errorResponse.put("message", "This account has been deactivated");
+        // The account exists but is not allowed to access LimitGuard
+        return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
     }
 }
