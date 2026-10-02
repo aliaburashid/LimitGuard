@@ -1,6 +1,7 @@
 package com.example.limitguard.security;
 
 import com.example.limitguard.model.User;
+import com.example.limitguard.model.UserStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -66,6 +67,7 @@ public class MyUserDetails implements UserDetails {
     // Returns true if the users account is enabled
     @Override
     public boolean isEnabled() {
-        return true;
+        // Only active users are allowed to authenticate
+        return user.getStatus() == UserStatus.ACTIVE;
     }
 }
