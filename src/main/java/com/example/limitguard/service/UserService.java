@@ -26,6 +26,11 @@ import com.example.limitguard.security.JWTUtils;
 import com.example.limitguard.security.MyUserDetails;
 import com.example.limitguard.exception.FinancialInstitutionNotFoundException;
 import com.example.limitguard.exception.IncorrectPasswordException;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 // Class that contains business logic
 // Create and manage an object of this class for me
@@ -310,7 +315,8 @@ public class UserService {
                 user.getLastName(),
                 user.getEmail(),
                 user.getRole(),
-                user.getFinancialInstitution()
+                user.getFinancialInstitution(),
+                user.getProfilePicturePath()
         );
     }
 
@@ -380,7 +386,59 @@ public class UserService {
                 updatedUser.getLastName(),
                 updatedUser.getEmail(),
                 updatedUser.getRole(),
-                updatedUser.getFinancialInstitution()
+                updatedUser.getFinancialInstitution(),
+                user.getProfilePicturePath()
+        );
+    }
+
+    // uploads a profile picture for the currently logged-in user
+    public UserProfileResponse uploadProfilePicture(MultipartFile image) throws IOException {
+        // gets the email of the currently logged-in user from Spring Security
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getName();
+
+        // finds the logged-in user in the database
+        User user = findUserByEmail(email);
+
+        // makes sure an image was actually uploaded
+        if (image.isEmpty()) {
+            throw new IllegalArgumentException("Profile picture cannot be empty");
+        }
+
+        // getting the image filename and storing it in filename
+        String filename = image.getOriginalFilename();
+
+        // choosing where the uploaded profile pictures will be stored
+        Path uploadPath = Paths.get("uploads");
+
+        // if the uploads folder does not exist, create it
+        if (!Files.exists(uploadPath)) {
+            Files.createDirectories(uploadPath);
+        }
+
+        // combines the uploads folder with the image filename
+        // uploads/ + profile.jpg -> uploads/profile.jpg
+        Path filePath = uploadPath.resolve(filename);
+
+        // saves the uploaded image inside the uploads folder
+        Files.write(filePath, image.getBytes());
+
+        // saves the image location in the logged-in users profile
+        user.setProfilePicturePath(filePath.toString());
+
+        // saves the updated user in the database
+        User updatedUser = userRepository.save(user);
+
+        // returns the users updated profile
+        return new UserProfileResponse(
+                updatedUser.getId(),
+                updatedUser.getFirstName(),
+                updatedUser.getLastName(),
+                updatedUser.getEmail(),
+                updatedUser.getRole(),
+                updatedUser.getFinancialInstitution(),
+                user.getProfilePicturePath()
         );
     }
 }

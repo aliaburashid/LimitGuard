@@ -25,4 +25,6 @@ public class UserProfileResponse {
 
     // The financial institution the user belongs to
     private FinancialInstitution financialInstitution;
+
+    private String profilePicturePath;
 }

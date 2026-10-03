@@ -9,7 +9,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 
 // tells Spring that this class contains API endpoints
 @RestController
@@ -99,6 +100,13 @@ public class UserController {
         UserProfileResponse updatedProfile =
                 userService.updateMyProfile(updateProfileRequest);
 
+        return new ResponseEntity<>(updatedProfile, HttpStatus.OK);
+    }
+
+    // uploads or replaces the profile picture of the currently logged-in user
+    @PatchMapping("/profile-picture")
+    public ResponseEntity<UserProfileResponse> uploadProfilePicture(@RequestParam("image") MultipartFile image) throws IOException {
+        UserProfileResponse updatedProfile = userService.uploadProfilePicture(image);
         return new ResponseEntity<>(updatedProfile, HttpStatus.OK);
     }
 }

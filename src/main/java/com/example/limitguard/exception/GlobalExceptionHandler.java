@@ -12,6 +12,7 @@ import org.springframework.security.authentication.DisabledException;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.io.IOException;
 
 // Handles exceptions from all controllers in the application
 @RestControllerAdvice
@@ -109,7 +110,7 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
     }
 
-    // Handles when the current password entered is incorrect
+    // handles when the current password entered is incorrect
     @ExceptionHandler(IncorrectPasswordException.class)
     public ResponseEntity<Map<String, String>> handleIncorrectPassword(
             IncorrectPasswordException exception) {
@@ -122,7 +123,7 @@ public class GlobalExceptionHandler {
     }
 
 
-    // Handles invalid profile update information
+    // handles invalid profile update information
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgument(
             IllegalArgumentException exception) {
@@ -132,5 +133,15 @@ public class GlobalExceptionHandler {
         error.put("message", exception.getMessage());
 
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    // handles errors that happen while saving an uploaded file
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<Map<String, String>> handleIOException(IOException exception) {
+
+        Map<String, String> error = new HashMap<>();
+        error.put("message", "Unable to save profile picture");
+
+        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }
