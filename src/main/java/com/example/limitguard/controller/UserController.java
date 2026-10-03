@@ -1,8 +1,6 @@
 package com.example.limitguard.controller;
 
-import com.example.limitguard.dto.LoginResponse;
-import com.example.limitguard.dto.RegisterRequest;
-import com.example.limitguard.dto.RegisterResponse;
+import com.example.limitguard.dto.*;
 import com.example.limitguard.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,10 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import com.example.limitguard.dto.LoginRequest;
 import org.springframework.web.bind.annotation.*;
-import com.example.limitguard.dto.ForgotPasswordRequest;
-import com.example.limitguard.dto.ResetPasswordRequest;
 
 
 // tells Spring that this class contains API endpoints
@@ -74,4 +69,11 @@ public class UserController {
         return new ResponseEntity<>("Password reset successfully", HttpStatus.OK);
     }
 
+    // allows the currently logged-in user to change their password
+    @PatchMapping ("/change-password")
+    public ResponseEntity<String> changePassword(@Valid @RequestBody ChangePasswordRequest changePasswordRequest) {
+        // sends the password details to the service
+        userService.changePassword(changePasswordRequest);
+        return ResponseEntity.ok("Password changed successfully");
+    }
 }

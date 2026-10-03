@@ -29,6 +29,8 @@ import com.example.limitguard.dto.LoginResponse;
 import com.example.limitguard.exception.FinancialInstitutionNotFoundException;
 import com.example.limitguard.dto.ForgotPasswordRequest;
 import com.example.limitguard.dto.ResetPasswordRequest;
+import com.example.limitguard.dto.ChangePasswordRequest;
+import com.example.limitguard.exception.IncorrectPasswordException;
 
 // Class that contains business logic
 // Create and manage an object of this class for me
@@ -270,5 +272,27 @@ public class UserService {
 
         // Return the JWT inside the login response
         return new LoginResponse(jwtToken);
+    }
+
+
+    // changes the password for the currently logged-in user
+    public void changePassword(ChangePasswordRequest changePasswordRequest) {
+        // gets the email of the user currently logged in from Spring Security
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        // finds the logged-in user in the database
+        User user = findUserByEmail(email);
+
+        // checks if the current password entered matches the stored hashed password
+        if (!passwordEncoder.matches(changePasswordRequest.getCurrentPassword(), user.getPassword())) {
+            throw new IncorrectPasswordException("Current password is incorrect");
+        }
+
+        // hashes the new password before saving it
+        String hashedPassword = passwordEncoder.encode(changePasswordRequest.getNewPassword());
+        user.setPassword(hashedPassword);
+
+        // saves the user with the new password
+        userRepository.save(user);
     }
 }
