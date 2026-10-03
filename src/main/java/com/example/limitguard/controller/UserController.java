@@ -70,10 +70,35 @@ public class UserController {
     }
 
     // allows the currently logged-in user to change their password
-    @PatchMapping ("/change-password")
-    public ResponseEntity<String> changePassword(@Valid @RequestBody ChangePasswordRequest changePasswordRequest) {
+    @PatchMapping("/change-password")
+    public ResponseEntity<String> changePassword(
+            @Valid @RequestBody ChangePasswordRequest changePasswordRequest) {
+
         // sends the password details to the service
         userService.changePassword(changePasswordRequest);
-        return ResponseEntity.ok("Password changed successfully");
+
+        return new ResponseEntity<>("Password changed successfully", HttpStatus.OK);
+    }
+
+
+    // allows the currently logged-in user to view their own profile
+    @GetMapping("/profile")
+    public ResponseEntity<UserProfileResponse> getMyProfile() {
+        // gets the logged-in users profile from the service
+        UserProfileResponse userProfile = userService.getMyProfile();
+        return new ResponseEntity<>(userProfile, HttpStatus.OK);
+    }
+
+
+    // allows the currently logged-in user to update their own profile
+    @PatchMapping("/profile")
+    public ResponseEntity<UserProfileResponse> updateMyProfile(
+            @Valid @RequestBody UpdateProfileRequest updateProfileRequest) {
+
+        // sends the updated profile information to the service
+        UserProfileResponse updatedProfile =
+                userService.updateMyProfile(updateProfileRequest);
+
+        return new ResponseEntity<>(updatedProfile, HttpStatus.OK);
     }
 }

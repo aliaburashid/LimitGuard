@@ -109,11 +109,28 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
     }
 
+    // Handles when the current password entered is incorrect
     @ExceptionHandler(IncorrectPasswordException.class)
-    public ResponseEntity<Map<String, String>> handleIncorrectPassword(IncorrectPasswordException exception) {
+    public ResponseEntity<Map<String, String>> handleIncorrectPassword(
+            IncorrectPasswordException exception) {
+
         // stores the error message that will be returned to the user
         Map<String, String> error = new HashMap<>();
         error.put("message", exception.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+
+    // Handles invalid profile update information
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalArgument(
+            IllegalArgumentException exception) {
+
+        // stores the error message that will be returned to the user
+        Map<String, String> error = new HashMap<>();
+        error.put("message", exception.getMessage());
+
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 }

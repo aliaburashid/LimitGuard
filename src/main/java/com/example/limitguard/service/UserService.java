@@ -1,7 +1,6 @@
 package com.example.limitguard.service;
 
-import com.example.limitguard.dto.LoginRequest;
-import com.example.limitguard.dto.RegisterRequest;
+import com.example.limitguard.dto.*;
 import com.example.limitguard.model.FinancialInstitution;
 import com.example.limitguard.model.User;
 import com.example.limitguard.model.UserTokenType;
@@ -14,7 +13,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import com.example.limitguard.dto.RegisterResponse;
 import com.example.limitguard.exception.EmailAlreadyExistsException;
 import com.example.limitguard.model.UserToken;
 import com.example.limitguard.repository.UserTokenRepository;
@@ -22,14 +20,11 @@ import com.example.limitguard.exception.InvalidTokenException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import com.example.limitguard.exception.EmailNotVerifiedException;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 import com.example.limitguard.security.JWTUtils;
 import com.example.limitguard.security.MyUserDetails;
-import com.example.limitguard.dto.LoginResponse;
 import com.example.limitguard.exception.FinancialInstitutionNotFoundException;
-import com.example.limitguard.dto.ForgotPasswordRequest;
-import com.example.limitguard.dto.ResetPasswordRequest;
-import com.example.limitguard.dto.ChangePasswordRequest;
 import com.example.limitguard.exception.IncorrectPasswordException;
 
 // Class that contains business logic
@@ -274,9 +269,9 @@ public class UserService {
         return new LoginResponse(jwtToken);
     }
 
-
     // changes the password for the currently logged-in user
     public void changePassword(ChangePasswordRequest changePasswordRequest) {
+
         // gets the email of the user currently logged in from Spring Security
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
 
@@ -294,5 +289,98 @@ public class UserService {
 
         // saves the user with the new password
         userRepository.save(user);
+    }
+
+
+    // gets the profile of the currently logged-in user
+    public UserProfileResponse getMyProfile() {
+
+        // gets the email of the currently logged-in user from Spring Security
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getName();
+
+        // finds that user in the database
+        User user = findUserByEmail(email);
+
+        // returns only the information that should be shown in the profile
+        return new UserProfileResponse(
+                user.getId(),
+                user.getFirstName(),
+                user.getLastName(),
+                user.getEmail(),
+                user.getRole(),
+                user.getFinancialInstitution()
+        );
+    }
+
+
+    // updates the profile of the currently logged-in user
+    public UserProfileResponse updateMyProfile(UpdateProfileRequest updateProfileRequest) {
+
+        // gets the email of the currently logged-in user from Spring Security
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getName();
+
+        // finds that user in the database
+        User user = findUserByEmail(email);
+
+        // checks that the first name is not blank if the user wants to update it
+        if (updateProfileRequest.getFirstName() != null) {
+
+            if (updateProfileRequest.getFirstName().isBlank()) {
+                throw new IllegalArgumentException("First name cannot be blank");
+            }
+
+            user.setFirstName(updateProfileRequest.getFirstName());
+        }
+
+        // checks that the last name is not blank if the user wants to update it
+        if (updateProfileRequest.getLastName() != null) {
+
+            if (updateProfileRequest.getLastName().isBlank()) {
+                throw new IllegalArgumentException("Last name cannot be blank");
+            }
+
+            user.setLastName(updateProfileRequest.getLastName());
+        }
+
+        // updates the email only if the user provided a new one
+        if (updateProfileRequest.getEmail() != null) {
+
+            // makes sure the email is not blank
+            if (updateProfileRequest.getEmail().isBlank()) {
+                throw new IllegalArgumentException("Email cannot be blank");
+            }
+
+            // only checks for duplicates if the user is actually changing their email
+            if (!updateProfileRequest.getEmail().equalsIgnoreCase(user.getEmail())) {
+
+                // is there already a user with this new email?
+                Optional<User> existingUser =
+                        userRepository.findByEmail(updateProfileRequest.getEmail());
+
+                // prevents the user from using an email that belongs to another account
+                if (existingUser.isPresent()) {
+                    throw new EmailAlreadyExistsException("Email already exists");
+                }
+
+                user.setEmail(updateProfileRequest.getEmail());
+            }
+        }
+
+        // saves the updated information
+        User updatedUser = userRepository.save(user);
+
+        // returns the updated profile
+        return new UserProfileResponse(
+                updatedUser.getId(),
+                updatedUser.getFirstName(),
+                updatedUser.getLastName(),
+                updatedUser.getEmail(),
+                updatedUser.getRole(),
+                updatedUser.getFinancialInstitution()
+        );
     }
 }
