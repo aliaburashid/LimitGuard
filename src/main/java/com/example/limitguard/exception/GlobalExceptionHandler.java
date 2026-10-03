@@ -108,4 +108,16 @@ public class GlobalExceptionHandler {
         // The account exists but is not allowed to access LimitGuard
         return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
     }
+
+    // Handles invalid profile update information
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException exception) {
+
+        // stores the error message that will be returned to the user
+        Map<String, String> error = new HashMap<>();
+        error.put("message", exception.getMessage());
+
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
 }

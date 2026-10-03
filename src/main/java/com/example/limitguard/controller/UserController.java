@@ -1,8 +1,6 @@
 package com.example.limitguard.controller;
 
-import com.example.limitguard.dto.LoginResponse;
-import com.example.limitguard.dto.RegisterRequest;
-import com.example.limitguard.dto.RegisterResponse;
+import com.example.limitguard.dto.*;
 import com.example.limitguard.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,10 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import com.example.limitguard.dto.LoginRequest;
 import org.springframework.web.bind.annotation.*;
-import com.example.limitguard.dto.ForgotPasswordRequest;
-import com.example.limitguard.dto.ResetPasswordRequest;
 
 
 // tells Spring that this class contains API endpoints
@@ -72,6 +67,22 @@ public class UserController {
         // validate the token and update the password
         userService.resetPassword(resetPasswordDetails);
         return new ResponseEntity<>("Password reset successfully", HttpStatus.OK);
+    }
+
+    // allows the currently logged-in user to view their own profile
+    @GetMapping("/profile")
+    public ResponseEntity<UserProfileResponse> getMyProfile()  {
+        // gets the logged-in users profile from the service
+        UserProfileResponse userProfile = userService.getMyProfile();
+        return new ResponseEntity<>(userProfile, HttpStatus.OK);
+    }
+
+    // allows the currently logged-in user to update their own profile
+    @PatchMapping("/profile")
+    public ResponseEntity<UserProfileResponse> updateMyProfile(@Valid @RequestBody UpdateProfileRequest updateProfileRequest) {
+        // sends the updated profile information to the service
+        UserProfileResponse updatedProfile = userService.updateMyProfile(updateProfileRequest);
+        return new ResponseEntity<>(updatedProfile, HttpStatus.OK);
     }
 
 }
