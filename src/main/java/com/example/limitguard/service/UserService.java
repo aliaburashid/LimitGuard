@@ -27,6 +27,8 @@ import com.example.limitguard.security.JWTUtils;
 import com.example.limitguard.security.MyUserDetails;
 import com.example.limitguard.dto.LoginResponse;
 import com.example.limitguard.exception.FinancialInstitutionNotFoundException;
+import com.example.limitguard.dto.ForgotPasswordRequest;
+import com.example.limitguard.dto.ResetPasswordRequest;
 
 // Class that contains business logic
 // Create and manage an object of this class for me
@@ -167,6 +169,67 @@ public class UserService {
         // Save the changes
         userRepository.save(userToVerify);
         userTokenRepository.save(verificationToken);
+    }
+
+    // creates a password-reset request for a user
+    public void forgotPassword(ForgotPasswordRequest forgotPasswordDetails) {
+
+        // find the account using the submitted email
+        User userFound = findUserByEmail(forgotPasswordDetails.getEmail());
+        // create a new password-reset token
+        UserToken passwordResetToken = new UserToken();
+        // generate a random unique token
+        passwordResetToken.setToken(UUID.randomUUID().toString());
+        // mark this token as a password-reset token
+        passwordResetToken.setTokenType(UserTokenType.PASSWORD_RESET);
+        // the reset token expires after 1 hour
+        passwordResetToken.setExpiresAt(LocalDateTime.now().plusHours(1));
+        // connect the token to the user
+        passwordResetToken.setUser(userFound);
+        // save the token
+        userTokenRepository.save(passwordResetToken);
+
+        // send the password-reset email
+        emailService.SendPasswordResetEmail(
+                userFound.getEmail(),
+                passwordResetToken.getToken()
+        );
+    }
+
+
+    // resets a users password using a valid password-reset token
+    public void resetPassword(ResetPasswordRequest resetPasswordDetails) {
+
+        // find the password-reset token
+        UserToken passwordResetToken = userTokenRepository
+                .findByToken(resetPasswordDetails.getToken())
+                .orElseThrow(() ->
+                        new InvalidTokenException("Password reset token not found"));
+
+        // make sure this token is specifically for password resets
+        if (passwordResetToken.getTokenType() != UserTokenType.PASSWORD_RESET) {
+            throw new InvalidTokenException("Invalid password reset token");
+        }
+
+        // do not allow a token to be used more than once
+        if (passwordResetToken.isUsed()) {
+            throw new InvalidTokenException("Password reset token has already been used");
+        }
+
+        // do not allow an expired token
+        if (passwordResetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new InvalidTokenException("Password reset token has expired");
+        }
+
+        // get the user that belongs to the reset token
+        User userToUpdate = passwordResetToken.getUser();
+        // hash the new password before storing it
+        userToUpdate.setPassword(passwordEncoder.encode(resetPasswordDetails.getNewPassword()));
+        // mark the token as used
+        passwordResetToken.setUsed(true);
+        // save the new password and token status
+        userRepository.save(userToUpdate);
+        userTokenRepository.save(passwordResetToken);
     }
 
     // Finds a user by their email address

@@ -11,8 +11,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import com.example.limitguard.dto.LoginRequest;
-import com.example.limitguard.dto.LoginResponse;
 import org.springframework.web.bind.annotation.*;
+import com.example.limitguard.dto.ForgotPasswordRequest;
+import com.example.limitguard.dto.ResetPasswordRequest;
 
 
 // tells Spring that this class contains API endpoints
@@ -54,6 +55,23 @@ public class UserController {
         LoginResponse loginResponse = userService.loginUser(loginDetails);
         // Return the login response with status 200 OK
         return new ResponseEntity<>(loginResponse, HttpStatus.OK);
+    }
+
+    // handles password-reset requests
+    @PostMapping("/forgot-password")
+    public ResponseEntity<String> forgotPassword(@Valid @RequestBody ForgotPasswordRequest forgotPasswordDetails) {
+        // create and email a password-reset token
+        userService.forgotPassword(forgotPasswordDetails);
+        return new ResponseEntity<>("Password reset email sent", HttpStatus.OK);
+    }
+
+
+    // handles setting a new password using a reset token
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPassword(@Valid @RequestBody ResetPasswordRequest resetPasswordDetails) {
+        // validate the token and update the password
+        userService.resetPassword(resetPasswordDetails);
+        return new ResponseEntity<>("Password reset successfully", HttpStatus.OK);
     }
 
 }
