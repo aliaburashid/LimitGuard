@@ -4,6 +4,7 @@ import com.example.limitguard.dto.*;
 import com.example.limitguard.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.http.HttpStatus;
@@ -108,5 +109,22 @@ public class UserController {
     public ResponseEntity<UserProfileResponse> uploadProfilePicture(@RequestParam("image") MultipartFile image) throws IOException {
         UserProfileResponse updatedProfile = userService.uploadProfilePicture(image);
         return new ResponseEntity<>(updatedProfile, HttpStatus.OK);
+    }
+
+
+    @PatchMapping("/{userId}/deactivate")
+    // a security check that happens before the method is allowed to run
+    // it checks if currently logged-in user have the ADMIN role?
+    // If yes, Spring allows Java to enter deactivateUser()
+    // If no, Spring stops there.
+    @PreAuthorize("hasRole('ADMIN')")
+    // allows an admin to deactivate another user account
+    public ResponseEntity<String> deactivateUser(@PathVariable Long userId,
+            @Valid @RequestBody DeactivateUserRequest deactivateUserRequest) {
+
+        // sends the user id and deactivation reason to the service
+        userService.deactivateUser(userId, deactivateUserRequest);
+        // returns a success message after the user is deactivated
+        return new ResponseEntity<>("User deactivated successfully", HttpStatus.OK);
     }
 }

@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.authentication.DisabledException;
+import org.springframework.mail.MailSendException;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -143,5 +144,25 @@ public class GlobalExceptionHandler {
         error.put("message", "Unable to save profile picture");
 
         return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    // handles errors that happen while sending an email
+    @ExceptionHandler(MailSendException.class)
+    public ResponseEntity<Map<String, String>> handleMailSendException(MailSendException exception) {
+        Map<String, String> error = new HashMap<>();
+        error.put("message", "Unable to send email");
+        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    // handles when a requested user does not exist
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleUserNotFound(UserNotFoundException exception) {
+
+        // stores the error message that will be returned to the user
+        Map<String, String> error = new HashMap<>();
+        error.put("message", exception.getMessage());
+
+        // returns 404 because the requested user was not found
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
     }
 }

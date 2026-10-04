@@ -1,6 +1,7 @@
 package com.example.limitguard.service;
 
 import com.example.limitguard.dto.*;
+import com.example.limitguard.exception.*;
 import com.example.limitguard.model.FinancialInstitution;
 import com.example.limitguard.model.User;
 import com.example.limitguard.model.UserTokenType;
@@ -13,24 +14,25 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import com.example.limitguard.exception.EmailAlreadyExistsException;
 import com.example.limitguard.model.UserToken;
 import com.example.limitguard.repository.UserTokenRepository;
-import com.example.limitguard.exception.InvalidTokenException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import com.example.limitguard.exception.EmailNotVerifiedException;
+
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 import com.example.limitguard.security.JWTUtils;
 import com.example.limitguard.security.MyUserDetails;
-import com.example.limitguard.exception.FinancialInstitutionNotFoundException;
-import com.example.limitguard.exception.IncorrectPasswordException;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import com.example.limitguard.repository.AuditLogRepository;
+import com.example.limitguard.model.AuditLog;
+import com.example.limitguard.model.UserStatus;
+import com.example.limitguard.dto.DeactivateUserRequest;
 
 // Class that contains business logic
 // Create and manage an object of this class for me
@@ -65,8 +67,14 @@ public class UserService {
     @Autowired
     private JWTUtils jwtUtils;
 
+    // Gives this service access to AuditLogRepository
+    @Autowired
+    private AuditLogRepository auditLogRepository;
+
     //-------------------------------------------------------------------------------------------------
 
+    // makes sure registration is rolled back if part of the process fails
+    @Transactional
     // Registers a new user in LimitGuard
     public RegisterResponse registerUser(RegisterRequest registrationDetails) {
 
@@ -92,6 +100,7 @@ public class UserService {
 
         // Connect the new user to their financial institution
         newUser.setFinancialInstitution(selectedFinancialInstitution);
+        // User saved temporarily
         User savedUser = userRepository.save(newUser);
 
         // Create a new token for email verification
@@ -104,9 +113,10 @@ public class UserService {
         verificationToken.setExpiresAt(LocalDateTime.now().plusHours(24));
         // Connect the token to the newly registered user
         verificationToken.setUser(savedUser);
-        // Save the verification token in the database
+        // Save the verification token in the database temporarily
         userTokenRepository.save(verificationToken);
 
+        // runtime exception happens here
         // send the verification link to the users email
         emailService.SendVerificationEmail(savedUser.getEmail(), verificationToken.getToken());
 
@@ -440,5 +450,48 @@ public class UserService {
                 updatedUser.getFinancialInstitution(),
                 user.getProfilePicturePath()
         );
+    }
+
+
+
+    // makes sure the user deactivation and audit log are saved together
+    @Transactional
+    // allows an admin to deactivate another user account
+    public void deactivateUser(Long userId, DeactivateUserRequest deactivateUserRequest) {
+        // gets the currently logged-in admins email
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getName();
+
+        // finds the admin in the database
+        User admin = findUserByEmail(email);
+
+        // finds the user that the admin wants to deactivate
+        // if the user does not exist, throw UserNotFoundException
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        // prevents an admin from deactivating their own account
+        if (admin.getId().equals(user.getId())) {
+            throw new IllegalArgumentException("Admin cannot deactivate their own account");
+        }
+
+        // changes the account status instead of deleting the user
+        user.setStatus(UserStatus.DEACTIVATED);
+
+        // saves the updated user
+        userRepository.save(user);
+
+        // creates an audit record for the deactivation
+        AuditLog auditLog = new AuditLog();
+
+        auditLog.setAction("USER_DEACTIVATED");
+        auditLog.setEntityType("USER");
+        auditLog.setEntityId(user.getId());
+        auditLog.setDetails(deactivateUserRequest.getReason());
+        auditLog.setActor(admin);
+
+        // saves the audit record
+        auditLogRepository.save(auditLog);
     }
 }

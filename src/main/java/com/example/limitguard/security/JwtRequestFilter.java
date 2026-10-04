@@ -68,27 +68,29 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 String email = jwtUtils.getUserNameFromJwtToken(jwt);
 
                 // Load the user from the database using their email
-                UserDetails userDetails =
-                        myUserDetailsService.loadUserByUsername(email);
+                UserDetails userDetails = myUserDetailsService.loadUserByUsername(email);
 
-                // Create an authentication object for the logged-in user
-                // this also includes the users roles/authorities
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                userDetails,
-                                null,
-                                userDetails.getAuthorities()
-                        );
+                // Only authenticate the user if their account is still active
+                if (userDetails.isEnabled()) {
+                    // Create an authentication object for the logged-in user
+                    // this also includes the users roles/authorities
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails,
+                                    null,
+                                    userDetails.getAuthorities()
+                            );
 
-                // add information about the current HTTP request
-                authentication.setDetails(
-                        new WebAuthenticationDetailsSource()
-                                .buildDetails(request)
-                );
+                    // add information about the current HTTP request
+                    authentication.setDetails(
+                            new WebAuthenticationDetailsSource()
+                                    .buildDetails(request)
+                    );
 
-                // tell Spring Security that this user is authenticated
-                SecurityContextHolder.getContext()
-                        .setAuthentication(authentication);
+                    // tell Spring Security that this user is authenticated
+                    SecurityContextHolder.getContext()
+                            .setAuthentication(authentication);
+                }
             }
 
         } catch (Exception exception) {
