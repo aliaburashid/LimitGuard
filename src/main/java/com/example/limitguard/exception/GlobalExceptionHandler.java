@@ -165,4 +165,16 @@ public class GlobalExceptionHandler {
         // returns 404 because the requested user was not found
         return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
     }
+
+    // handles when a financial institution name already exists
+    @ExceptionHandler(FinancialInstitutionAlreadyExistsException.class)
+    public ResponseEntity<Map<String, String>> handleFinancialInstitutionAlreadyExists(
+            FinancialInstitutionAlreadyExistsException exception) {
+        // create the error response
+        Map<String, String> errorResponse = new HashMap<>();
+        // add the error message to the response
+        errorResponse.put("message", exception.getMessage());
+        // return 409 because the financial institution name already exists
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
 }
