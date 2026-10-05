@@ -2,6 +2,7 @@ package com.example.limitguard.service;
 
 import com.example.limitguard.dto.CounterpartyRequest;
 import com.example.limitguard.dto.CounterpartyResponse;
+import com.example.limitguard.dto.CounterpartyStatusRequest;
 import com.example.limitguard.enums.CounterpartyStatus;
 import com.example.limitguard.exception.CounterpartyAlreadyExistsException;
 import com.example.limitguard.model.AuditLog;
@@ -185,5 +186,49 @@ public class CounterpartyService {
                 updatedCounterparty.getUpdatedAt()
         );
     }
+
+    // updates counterparty status
+    @Transactional
+    public CounterpartyResponse updateCounterpartyStatus(Long counterpartyId, CounterpartyStatusRequest statusRequest) {
+
+        // finds the counterparty by id
+        Counterparty counterparty = counterpartyRepository.findById(counterpartyId)
+                .orElseThrow(() ->
+                        new CounterpartyNotFoundException("Counterparty not found"));
+
+        // saves the current status before changing it
+        // so we can record the old and new status in the audit log
+        CounterpartyStatus oldStatus = counterparty.getStatus();
+
+        // changes the counterparty status
+        counterparty.setStatus(statusRequest.getStatus());
+
+        // saves the status change to PostgreSQL
+        Counterparty updatedCounterparty = counterpartyRepository.save(counterparty);
+
+        // gets the currently logged-in Risk Officer
+        User currentUser = getCurrentLoggedInUser();
+
+        // records the status change
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction("COUNTERPARTY_STATUS_UPDATED");
+        auditLog.setEntityType("COUNTERPARTY");
+        auditLog.setEntityId(updatedCounterparty.getId());
+        auditLog.setDetails("Counterparty status changed from " + oldStatus + " to " + updatedCounterparty.getStatus());
+        auditLog.setActor(currentUser);
+
+        auditLogRepository.save(auditLog);
+
+        // converts the Counterparty entity into the response DTO
+        return new CounterpartyResponse(
+                updatedCounterparty.getId(),
+                updatedCounterparty.getName(),
+                updatedCounterparty.getStatus(),
+                updatedCounterparty.getCreatedAt(),
+                updatedCounterparty.getUpdatedAt()
+        );
+    }
+
+
 }
 

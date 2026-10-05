@@ -2,6 +2,7 @@ package com.example.limitguard.controller;
 
 import com.example.limitguard.dto.CounterpartyRequest;
 import com.example.limitguard.dto.CounterpartyResponse;
+import com.example.limitguard.dto.CounterpartyStatusRequest;
 import com.example.limitguard.service.CounterpartyService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,6 +73,20 @@ public class CounterpartyController {
                 counterpartyService.updateCounterparty(counterpartyId, counterpartyRequest);
 
         // returns the updated counterparty with 200 OK
+        return new ResponseEntity<>(counterpartyResponse, HttpStatus.OK);
+    }
+
+    @PatchMapping("/{counterpartyId}/status")
+    @PreAuthorize("hasRole('RISK_OFFICER')")
+    public ResponseEntity<CounterpartyResponse> updateCounterpartyStatus(
+            @PathVariable Long counterpartyId,
+            @Valid @RequestBody CounterpartyStatusRequest statusRequest) {
+
+        // sends the counterparty id and requested status to the service
+        CounterpartyResponse counterpartyResponse =
+                counterpartyService.updateCounterpartyStatus(counterpartyId, statusRequest);
+
+        // returns the counterparty with its updated status
         return new ResponseEntity<>(counterpartyResponse, HttpStatus.OK);
     }
 
