@@ -206,4 +206,12 @@ public class GlobalExceptionHandler {
             CreditLimitAlreadyExistsException exception) {
         return new ResponseEntity<>(Map.of("message", exception.getMessage()), HttpStatus.CONFLICT);
     }
+
+    // handles when the credit limit is not found
+    @ExceptionHandler(CreditLimitNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleCreditLimitNotFoundException(
+            CreditLimitNotFoundException exception) {
+        return new ResponseEntity<>(Map.of("message", exception.getMessage()), HttpStatus.NOT_FOUND
+        );
+    }
 }

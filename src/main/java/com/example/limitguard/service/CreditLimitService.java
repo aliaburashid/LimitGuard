@@ -19,6 +19,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.limitguard.dto.CreditExposureResponse;
+import com.example.limitguard.exception.CreditLimitNotFoundException;
 
 import java.math.BigDecimal;
 
@@ -115,6 +117,31 @@ public class CreditLimitService {
                 savedCreditLimit.getCounterparty().getId(),
                 savedCreditLimit.getCreatedAt(),
                 savedCreditLimit.getUpdatedAt()
+        );
+    }
+
+    // gets the credit exposure and available headroom
+    public CreditExposureResponse getCreditExposure(Long creditLimitId) {
+
+        // checks that the credit limit exists
+        CreditLimit creditLimit = creditLimitRepository
+                .findById(creditLimitId)
+                .orElseThrow(() ->
+                        new CreditLimitNotFoundException("Credit limit not found"));
+
+        // calculates the remaining available credit
+        BigDecimal availableHeadroom = creditLimit.getLimitAmount()
+                        .subtract(creditLimit.getUsedAmount())
+                        .subtract(creditLimit.getReservedAmount());
+
+        // returns the exposure information
+        return new CreditExposureResponse(
+                creditLimit.getId(),
+                creditLimit.getCounterparty().getId(),
+                creditLimit.getLimitAmount(),
+                creditLimit.getUsedAmount(),
+                creditLimit.getReservedAmount(),
+                availableHeadroom
         );
     }
 }
