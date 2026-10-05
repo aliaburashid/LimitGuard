@@ -10,7 +10,7 @@ import com.example.limitguard.model.User;
 import com.example.limitguard.repository.AuditLogRepository;
 import com.example.limitguard.repository.CounterpartyRepository;
 import com.example.limitguard.security.MyUserDetails;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -137,6 +137,52 @@ public class CounterpartyService {
                         counterparty.getCreatedAt(),
                         counterparty.getUpdatedAt()
                 )
+        );
+    }
+
+
+    // updates counterparty
+    @Transactional
+    public CounterpartyResponse updateCounterparty(Long counterpartyId, CounterpartyRequest counterpartyRequest) {
+
+        // finds the counterparty by id
+        Counterparty counterparty = counterpartyRepository.findById(counterpartyId)
+                .orElseThrow(() ->
+                        new CounterpartyNotFoundException("Counterparty not found"));
+
+        // checks if another counterparty already has the requested name
+        // IdNot excludes the counterparty that we are currently updating
+        if (counterpartyRepository.existsByNameAndIdNot(counterpartyRequest.getName(), counterpartyId)) {
+            throw new CounterpartyAlreadyExistsException("Counterparty already exists");
+        }
+
+        // updates the permitted counterparty information
+        // status is NOT changed here because status management belongs to LG-25
+        counterparty.setName(counterpartyRequest.getName());
+
+        // saves the changes to PostgreSQL
+        Counterparty updatedCounterparty = counterpartyRepository.save(counterparty);
+
+        // gets the currently logged-in Risk Officer
+        User currentUser = getCurrentLoggedInUser();
+
+        // records who updated the counterparty
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction("COUNTERPARTY_UPDATED");
+        auditLog.setEntityType("COUNTERPARTY");
+        auditLog.setEntityId(updatedCounterparty.getId());
+        auditLog.setDetails("Updated counterparty: " + updatedCounterparty.getName());
+        auditLog.setActor(currentUser);
+
+        auditLogRepository.save(auditLog);
+
+        // converts the Counterparty entity into the response DTO
+        return new CounterpartyResponse(
+                updatedCounterparty.getId(),
+                updatedCounterparty.getName(),
+                updatedCounterparty.getStatus(),
+                updatedCounterparty.getCreatedAt(),
+                updatedCounterparty.getUpdatedAt()
         );
     }
 }

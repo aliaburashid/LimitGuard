@@ -61,4 +61,18 @@ public class CounterpartyController {
         return new ResponseEntity<>(counterparties, HttpStatus.OK);
     }
 
+    @PutMapping("/{counterpartyId}")
+    @PreAuthorize("hasRole('RISK_OFFICER')")
+    public ResponseEntity<CounterpartyResponse> updateCounterparty(
+            @PathVariable Long counterpartyId,
+            @Valid @RequestBody CounterpartyRequest counterpartyRequest) {
+
+        // sends the counterparty ID and new information to the service
+        CounterpartyResponse counterpartyResponse =
+                counterpartyService.updateCounterparty(counterpartyId, counterpartyRequest);
+
+        // returns the updated counterparty with 200 OK
+        return new ResponseEntity<>(counterpartyResponse, HttpStatus.OK);
+    }
+
 }

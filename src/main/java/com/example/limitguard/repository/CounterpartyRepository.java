@@ -27,4 +27,8 @@ public interface CounterpartyRepository extends JpaRepository<Counterparty, Long
      * such as total results and total pages.
      */
     Page<Counterparty> findByNameContainingIgnoreCase(String name, Pageable pageable);
+
+    // checks whether another counterparty already uses this name
+    // does someone other than the counterparty I'm currently updating have this name?
+    boolean existsByNameAndIdNot(String name, Long id);
 }
