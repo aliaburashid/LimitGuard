@@ -177,4 +177,17 @@ public class GlobalExceptionHandler {
         // return 409 because the financial institution name already exists
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
     }
+
+
+    // handles when a counterparty name already exists
+    @ExceptionHandler(CounterpartyAlreadyExistsException.class)
+    public ResponseEntity<Map<String, String>> handleCounterpartyAlreadyExists(
+            CounterpartyAlreadyExistsException exception) {
+        // create the error response
+        Map<String, String> errorResponse = new HashMap<>();
+        // add the error message to the response
+        errorResponse.put("message", exception.getMessage());
+        // return 409 because the counterparty name already exists
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
 }
