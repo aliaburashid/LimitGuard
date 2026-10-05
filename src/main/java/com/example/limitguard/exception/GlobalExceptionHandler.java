@@ -10,6 +10,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.mail.MailSendException;
 import com.example.limitguard.exception.CounterpartyNotFoundException;
+import com.example.limitguard.exception.CreditLimitAlreadyExistsException;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -197,5 +198,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleCounterpartyNotFoundException(
             CounterpartyNotFoundException exception) {
         return new ResponseEntity<>(Map.of("message", exception.getMessage()), HttpStatus.NOT_FOUND);
+    }
+
+    // handles when a credit limit already exists
+    @ExceptionHandler(CreditLimitAlreadyExistsException.class)
+    public ResponseEntity<Map<String, String>> handleCreditLimitAlreadyExistsException(
+            CreditLimitAlreadyExistsException exception) {
+        return new ResponseEntity<>(Map.of("message", exception.getMessage()), HttpStatus.CONFLICT);
     }
 }
