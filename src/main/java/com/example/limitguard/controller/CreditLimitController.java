@@ -3,6 +3,7 @@ package com.example.limitguard.controller;
 import com.example.limitguard.dto.CreditExposureResponse;
 import com.example.limitguard.dto.CreditLimitRequest;
 import com.example.limitguard.dto.CreditLimitResponse;
+import com.example.limitguard.dto.UpdateCreditLimitRequest;
 import com.example.limitguard.service.CreditLimitService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,5 +36,16 @@ public class CreditLimitController {
     public ResponseEntity<CreditExposureResponse> getCreditExposure(@PathVariable Long creditLimitId) {
         CreditExposureResponse creditExposureResponse = creditLimitService.getCreditExposure(creditLimitId);
         return new ResponseEntity<>(creditExposureResponse, HttpStatus.OK);
+    }
+
+    // updates an existing credit limit
+    @PutMapping("/{creditLimitId}")
+    @PreAuthorize("hasRole('RISK_OFFICER')")
+    public ResponseEntity<CreditLimitResponse> updateCreditLimit(
+            @PathVariable Long creditLimitId,
+            @Valid @RequestBody UpdateCreditLimitRequest updateCreditLimitRequest) {
+        CreditLimitResponse creditLimitResponse =
+                creditLimitService.updateCreditLimit(creditLimitId, updateCreditLimitRequest);
+        return new ResponseEntity<>(creditLimitResponse, HttpStatus.OK);
     }
 }

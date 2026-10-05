@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.limitguard.dto.CreditExposureResponse;
 import com.example.limitguard.exception.CreditLimitNotFoundException;
+import com.example.limitguard.dto.UpdateCreditLimitRequest;
 
 import java.math.BigDecimal;
 
@@ -142,6 +143,50 @@ public class CreditLimitService {
                 creditLimit.getUsedAmount(),
                 creditLimit.getReservedAmount(),
                 availableHeadroom
+        );
+    }
+
+    // updates an existing credit limit
+    @Transactional
+    public CreditLimitResponse updateCreditLimit(Long creditLimitId, UpdateCreditLimitRequest updateCreditLimitRequest) {
+
+        // checks that the credit limit exists
+        CreditLimit creditLimit = creditLimitRepository
+                .findById(creditLimitId)
+                .orElseThrow(() ->
+                        new CreditLimitNotFoundException("Credit limit not found"));
+
+        // keeps the old limit amount for the audit log
+        BigDecimal oldLimitAmount = creditLimit.getLimitAmount();
+
+        // updates only the approved limit amount
+        creditLimit.setLimitAmount(updateCreditLimitRequest.getLimitAmount());
+
+        // usedAmount and reservedAmount are NOT changed
+        CreditLimit updatedCreditLimit = creditLimitRepository.save(creditLimit);
+
+        // gets the Risk Officer who made the change
+        User currentUser = getCurrentLoggedInUser();
+
+        // records the change in the audit log
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction("CREDIT_LIMIT_UPDATED");
+        auditLog.setEntityType("CREDIT_LIMIT");
+        auditLog.setEntityId(updatedCreditLimit.getId());
+        auditLog.setDetails("Credit limit changed from " + oldLimitAmount + " to " + updatedCreditLimit.getLimitAmount());
+        auditLog.setActor(currentUser);
+
+        auditLogRepository.save(auditLog);
+
+        return new CreditLimitResponse(
+                updatedCreditLimit.getId(),
+                updatedCreditLimit.getLimitAmount(),
+                updatedCreditLimit.getUsedAmount(),
+                updatedCreditLimit.getReservedAmount(),
+                updatedCreditLimit.getFinancialInstitution().getId(),
+                updatedCreditLimit.getCounterparty().getId(),
+                updatedCreditLimit.getCreatedAt(),
+                updatedCreditLimit.getUpdatedAt()
         );
     }
 }
