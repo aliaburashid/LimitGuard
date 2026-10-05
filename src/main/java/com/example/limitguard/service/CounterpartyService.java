@@ -14,6 +14,9 @@ import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import com.example.limitguard.exception.CounterpartyNotFoundException;
 
 @Service
 public class CounterpartyService {
@@ -87,6 +90,54 @@ public class CounterpartyService {
 
         // returns the counterparty response
         return counterpartyResponse;
+    }
 
+    // gets one counterparty by its id
+    public CounterpartyResponse getCounterpartyById(Long counterpartyId) {
+        // findById searches the counterparties table using the counterparty id
+        // it returns an Optional because the counterparty might not exist
+        Counterparty counterparty = counterpartyRepository.findById(counterpartyId)
+                // if the counterparty does not exist, throw an exception
+                .orElseThrow(() ->
+                        new CounterpartyNotFoundException("Counterparty not found"));
+
+        // converts the Counterparty entity from the database
+        // into a CounterpartyResponse DTO that we can send back to the user
+        return new CounterpartyResponse(
+                counterparty.getId(),
+                counterparty.getName(),
+                counterparty.getStatus(),
+                counterparty.getCreatedAt(),
+                counterparty.getUpdatedAt()
+        );
+    }
+
+    // gets all counterparties or searches them by name
+    // Pageable handles pagination and sorting
+    public Page<CounterpartyResponse> getCounterparties(String name, Pageable pageable) {
+        Page<Counterparty> counterparties;
+
+        // if no name was provided, return all counterparties
+        if (name == null || name.isBlank()) {
+            counterparties = counterpartyRepository.findAll(pageable);
+        } else {
+            // otherwise search for counterparties containing the given name
+            counterparties = counterpartyRepository.findByNameContainingIgnoreCase(name, pageable);
+        }
+
+        // converts each Counterparty inside the page into a CounterpartyResponse
+        // map is used because we have multiple counterparties, not just one
+        // Page.map() converts the contents but keeps the pagination information,
+        // such as the page number, total elements and total pages
+        return counterparties.map(counterparty ->
+                new CounterpartyResponse(
+                        counterparty.getId(),
+                        counterparty.getName(),
+                        counterparty.getStatus(),
+                        counterparty.getCreatedAt(),
+                        counterparty.getUpdatedAt()
+                )
+        );
     }
 }
+

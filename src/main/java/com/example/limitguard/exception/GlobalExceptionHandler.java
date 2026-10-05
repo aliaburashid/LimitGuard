@@ -9,6 +9,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.mail.MailSendException;
+import com.example.limitguard.exception.CounterpartyNotFoundException;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -189,5 +190,12 @@ public class GlobalExceptionHandler {
         errorResponse.put("message", exception.getMessage());
         // return 409 because the counterparty name already exists
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+    // handles when a counterparty cannot be found
+    @ExceptionHandler(CounterpartyNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleCounterpartyNotFoundException(
+            CounterpartyNotFoundException exception) {
+        return new ResponseEntity<>(Map.of("message", exception.getMessage()), HttpStatus.NOT_FOUND);
     }
 }
