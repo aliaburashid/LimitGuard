@@ -1,5 +1,7 @@
 package com.example.limitguard.model;
 
+import com.example.limitguard.enums.UserRole;
+import com.example.limitguard.enums.UserStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;

@@ -1,4 +1,4 @@
-package com.example.limitguard.model;
+package com.example.limitguard.enums;
 
 // We use enum when something can only be one of a fixed set of choices.
 // The user/system must pick one of the choices.

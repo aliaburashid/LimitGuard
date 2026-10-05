@@ -1,6 +1,6 @@
 package com.example.limitguard.dto;
 
-import com.example.limitguard.model.FinancialInstitutionStatus;
+import com.example.limitguard.enums.FinancialInstitutionStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;

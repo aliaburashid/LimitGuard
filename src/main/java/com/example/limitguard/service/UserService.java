@@ -4,7 +4,7 @@ import com.example.limitguard.dto.*;
 import com.example.limitguard.exception.*;
 import com.example.limitguard.model.FinancialInstitution;
 import com.example.limitguard.model.User;
-import com.example.limitguard.model.UserTokenType;
+import com.example.limitguard.enums.UserTokenType;
 import com.example.limitguard.repository.FinancialInstitutionRepository;
 import com.example.limitguard.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +18,7 @@ import com.example.limitguard.model.UserToken;
 import com.example.limitguard.repository.UserTokenRepository;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import com.example.limitguard.dto.UpdateUserRoleRequest;
-import com.example.limitguard.model.UserRole;
+import com.example.limitguard.enums.UserRole;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -33,7 +33,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import com.example.limitguard.repository.AuditLogRepository;
 import com.example.limitguard.model.AuditLog;
-import com.example.limitguard.model.UserStatus;
+import com.example.limitguard.enums.UserStatus;
 import com.example.limitguard.dto.DeactivateUserRequest;
 
 // Class that contains business logic

@@ -1,6 +1,6 @@
 package com.example.limitguard.dto;
 
-import com.example.limitguard.model.UserRole;
+import com.example.limitguard.enums.UserRole;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;

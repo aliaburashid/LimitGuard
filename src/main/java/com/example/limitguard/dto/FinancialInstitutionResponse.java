@@ -1,6 +1,6 @@
 package com.example.limitguard.dto;
 
-import com.example.limitguard.model.FinancialInstitutionStatus;
+import com.example.limitguard.enums.FinancialInstitutionStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;

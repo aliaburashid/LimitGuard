@@ -1,4 +1,4 @@
-package com.example.limitguard.model;
+package com.example.limitguard.enums;
 
 // The roles a user can have in LimitGuard
 public enum UserRole {

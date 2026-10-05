@@ -1,7 +1,7 @@
 package com.example.limitguard.dto;
 
-import com.example.limitguard.model.UserRole;
-import com.example.limitguard.model.UserStatus;
+import com.example.limitguard.enums.UserRole;
+import com.example.limitguard.enums.UserStatus;
 import lombok.Getter;
 import lombok.Setter;
 

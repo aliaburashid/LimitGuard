@@ -1,7 +1,7 @@
 package com.example.limitguard.dto;
 
 import com.example.limitguard.model.FinancialInstitution;
-import com.example.limitguard.model.UserRole;
+import com.example.limitguard.enums.UserRole;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;

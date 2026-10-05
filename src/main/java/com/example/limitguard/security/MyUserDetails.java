@@ -1,7 +1,7 @@
 package com.example.limitguard.security;
 
 import com.example.limitguard.model.User;
-import com.example.limitguard.model.UserStatus;
+import com.example.limitguard.enums.UserStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;

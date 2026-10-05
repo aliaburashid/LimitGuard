@@ -6,7 +6,7 @@ import com.example.limitguard.exception.FinancialInstitutionAlreadyExistsExcepti
 import com.example.limitguard.exception.FinancialInstitutionNotFoundException;
 import com.example.limitguard.model.AuditLog;
 import com.example.limitguard.model.FinancialInstitution;
-import com.example.limitguard.model.FinancialInstitutionStatus;
+import com.example.limitguard.enums.FinancialInstitutionStatus;
 import com.example.limitguard.model.User;
 import com.example.limitguard.repository.AuditLogRepository;
 import com.example.limitguard.repository.FinancialInstitutionRepository;
@@ -27,6 +27,34 @@ public class FinancialInstitutionService {
     private AuditLogRepository auditLogRepository;
 
     //--------------------------------------------------------------------------------------------
+
+    // gets the user who is currently logged in
+    private User getCurrentLoggedInUser() {
+        // ( SecurityContextHolder ): spring security keeps info and the currently authenticated/logged-in user here
+        // (.getContext() ) : Gets the current security information.
+        // (.getAuthentication() ) : info about who logged in
+        // ( .getPrincipal() ): Gets the actual logged-in user's details.
+        // gets the logged-in users details from Spring Security
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getPrincipal();
+
+        // Returns the User object stored inside MyUserDetails
+        return userDetails.getUser();
+    }
+
+    // converts a FinancialInstitution entity into the response we send to the user
+    private FinancialInstitutionResponse convertToResponse(FinancialInstitution financialInstitution) {
+        return new FinancialInstitutionResponse(
+                financialInstitution.getId(),
+                financialInstitution.getName(),
+                financialInstitution.getStatus(),
+                financialInstitution.getCreatedAt(),
+                financialInstitution.getUpdatedAt()
+        );
+
+    }
 
     // If something fails during the database transaction
     // Spring can roll the database changes back together
@@ -118,32 +146,6 @@ public class FinancialInstitutionService {
 
         // converts the updated institution into a response DTO and returns it
         return convertToResponse(updatedFinancialInstitution);
-    }
-
-    // converts a FinancialInstitution entity into the response we send to the user
-    private FinancialInstitutionResponse convertToResponse(FinancialInstitution financialInstitution) {
-        return new FinancialInstitutionResponse(
-                financialInstitution.getId(),
-                financialInstitution.getName(),
-                financialInstitution.getStatus(),
-                financialInstitution.getCreatedAt(),
-                financialInstitution.getUpdatedAt()
-        );
-
-    }
-
-
-    // gets the user who is currently logged in
-    private User getCurrentLoggedInUser() {
-
-        // gets the logged-in users details from Spring Security
-        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder
-                        .getContext()
-                        .getAuthentication()
-                        .getPrincipal();
-
-        // Returns the User object stored inside MyUserDetails
-        return userDetails.getUser();
     }
 
 }
