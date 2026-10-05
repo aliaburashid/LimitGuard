@@ -17,6 +17,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.example.limitguard.model.UserToken;
 import com.example.limitguard.repository.UserTokenRepository;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import com.example.limitguard.dto.UpdateUserRoleRequest;
+import com.example.limitguard.model.UserRole;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -493,5 +495,51 @@ public class UserService {
 
         // saves the audit record
         auditLogRepository.save(auditLog);
+    }
+
+
+    // allows an admin to change another users role
+    @Transactional
+    public void updateUserRole(Long userId, UpdateUserRoleRequest updateUserRoleRequest) {
+
+        // gets the currently logged-in admins email
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getName();
+
+        // finds the admin in the database
+        User admin = findUserByEmail(email);
+
+        // finds the user whose role the admin wants to change
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        // prevents the admin from changing their own role
+        if (admin.getId().equals(user.getId())) {
+            throw new IllegalArgumentException("You cannot change your own role");
+        }
+
+        // prevents admin from being assigned through this endpoint
+        if (updateUserRoleRequest.getRole() == UserRole.ADMIN) {
+            throw new IllegalArgumentException("ADMIN role cannot be assigned");
+        }
+
+        // changes the users role
+        user.setRole(updateUserRoleRequest.getRole());
+
+        // saves the updated user
+        userRepository.save(user);
+
+        // records the role change in the audit log
+        AuditLog auditLog = new AuditLog();
+
+        auditLog.setAction("USER_ROLE_UPDATED");
+        auditLog.setEntityType("USER");
+        auditLog.setEntityId(user.getId());
+        auditLog.setDetails("Role changed to: " + updateUserRoleRequest.getRole());
+        auditLog.setActor(admin);
+
+        auditLogRepository.save(auditLog);
+
     }
 }

@@ -127,4 +127,15 @@ public class UserController {
         // returns a success message after the user is deactivated
         return new ResponseEntity<>("User deactivated successfully", HttpStatus.OK);
     }
+
+
+    @PatchMapping("/{userId}/role")
+    @PreAuthorize("hasRole('ADMIN')")
+    // allows an admin to change another users role
+    public ResponseEntity<String> updateUserRole(@PathVariable Long userId,
+            @Valid @RequestBody UpdateUserRoleRequest updateUserRoleRequest) {
+
+        userService.updateUserRole(userId, updateUserRoleRequest);
+        return new ResponseEntity<>("User role updated successfully", HttpStatus.OK);
+    }
 }
