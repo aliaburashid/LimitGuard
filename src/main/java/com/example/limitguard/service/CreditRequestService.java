@@ -121,10 +121,8 @@ public class CreditRequestService {
                     "Credit requests cannot be created for a frozen or closed counterparty");
         }
 
-        // calculates the credit capacity that is still available
-        BigDecimal availableHeadroom = creditLimit.getLimitAmount()
-                .subtract(creditLimit.getUsedAmount())
-                .subtract(creditLimit.getReservedAmount());
+        // checks the current available headroom before accepting the request
+        BigDecimal availableHeadroom = calculateAvailableHeadroom(creditLimit);
 
         // prevents a credit request from exceeding the available headroom
         // rejecting 0 and below
@@ -193,6 +191,14 @@ public class CreditRequestService {
                 savedCreditRequest.getCreatedAt(),
                 savedCreditRequest.getUpdatedAt()
         );
+    }
+
+    // calculates how much headroom is available right now
+    // headroom = total limit - used exposure - reserved exposure
+    private BigDecimal calculateAvailableHeadroom(CreditLimit creditLimit) {
+        return creditLimit.getLimitAmount()
+                .subtract(creditLimit.getUsedAmount())
+                .subtract(creditLimit.getReservedAmount());
     }
 
     // reserves available credit capacity for a credit request
@@ -567,11 +573,9 @@ public class CreditRequestService {
 
         CreditLimit creditLimit = creditRequest.getCreditLimit();
 
-        // headroom must use the current exposure values, not values from when
-        // the credit request was originally submitted
-        BigDecimal availableHeadroom = creditLimit.getLimitAmount()
-                .subtract(creditLimit.getUsedAmount())
-                .subtract(creditLimit.getReservedAmount());
+        // shows the Risk Officer the headroom based on the latest exposure values
+        // not values from when the credit request was originally submitted
+        BigDecimal availableHeadroom = calculateAvailableHeadroom(creditLimit);
 
         String requesterName =
                 creditRequest.getRequester().getFirstName()
