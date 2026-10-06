@@ -248,6 +248,27 @@ public class CreditRequestService {
         // only PENDING_APPROVAL can move to RESERVED
         validateStatusTransition(creditRequest, CreditRequestStatus.RESERVED);
 
+        // gets the credit limit connected to this credit request
+        CreditLimit creditLimit = creditRequest.getCreditLimit();
+
+        // calculates the credit capacity that is currently available
+        BigDecimal availableHeadroom = creditLimit.getLimitAmount()
+                .subtract(creditLimit.getUsedAmount())
+                .subtract(creditLimit.getReservedAmount());
+
+        // the request cannot be approved if there is not enough available capacity
+        if (creditRequest.getAmount().compareTo(availableHeadroom) > 0) {
+            throw new InsufficientHeadroomException(
+                    "Insufficient available headroom to approve this credit request"
+            );
+        }
+
+        // reserves the requested amount
+        creditLimit.setReservedAmount(creditLimit.getReservedAmount().add(creditRequest.getAmount()));
+
+        // the reservation will automatically expire after 24 hours
+        creditRequest.setExpiresAt(LocalDateTime.now().plusHours(24));
+
         // approval moves the request into the RESERVED status
         creditRequest.setStatus(CreditRequestStatus.RESERVED);
 
