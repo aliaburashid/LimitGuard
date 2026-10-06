@@ -15,4 +15,8 @@ public interface CreditRequestRepository extends JpaRepository<CreditRequest, Lo
     Page<CreditRequest> findByRequesterId(Long requesterId, Pageable pageable);
     // finds the credit request where the status = RESERVED and expiresAt < current time
     List<CreditRequest> findByStatusAndExpiresAtBefore(CreditRequestStatus status, LocalDateTime currentTime);
+    // finds credit requests waiting for Risk Officer approval
+    // pagination keeps the approval queue manageable when there are many requests
+    // USED FOR: give me only credit requests whose status is PENDING_APPROVAL
+    Page<CreditRequest> findByStatus(CreditRequestStatus status, Pageable pageable);
 }
