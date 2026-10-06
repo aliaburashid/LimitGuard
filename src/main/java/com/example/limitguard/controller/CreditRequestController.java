@@ -66,10 +66,18 @@ public class CreditRequestController {
     @PreAuthorize("hasAnyRole('RELATIONSHIP_MANAGER', 'RISK_OFFICER')")
     public ResponseEntity<CreditRequestResponse> getCreditRequestById(
             @PathVariable Long creditRequestId) {
-
         CreditRequestResponse creditRequestResponse =
                 creditRequestService.getCreditRequestById(creditRequestId);
+        return new ResponseEntity<>(creditRequestResponse, HttpStatus.OK);
+    }
 
+    // marks a reserved credit request as used
+    @PatchMapping("/{creditRequestId}/use")
+    @PreAuthorize("hasRole('RELATIONSHIP_MANAGER')")
+    public ResponseEntity<CreditRequestResponse> markCreditRequestAsUsed(
+            @PathVariable Long creditRequestId) {
+        CreditRequestResponse creditRequestResponse =
+                creditRequestService.markCreditRequestAsUsed(creditRequestId);
         return new ResponseEntity<>(creditRequestResponse, HttpStatus.OK);
     }
 }

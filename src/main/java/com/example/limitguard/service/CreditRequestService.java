@@ -182,6 +182,79 @@ public class CreditRequestService {
         creditRequest.setStatus(CreditRequestStatus.RESERVED);
     }
 
+    // marks reserved credit capacity as used
+    @Transactional
+    public CreditRequestResponse markCreditRequestAsUsed(Long creditRequestId) {
+
+        // checks that the credit request exists
+        CreditRequest creditRequest = creditRequestRepository
+                .findById(creditRequestId)
+                .orElseThrow(() ->
+                        new CreditRequestNotFoundException("Credit request not found"));
+
+        // gets the currently logged-in user
+        User currentUser = getCurrentLoggedInUser();
+
+        // prevents a Relationship Manager from using another users request
+        if (!creditRequest.getRequester().getId()
+                .equals(currentUser.getId())) {
+
+            throw new AccessDeniedException(
+                    "You do not have permission to use this credit request");
+        }
+
+        // only a RESERVED request can become USED
+        if (creditRequest.getStatus() != CreditRequestStatus.RESERVED) {
+            throw new IllegalArgumentException(
+                    "Only a reserved credit request can be marked as used");
+        }
+
+        CreditLimit creditLimit = creditRequest.getCreditLimit();
+
+        // removes the request amount from reserved exposure
+        creditLimit.setReservedAmount(
+                creditLimit.getReservedAmount()
+                        .subtract(creditRequest.getAmount())
+        );
+
+        // adds the same amount to used exposure
+        creditLimit.setUsedAmount(
+                creditLimit.getUsedAmount()
+                        .add(creditRequest.getAmount())
+        );
+
+        // changes the request status from RESERVED to USED
+        creditRequest.setStatus(CreditRequestStatus.USED);
+
+        // saves the updated request and credit limit
+        CreditRequest savedCreditRequest =
+                creditRequestRepository.save(creditRequest);
+
+        creditLimitRepository.save(creditLimit);
+
+        // records the operation in the audit log
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction("CREDIT_CAPACITY_USED");
+        auditLog.setEntityType("CREDIT_REQUEST");
+        auditLog.setEntityId(savedCreditRequest.getId());
+        auditLog.setDetails("Marked reserved credit capacity of " + savedCreditRequest.getAmount() + " as used");
+        auditLog.setActor(currentUser);
+
+        auditLogRepository.save(auditLog);
+
+        // returns the updated credit request
+        return new CreditRequestResponse(
+                savedCreditRequest.getId(),
+                savedCreditRequest.getAmount(),
+                savedCreditRequest.getStatus(),
+                savedCreditRequest.getCreditLimit().getId(),
+                savedCreditRequest.getCreditLimit().getCounterparty().getId(),
+                savedCreditRequest.getRequester().getId(),
+                savedCreditRequest.getExpiresAt(),
+                savedCreditRequest.getCreatedAt(),
+                savedCreditRequest.getUpdatedAt()
+        );
+    }
 
     // gets the credit requests submitted by the logged-in user
     public Page<CreditRequestResponse> getMyCreditRequests(Pageable pageable) {
