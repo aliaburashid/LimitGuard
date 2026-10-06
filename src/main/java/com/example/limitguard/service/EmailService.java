@@ -191,4 +191,143 @@ public class EmailService {
             throw new RuntimeException("Unable to send password reset email");
         }
     }
+
+
+    // Sends an email when a credit request is approved
+    public void SendCreditRequestApprovedEmail(String email, Long creditRequestId) {
+        try {
+            // create a new email
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper =
+                    new MimeMessageHelper(message, true, "UTF-8");
+
+            // set who receives the email
+            helper.setTo(email);
+
+            // set the email subject
+            helper.setSubject("Your LimitGuard credit request was approved");
+
+            // set the email message
+            String emailMessage = """
+                <html>
+                <body style="margin: 0; padding: 0; background-color: #f4f6f8;
+                             font-family: Arial, sans-serif;">
+
+                    <div style="max-width: 600px; margin: 40px auto;
+                                background-color: white; padding: 40px;
+                                border-radius: 10px;">
+
+                        <h1 style="color: #1f2937;">
+                            LimitGuard
+                        </h1>
+
+                        <h2 style="color: #1f2937;">
+                            Credit request approved
+                        </h2>
+
+                        <p style="color: #4b5563; line-height: 1.6;">
+                            Your credit request #%s has been approved
+                            by a Risk Officer.
+                        </p>
+
+                        <p style="color: #4b5563; line-height: 1.6;">
+                            The requested credit capacity has now been reserved.
+                        </p>
+
+                        <hr style="border: none;
+                                   border-top: 1px solid #e5e7eb;
+                                   margin: 30px 0;">
+
+                        <p style="color: #9ca3af; font-size: 12px;">
+                            LimitGuard - Credit Limit & Exposure Management
+                        </p>
+
+                    </div>
+
+                </body>
+                </html>
+                """.formatted(creditRequestId);
+
+            // true means the email message contains HTML
+            helper.setText(emailMessage, true);
+
+            // send the email
+            mailSender.send(message);
+
+        } catch (MessagingException exception) {
+            throw new RuntimeException(
+                    "Unable to send credit request approval email"
+            );
+        }
+    }
+
+
+    // Sends an email when a credit request is rejected
+    public void SendCreditRequestRejectedEmail(String email, Long creditRequestId, String reason) {
+        try {
+
+            // create a new email
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper =
+                    new MimeMessageHelper(message, true, "UTF-8");
+
+            // set who receives the email
+            helper.setTo(email);
+
+            // set the email subject
+            helper.setSubject("Your LimitGuard credit request was rejected");
+
+            // set the email message
+            String emailMessage = """
+                <html>
+                <body style="margin: 0; padding: 0; background-color: #f4f6f8;
+                             font-family: Arial, sans-serif;">
+
+                    <div style="max-width: 600px; margin: 40px auto;
+                                background-color: white; padding: 40px;
+                                border-radius: 10px;">
+
+                        <h1 style="color: #1f2937;">
+                            LimitGuard
+                        </h1>
+
+                        <h2 style="color: #1f2937;">
+                            Credit request rejected
+                        </h2>
+
+                        <p style="color: #4b5563; line-height: 1.6;">
+                            Your credit request #%s has been rejected
+                            by a Risk Officer.
+                        </p>
+
+                        <p style="color: #4b5563; line-height: 1.6;">
+                            <strong>Reason:</strong> %s
+                        </p>
+
+                        <hr style="border: none;
+                                   border-top: 1px solid #e5e7eb;
+                                   margin: 30px 0;">
+
+                        <p style="color: #9ca3af; font-size: 12px;">
+                            LimitGuard - Credit Limit & Exposure Management
+                        </p>
+
+                    </div>
+
+                </body>
+                </html>
+                """.formatted(creditRequestId, reason);
+
+            // true means the email message contains HTML
+            helper.setText(emailMessage, true);
+
+            // send the email
+            mailSender.send(message);
+
+        } catch (MessagingException exception) {
+            throw new RuntimeException(
+                    "Unable to send credit request rejection email"
+            );
+        }
+    }
 }
