@@ -60,4 +60,16 @@ public class CreditRequestController {
         Page<CreditRequestResponse> creditRequests = creditRequestService.getMyCreditRequests(pageable);
         return new ResponseEntity<>(creditRequests, HttpStatus.OK);
     }
+
+    // gets a credit request by ID
+    @GetMapping("/{creditRequestId}")
+    @PreAuthorize("hasAnyRole('RELATIONSHIP_MANAGER', 'RISK_OFFICER')")
+    public ResponseEntity<CreditRequestResponse> getCreditRequestById(
+            @PathVariable Long creditRequestId) {
+
+        CreditRequestResponse creditRequestResponse =
+                creditRequestService.getCreditRequestById(creditRequestId);
+
+        return new ResponseEntity<>(creditRequestResponse, HttpStatus.OK);
+    }
 }
