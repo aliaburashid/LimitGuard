@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import com.example.limitguard.dto.RejectCreditRequestRequest;
 
 @RestController
 @RequestMapping("/api/credit-requests")
@@ -120,6 +121,17 @@ public class CreditRequestController {
             @PathVariable Long creditRequestId) {
         CreditRequestResponse creditRequest =
                 creditRequestService.approveCreditRequest(creditRequestId);
+        return new ResponseEntity<>(creditRequest, HttpStatus.OK);
+    }
+
+    // Risk Officer rejects a pending credit request
+    @PatchMapping("/{creditRequestId}/reject")
+    @PreAuthorize("hasRole('RISK_OFFICER')")
+    public ResponseEntity<CreditRequestResponse> rejectCreditRequest(
+            @PathVariable Long creditRequestId,
+            @Valid @RequestBody RejectCreditRequestRequest request) {
+        CreditRequestResponse creditRequest =
+                creditRequestService.rejectCreditRequest(creditRequestId, request.getReason());
         return new ResponseEntity<>(creditRequest, HttpStatus.OK);
     }
 }
