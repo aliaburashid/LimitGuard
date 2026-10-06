@@ -101,11 +101,15 @@ public class CreditRequestService {
                 .compareTo(new BigDecimal("500000")) > 0) {
             creditRequest.setStatus(CreditRequestStatus.PENDING_APPROVAL);
         } else {
-            creditRequest.setStatus(CreditRequestStatus.RESERVED);
+            // requests of 500,000 or less can reserve capacity directly
+            reserveCreditCapacity(creditRequest, creditLimit);
         }
 
         // save the credit request
         CreditRequest savedCreditRequest = creditRequestRepository.save(creditRequest);
+
+        // saves the updated reserved amount
+        creditLimitRepository.save(creditLimit);
 
         // records the credit request creation in the audit log
         AuditLog auditLog = new AuditLog();
@@ -116,6 +120,19 @@ public class CreditRequestService {
         auditLog.setActor(requester);
 
         auditLogRepository.save(auditLog);
+
+        // records when credit capacity is reserved
+        if (savedCreditRequest.getStatus() == CreditRequestStatus.RESERVED) {
+
+            AuditLog reservationAuditLog = new AuditLog();
+            reservationAuditLog.setAction("CREDIT_CAPACITY_RESERVED");
+            reservationAuditLog.setEntityType("CREDIT_REQUEST");
+            reservationAuditLog.setEntityId(savedCreditRequest.getId());
+            reservationAuditLog.setDetails("Reserved credit capacity of " + savedCreditRequest.getAmount());
+            reservationAuditLog.setActor(requester);
+
+            auditLogRepository.save(reservationAuditLog);
+        }
 
         // return it in a DTO response
         return new CreditRequestResponse(
@@ -130,6 +147,41 @@ public class CreditRequestService {
                 savedCreditRequest.getUpdatedAt()
         );
     }
+
+    // reserves available credit capacity for a credit request
+    // Take this credit request and actually reserve its money from the credit limit.
+    private void reserveCreditCapacity(CreditRequest creditRequest, CreditLimit creditLimit) {
+
+        // prevents the same request from reserving capacity more than once
+        // If we've already reserved this request, STOP. Don't reserve the same money twice
+        if (creditRequest.getStatus() == CreditRequestStatus.RESERVED) {
+            throw new IllegalArgumentException("Credit request is already reserved");
+        }
+
+        // calculates the latest available headroom before reservation
+        BigDecimal availableHeadroom = creditLimit.getLimitAmount()
+                .subtract(creditLimit.getUsedAmount())
+                .subtract(creditLimit.getReservedAmount());
+
+        // checks headroom again immediately before reservation
+        // Does the requested money fit inside the available headroom?
+        if (creditRequest.getAmount().compareTo(availableHeadroom) > 0) {
+            throw new InsufficientHeadroomException(
+                    "Insufficient headroom to reserve credit capacity");
+        }
+
+        // increases the reserved exposure by the request amount
+        // If it does fit, we add the money to the reserved amount
+        creditLimit.setReservedAmount(
+                creditLimit.getReservedAmount()
+                        .add(creditRequest.getAmount())
+        );
+
+        // changes the request status to RESERVED
+        // The money is now successfully held for this request
+        creditRequest.setStatus(CreditRequestStatus.RESERVED);
+    }
+
 
     // gets the credit requests submitted by the logged-in user
     public Page<CreditRequestResponse> getMyCreditRequests(Pageable pageable) {
