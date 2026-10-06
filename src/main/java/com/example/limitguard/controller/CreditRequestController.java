@@ -2,6 +2,7 @@ package com.example.limitguard.controller;
 
 import com.example.limitguard.dto.CreditRequestRequest;
 import com.example.limitguard.dto.CreditRequestResponse;
+import com.example.limitguard.dto.CreditRequestReviewResponse;
 import com.example.limitguard.service.CreditRequestService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -100,5 +101,15 @@ public class CreditRequestController {
                 creditRequestService.getPendingCreditRequests(pageable);
         // returns the pending approval queue with HTTP 200 OK
         return new ResponseEntity<>(pendingRequests, HttpStatus.OK);
+    }
+
+    // allows a Risk Officer to review the details of a request awaiting approval
+    @GetMapping("/{creditRequestId}/review")
+    @PreAuthorize("hasRole('RISK_OFFICER')")
+    public ResponseEntity<CreditRequestReviewResponse> reviewCreditRequest(
+            @PathVariable Long creditRequestId) {
+        CreditRequestReviewResponse creditRequest =
+                creditRequestService.reviewCreditRequest(creditRequestId);
+        return new ResponseEntity<>(creditRequest, HttpStatus.OK);
     }
 }
