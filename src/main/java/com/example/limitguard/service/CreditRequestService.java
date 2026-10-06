@@ -15,6 +15,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.limitguard.enums.CounterpartyStatus;
+import com.example.limitguard.model.AuditLog;
+import com.example.limitguard.repository.AuditLogRepository;
 
 import java.math.BigDecimal;
 
@@ -26,6 +28,9 @@ public class CreditRequestService {
 
     @Autowired
     private CreditLimitRepository creditLimitRepository;
+
+    @Autowired
+    private AuditLogRepository auditLogRepository;
 
     //---------------------------------------------------------------------------
 
@@ -83,6 +88,16 @@ public class CreditRequestService {
 
         // save the credit request
         CreditRequest savedCreditRequest = creditRequestRepository.save(creditRequest);
+
+        // records the credit request creation in the audit log
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction("CREDIT_REQUEST_CREATED");
+        auditLog.setEntityType("CREDIT_REQUEST");
+        auditLog.setEntityId(savedCreditRequest.getId());
+        auditLog.setDetails("Created credit request of " + savedCreditRequest.getAmount() + " with status " + savedCreditRequest.getStatus());
+        auditLog.setActor(requester);
+
+        auditLogRepository.save(auditLog);
 
         // return it in a DTO response
         return new CreditRequestResponse(
