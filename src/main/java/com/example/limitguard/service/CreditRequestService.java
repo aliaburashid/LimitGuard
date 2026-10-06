@@ -232,6 +232,41 @@ public class CreditRequestService {
         creditRequest.setExpiresAt(LocalDateTime.now().plusHours(24));
     }
 
+
+    // approves a credit request that is waiting for Risk Officer approval
+    @Transactional
+    public CreditRequestResponse approveCreditRequest(Long creditRequestId) {
+
+        // finds the credit request
+        CreditRequest creditRequest = creditRequestRepository.findById(creditRequestId)
+                .orElseThrow(() ->
+                        new CreditRequestNotFoundException(
+                                "Credit request with id " + creditRequestId + " was not found"
+                        )
+                );
+
+        // only PENDING_APPROVAL can move to RESERVED
+        validateStatusTransition(creditRequest, CreditRequestStatus.RESERVED);
+
+        // approval moves the request into the RESERVED status
+        creditRequest.setStatus(CreditRequestStatus.RESERVED);
+
+        CreditRequest savedCreditRequest =
+                creditRequestRepository.save(creditRequest);
+
+        return new CreditRequestResponse(
+                savedCreditRequest.getId(),
+                savedCreditRequest.getAmount(),
+                savedCreditRequest.getStatus(),
+                savedCreditRequest.getCreditLimit().getId(),
+                savedCreditRequest.getCreditLimit().getCounterparty().getId(),
+                savedCreditRequest.getRequester().getId(),
+                savedCreditRequest.getExpiresAt(),
+                savedCreditRequest.getCreatedAt(),
+                savedCreditRequest.getUpdatedAt()
+        );
+    }
+
     // marks reserved credit capacity as used
     @Transactional
     public CreditRequestResponse markCreditRequestAsUsed(Long creditRequestId) {
