@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.limitguard.enums.CounterpartyStatus;
 import com.example.limitguard.model.AuditLog;
 import com.example.limitguard.repository.AuditLogRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 
@@ -125,4 +127,34 @@ public class CreditRequestService {
                 savedCreditRequest.getUpdatedAt()
         );
     }
+
+    // gets the credit requests submitted by the logged-in user
+    public Page<CreditRequestResponse> getMyCreditRequests(Pageable pageable) {
+
+        // gets the currently logged-in user
+        User requester = getCurrentLoggedInUser();
+
+        // finds only the credit requests created by this user
+        Page<CreditRequest> creditRequests =
+                creditRequestRepository.findByRequesterId(requester.getId(), pageable);
+
+        // converts each CreditRequest into a CreditRequestResponse
+        return creditRequests.map(creditRequest ->
+                new CreditRequestResponse(
+                        creditRequest.getId(),
+                        creditRequest.getAmount(),
+                        creditRequest.getStatus(),
+                        creditRequest.getCreditLimit().getId(),
+                        creditRequest.getCreditLimit().getCounterparty().getId(),
+                        creditRequest.getRequester().getId(),
+                        creditRequest.getExpiresAt(),
+                        creditRequest.getCreatedAt(),
+                        creditRequest.getUpdatedAt()
+                )
+        );
+    }
+
+
+
+
 }
