@@ -282,6 +282,9 @@ public class CreditRequestService {
                         )
                 );
 
+        // makes sure only a PENDING_APPROVAL request can be approved
+        validateApprovalAction(creditRequest);
+
         // makes sure the requester and decision maker are different users
         // this must happen before any request status or exposure is changed
         validateMakerChecker(creditRequest);
