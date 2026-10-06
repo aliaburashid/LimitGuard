@@ -3,7 +3,9 @@ package com.example.limitguard.service;
 import com.example.limitguard.dto.CreditRequestRequest;
 import com.example.limitguard.dto.CreditRequestResponse;
 import com.example.limitguard.enums.CreditRequestStatus;
+import com.example.limitguard.enums.UserRole;
 import com.example.limitguard.exception.CreditLimitNotFoundException;
+import com.example.limitguard.exception.CreditRequestNotFoundException;
 import com.example.limitguard.exception.InsufficientHeadroomException;
 import com.example.limitguard.model.CreditLimit;
 import com.example.limitguard.model.CreditRequest;
@@ -12,6 +14,7 @@ import com.example.limitguard.repository.CreditLimitRepository;
 import com.example.limitguard.repository.CreditRequestRepository;
 import com.example.limitguard.security.MyUserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -151,6 +154,41 @@ public class CreditRequestService {
                         creditRequest.getCreatedAt(),
                         creditRequest.getUpdatedAt()
                 )
+        );
+    }
+
+    // gets a credit request by ID for an authorized user
+    public CreditRequestResponse getCreditRequestById(Long creditRequestId) {
+
+        // checks that the credit request exists
+        CreditRequest creditRequest = creditRequestRepository
+                .findById(creditRequestId)
+                .orElseThrow(() ->
+                        new CreditRequestNotFoundException("Credit request not found"));
+
+        // gets the currently logged-in user
+        User currentUser = getCurrentLoggedInUser();
+
+        // relationship managers can only view their own requests
+        // If the logged-in user is a Relationship Manager AND this request does not belong to them, block them.
+        if (currentUser.getRole() == UserRole.RELATIONSHIP_MANAGER
+                && !creditRequest.getRequester().getId()
+                .equals(currentUser.getId())) {
+
+            throw new AccessDeniedException("You do not have permission to view this credit request");
+        }
+
+        // returns the credit request details
+        return new CreditRequestResponse(
+                creditRequest.getId(),
+                creditRequest.getAmount(),
+                creditRequest.getStatus(),
+                creditRequest.getCreditLimit().getId(),
+                creditRequest.getCreditLimit().getCounterparty().getId(),
+                creditRequest.getRequester().getId(),
+                creditRequest.getExpiresAt(),
+                creditRequest.getCreatedAt(),
+                creditRequest.getUpdatedAt()
         );
     }
 
