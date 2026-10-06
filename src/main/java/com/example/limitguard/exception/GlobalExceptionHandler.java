@@ -214,4 +214,15 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(Map.of("message", exception.getMessage()), HttpStatus.NOT_FOUND
         );
     }
+
+    // handles invalid credit limit reduction
+    @ExceptionHandler(InvalidCreditLimitReductionException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidCreditLimitReductionException(
+            InvalidCreditLimitReductionException exception) {
+
+        return new ResponseEntity<>(
+                Map.of("message", exception.getMessage()),
+                HttpStatus.BAD_REQUEST
+        );
+    }
 }

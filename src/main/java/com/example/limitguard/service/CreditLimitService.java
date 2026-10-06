@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.limitguard.dto.CreditExposureResponse;
 import com.example.limitguard.exception.CreditLimitNotFoundException;
 import com.example.limitguard.dto.UpdateCreditLimitRequest;
+import com.example.limitguard.exception.InvalidCreditLimitReductionException;
 
 import java.math.BigDecimal;
 
@@ -159,6 +160,17 @@ public class CreditLimitService {
         // keeps the old limit amount for the audit log
         BigDecimal oldLimitAmount = creditLimit.getLimitAmount();
 
+        // calculates the counterparty current exposure
+        BigDecimal currentExposure = creditLimit.getUsedAmount().add(creditLimit.getReservedAmount());
+
+        // prevents the new limit from being lower than the current exposure
+        // compareTo() because its BigDecimal
+        if (updateCreditLimitRequest.getLimitAmount()
+                .compareTo(currentExposure) < 0) {
+
+            throw new InvalidCreditLimitReductionException(
+                    "Credit limit cannot be lower than current exposure");
+        }
         // updates only the approved limit amount
         creditLimit.setLimitAmount(updateCreditLimitRequest.getLimitAmount());
 
