@@ -256,6 +256,74 @@ public class CreditRequestService {
         );
     }
 
+    // cancels a reserved credit request
+    @Transactional
+    public CreditRequestResponse cancelCreditRequest(Long creditRequestId) {
+
+        // checks that the credit request exists
+        CreditRequest creditRequest = creditRequestRepository
+                .findById(creditRequestId)
+                .orElseThrow(() ->
+                        new CreditRequestNotFoundException("Credit request not found"));
+
+        // gets the currently logged-in user
+        User currentUser = getCurrentLoggedInUser();
+
+        // prevents a Relationship Manager from cancelling another users request
+        if (!creditRequest.getRequester().getId()
+                .equals(currentUser.getId())) {
+
+            throw new AccessDeniedException(
+                    "You do not have permission to cancel this credit request");
+        }
+
+        // only a RESERVED request can be cancelled
+        if (creditRequest.getStatus() != CreditRequestStatus.RESERVED) {
+            throw new IllegalArgumentException(
+                    "Only a reserved credit request can be cancelled");
+        }
+
+        CreditLimit creditLimit = creditRequest.getCreditLimit();
+
+        // releases the reserved capacity
+        creditLimit.setReservedAmount(
+                creditLimit.getReservedAmount()
+                        .subtract(creditRequest.getAmount())
+        );
+
+        // changes the request status to CANCELLED
+        creditRequest.setStatus(CreditRequestStatus.CANCELLED);
+
+        // saves the updated request and credit limit
+        CreditRequest savedCreditRequest =
+                creditRequestRepository.save(creditRequest);
+
+        creditLimitRepository.save(creditLimit);
+
+        // records the cancellation in the audit log
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction("CREDIT_REQUEST_CANCELLED");
+        auditLog.setEntityType("CREDIT_REQUEST");
+        auditLog.setEntityId(savedCreditRequest.getId());
+        auditLog.setDetails("Cancelled reserved credit request of " + savedCreditRequest.getAmount() + " and released the reserved capacity");
+        auditLog.setActor(currentUser);
+
+        auditLogRepository.save(auditLog);
+
+        // returns the updated credit request
+        return new CreditRequestResponse(
+                savedCreditRequest.getId(),
+                savedCreditRequest.getAmount(),
+                savedCreditRequest.getStatus(),
+                savedCreditRequest.getCreditLimit().getId(),
+                savedCreditRequest.getCreditLimit().getCounterparty().getId(),
+                savedCreditRequest.getRequester().getId(),
+                savedCreditRequest.getExpiresAt(),
+                savedCreditRequest.getCreatedAt(),
+                savedCreditRequest.getUpdatedAt()
+        );
+    }
+
     // gets the credit requests submitted by the logged-in user
     public Page<CreditRequestResponse> getMyCreditRequests(Pageable pageable) {
 

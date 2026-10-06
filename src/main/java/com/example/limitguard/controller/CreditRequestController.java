@@ -80,4 +80,14 @@ public class CreditRequestController {
                 creditRequestService.markCreditRequestAsUsed(creditRequestId);
         return new ResponseEntity<>(creditRequestResponse, HttpStatus.OK);
     }
+
+    // cancels a reserved credit request
+    @PatchMapping("/{creditRequestId}/cancel")
+    @PreAuthorize("hasRole('RELATIONSHIP_MANAGER')")
+    public ResponseEntity<CreditRequestResponse> cancelCreditRequest(
+            @PathVariable Long creditRequestId) {
+        CreditRequestResponse creditRequestResponse =
+                creditRequestService.cancelCreditRequest(creditRequestId);
+        return new ResponseEntity<>(creditRequestResponse, HttpStatus.OK);
+    }
 }
