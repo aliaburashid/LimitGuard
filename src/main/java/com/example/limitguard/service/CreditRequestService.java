@@ -353,6 +353,27 @@ public class CreditRequestService {
             throw new IllegalArgumentException("Credit request cannot expire before its expiry time");
         }
 
+        // gets the credit limit connected to this reservation
+        CreditLimit creditLimit = creditRequest.getCreditLimit();
+
+        // makes sure reserved capacity cannot become negative
+        // Do we have enough reservedAmount to remove this request amount?
+        // if yes -> subtract it if no -> stop
+        // that would make the reserved amount negative
+        if (creditLimit.getReservedAmount()
+                .compareTo(creditRequest.getAmount()) < 0) {
+            throw new IllegalArgumentException("Reserved amount cannot become negative");
+        }
+
+        // releases the unused reserved capacity
+        creditLimit.setReservedAmount(
+                creditLimit.getReservedAmount()
+                        .subtract(creditRequest.getAmount())
+        );
+
+        // saves the updated credit limit
+        creditLimitRepository.save(creditLimit);
+
         // changes the request status from RESERVED to EXPIRED
         creditRequest.setStatus(CreditRequestStatus.EXPIRED);
 
