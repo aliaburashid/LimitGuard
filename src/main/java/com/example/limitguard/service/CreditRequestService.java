@@ -394,7 +394,7 @@ public class CreditRequestService {
         auditLog.setAction("CREDIT_REQUEST_EXPIRED");
         auditLog.setEntityType("CREDIT_REQUEST");
         auditLog.setEntityId(savedCreditRequest.getId());
-        auditLog.setDetails("Credit reservation of " + savedCreditRequest.getAmount() + " expired");
+        auditLog.setDetails("Credit reservation of " + savedCreditRequest.getAmount() + " expired and released the reserved capacity");
 
         auditLogRepository.save(auditLog);
 
