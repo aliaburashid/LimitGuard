@@ -40,8 +40,9 @@ public class AuditLog {
 
     // the user who performed the action
     // in the database this will be stored as actor_id
+    // Reservation expires automatically -> actor = null
     @ManyToOne
-    @JoinColumn(name = "actor_id", nullable = false)
+    @JoinColumn(name = "actor_id")
     private User actor;
 
     // automatically stores when the audit log was created

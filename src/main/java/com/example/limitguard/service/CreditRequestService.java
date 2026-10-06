@@ -25,6 +25,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Service
 public class CreditRequestService {
@@ -180,6 +181,9 @@ public class CreditRequestService {
         // changes the request status to RESERVED
         // The money is now successfully held for this request
         creditRequest.setStatus(CreditRequestStatus.RESERVED);
+
+        // every reservation receives an expiry time
+        creditRequest.setExpiresAt(LocalDateTime.now().plusHours(24));
     }
 
     // marks reserved credit capacity as used
@@ -307,6 +311,60 @@ public class CreditRequestService {
         auditLog.setEntityId(savedCreditRequest.getId());
         auditLog.setDetails("Cancelled reserved credit request of " + savedCreditRequest.getAmount() + " and released the reserved capacity");
         auditLog.setActor(currentUser);
+
+        auditLogRepository.save(auditLog);
+
+        // returns the updated credit request
+        return new CreditRequestResponse(
+                savedCreditRequest.getId(),
+                savedCreditRequest.getAmount(),
+                savedCreditRequest.getStatus(),
+                savedCreditRequest.getCreditLimit().getId(),
+                savedCreditRequest.getCreditLimit().getCounterparty().getId(),
+                savedCreditRequest.getRequester().getId(),
+                savedCreditRequest.getExpiresAt(),
+                savedCreditRequest.getCreatedAt(),
+                savedCreditRequest.getUpdatedAt()
+        );
+    }
+
+    // expires an unused credit reservation
+    @Transactional
+    public CreditRequestResponse expireCreditRequest(Long creditRequestId) {
+
+        // checks that the credit request exists
+        CreditRequest creditRequest = creditRequestRepository
+                .findById(creditRequestId)
+                .orElseThrow(() ->
+                        new CreditRequestNotFoundException("Credit request not found"));
+
+        // only a RESERVED request can expire
+        if (creditRequest.getStatus() != CreditRequestStatus.RESERVED) {
+            throw new IllegalArgumentException("Only a reserved credit request can expire");
+        }
+
+        // makes sure the reservation has an expiry time
+        if (creditRequest.getExpiresAt() == null) {
+            throw new IllegalArgumentException("Credit request does not have an expiry time");
+        }
+
+        // prevents the reservation from expiring before its expiry time
+        if (LocalDateTime.now().isBefore(creditRequest.getExpiresAt())) {
+            throw new IllegalArgumentException("Credit request cannot expire before its expiry time");
+        }
+
+        // changes the request status from RESERVED to EXPIRED
+        creditRequest.setStatus(CreditRequestStatus.EXPIRED);
+
+        // saves the expired request
+        CreditRequest savedCreditRequest = creditRequestRepository.save(creditRequest);
+
+        // records the automatic expiry in the audit log
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction("CREDIT_REQUEST_EXPIRED");
+        auditLog.setEntityType("CREDIT_REQUEST");
+        auditLog.setEntityId(savedCreditRequest.getId());
+        auditLog.setDetails("Credit reservation of " + savedCreditRequest.getAmount() + " expired");
 
         auditLogRepository.save(auditLog);
 
