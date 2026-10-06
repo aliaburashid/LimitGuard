@@ -317,6 +317,10 @@ public class CreditRequestService {
                 .orElseThrow(() -> new CreditRequestNotFoundException(
                         "Credit request with id " + creditRequestId + " was not found"));
 
+        // makes sure the requester and decision maker are different users
+        // this must happen before the request can be rejected
+        validateMakerChecker(creditRequest);
+
         // only PENDING_APPROVAL can move to REJECTED
         validateStatusTransition(creditRequest, CreditRequestStatus.REJECTED);
 
