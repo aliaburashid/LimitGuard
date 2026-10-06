@@ -46,6 +46,9 @@ public class CreditRequestService {
     @Autowired
     private ApprovalDecisionRepository approvalDecisionRepository;
 
+    @Autowired
+    private EmailService emailService;
+
     //---------------------------------------------------------------------------
 
     // gets the currently logged-in user
@@ -323,6 +326,12 @@ public class CreditRequestService {
 
         auditLogRepository.save(auditLog);
 
+        // sends the approval notification to the user who created the request
+        emailService.SendCreditRequestApprovedEmail(
+                savedCreditRequest.getRequester().getEmail(),
+                savedCreditRequest.getId()
+        );
+
         return new CreditRequestResponse(
                 savedCreditRequest.getId(),
                 savedCreditRequest.getAmount(),
@@ -380,6 +389,13 @@ public class CreditRequestService {
         auditLog.setActor(getCurrentLoggedInUser());
 
         auditLogRepository.save(auditLog);
+
+        // sends the rejection notification to the user who created the request
+        emailService.SendCreditRequestRejectedEmail(
+                savedCreditRequest.getRequester().getEmail(),
+                savedCreditRequest.getId(),
+                reason
+        );
 
         return new CreditRequestResponse(
                 savedCreditRequest.getId(),
