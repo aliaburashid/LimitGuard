@@ -112,4 +112,14 @@ public class CreditRequestController {
                 creditRequestService.reviewCreditRequest(creditRequestId);
         return new ResponseEntity<>(creditRequest, HttpStatus.OK);
     }
+
+    // allows a Risk Officer to approve a pending credit request
+    @PatchMapping("/{creditRequestId}/approve")
+    @PreAuthorize("hasRole('RISK_OFFICER')")
+    public ResponseEntity<CreditRequestResponse> approveCreditRequest(
+            @PathVariable Long creditRequestId) {
+        CreditRequestResponse creditRequest =
+                creditRequestService.approveCreditRequest(creditRequestId);
+        return new ResponseEntity<>(creditRequest, HttpStatus.OK);
+    }
 }
