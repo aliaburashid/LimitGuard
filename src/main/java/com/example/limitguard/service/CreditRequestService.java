@@ -301,6 +301,16 @@ public class CreditRequestService {
         CreditRequest savedCreditRequest =
                 creditRequestRepository.save(creditRequest);
 
+        // record who rejected the request and why
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction("CREDIT_REQUEST_REJECTED");
+        auditLog.setEntityType("CREDIT_REQUEST");
+        auditLog.setEntityId(savedCreditRequest.getId());
+        auditLog.setDetails("Rejected credit request of " + savedCreditRequest.getAmount() + ". Reason: " + reason);
+        auditLog.setActor(getCurrentLoggedInUser());
+
+        auditLogRepository.save(auditLog);
+
         return new CreditRequestResponse(
                 savedCreditRequest.getId(),
                 savedCreditRequest.getAmount(),
