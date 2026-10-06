@@ -4,6 +4,7 @@ import com.example.limitguard.dto.CreditRequestRequest;
 import com.example.limitguard.dto.CreditRequestResponse;
 import com.example.limitguard.enums.CreditRequestStatus;
 import com.example.limitguard.exception.CreditLimitNotFoundException;
+import com.example.limitguard.exception.InsufficientHeadroomException;
 import com.example.limitguard.model.CreditLimit;
 import com.example.limitguard.model.CreditRequest;
 import com.example.limitguard.model.User;
@@ -66,6 +67,18 @@ public class CreditRequestService {
 
             throw new IllegalArgumentException(
                     "Credit requests cannot be created for a frozen or closed counterparty");
+        }
+
+        // calculates the credit capacity that is still available
+        BigDecimal availableHeadroom = creditLimit.getLimitAmount()
+                .subtract(creditLimit.getUsedAmount())
+                .subtract(creditLimit.getReservedAmount());
+
+        // prevents a credit request from exceeding the available headroom
+        // rejecting 0 and below
+        if (creditRequestRequest.getAmount()
+                .compareTo(availableHeadroom) > 0) {
+            throw new InsufficientHeadroomException("Requested amount exceeds available headroom");
         }
 
         // gets the requester from the logged-in user
