@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.limitguard.enums.CounterpartyStatus;
 
 import java.math.BigDecimal;
 
@@ -53,6 +54,14 @@ public class CreditRequestService {
                 .findById(creditRequestRequest.getCreditLimitId())
                 .orElseThrow(() ->
                         new CreditLimitNotFoundException("Credit limit not found"));
+
+        // prevents new credit requests for frozen or closed counterparties
+        if (creditLimit.getCounterparty().getStatus() == CounterpartyStatus.FROZEN
+                || creditLimit.getCounterparty().getStatus() == CounterpartyStatus.CLOSED) {
+
+            throw new IllegalArgumentException(
+                    "Credit requests cannot be created for a frozen or closed counterparty");
+        }
 
         // gets the requester from the logged-in user
         User requester = getCurrentLoggedInUser();
