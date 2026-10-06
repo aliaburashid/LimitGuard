@@ -231,4 +231,11 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(Map.of("message", exception.getMessage()), HttpStatus.BAD_REQUEST);
     }
 
+    // handles credit requests that cannot be found
+    @ExceptionHandler(CreditRequestNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleCreditRequestNotFound(
+            CreditRequestNotFoundException exception) {
+        return new ResponseEntity<>(Map.of("message", exception.getMessage()), HttpStatus.NOT_FOUND);
+    }
+
 }
