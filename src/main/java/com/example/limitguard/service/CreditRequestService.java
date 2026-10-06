@@ -3,6 +3,7 @@ package com.example.limitguard.service;
 import com.example.limitguard.dto.CreditRequestRequest;
 import com.example.limitguard.dto.CreditRequestResponse;
 import com.example.limitguard.enums.CreditRequestStatus;
+import com.example.limitguard.dto.CreditRequestReviewResponse;
 import com.example.limitguard.enums.UserRole;
 import com.example.limitguard.exception.CreditLimitNotFoundException;
 import com.example.limitguard.exception.CreditRequestNotFoundException;
@@ -453,6 +454,55 @@ public class CreditRequestService {
                 savedCreditRequest.getExpiresAt(),
                 savedCreditRequest.getCreatedAt(),
                 savedCreditRequest.getUpdatedAt()
+        );
+    }
+
+    // gets the information a Risk Officer needs to review a pending credit request
+    public CreditRequestReviewResponse reviewCreditRequest(Long creditRequestId) {
+
+        // finds the requested credit request
+        CreditRequest creditRequest = creditRequestRepository.findById(creditRequestId)
+                .orElseThrow(() ->
+                        new CreditRequestNotFoundException(
+                                "Credit request with id " + creditRequestId + " was not found"
+                        )
+                );
+
+        // only requests waiting for approval can enter the approval-review workflow
+        if (creditRequest.getStatus() != CreditRequestStatus.PENDING_APPROVAL) {
+            throw new IllegalArgumentException( "Credit request is not awaiting approval");
+        }
+
+        CreditLimit creditLimit = creditRequest.getCreditLimit();
+
+        // headroom must use the current exposure values, not values from when
+        // the credit request was originally submitted
+        BigDecimal availableHeadroom = creditLimit.getLimitAmount()
+                .subtract(creditLimit.getUsedAmount())
+                .subtract(creditLimit.getReservedAmount());
+
+        String requesterName =
+                creditRequest.getRequester().getFirstName()
+                        + " "
+                        + creditRequest.getRequester().getLastName();
+
+        return new CreditRequestReviewResponse(
+                creditRequest.getId(),
+                creditRequest.getAmount(),
+                creditRequest.getStatus(),
+                creditRequest.getCreatedAt(),
+
+                creditRequest.getRequester().getId(),
+                requesterName,
+
+                creditLimit.getCounterparty().getId(),
+                creditLimit.getCounterparty().getName(),
+
+                creditLimit.getId(),
+                creditLimit.getLimitAmount(),
+                creditLimit.getUsedAmount(),
+                creditLimit.getReservedAmount(),
+                availableHeadroom
         );
     }
 
