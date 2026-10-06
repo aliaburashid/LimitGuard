@@ -275,6 +275,18 @@ public class CreditRequestService {
         CreditRequest savedCreditRequest =
                 creditRequestRepository.save(creditRequest);
 
+        // records the successful approval in the audit trail
+        AuditLog auditLog = new AuditLog();
+
+        auditLog.setAction("CREDIT_REQUEST_APPROVED");
+        auditLog.setEntityType("CREDIT_REQUEST");
+        auditLog.setEntityId(savedCreditRequest.getId());
+        auditLog.setDetails("Approved credit request of " + savedCreditRequest.getAmount() + " and reserved the credit capacity");
+
+        auditLog.setActor(getCurrentLoggedInUser());
+
+        auditLogRepository.save(auditLog);
+
         return new CreditRequestResponse(
                 savedCreditRequest.getId(),
                 savedCreditRequest.getAmount(),
