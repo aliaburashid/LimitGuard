@@ -289,6 +289,15 @@ public class CreditRequestService {
 
         CreditLimit creditLimit = creditRequest.getCreditLimit();
 
+        // makes sure reserved capacity cannot become negative
+        // Do we have enough reservedAmount to remove this request amount?
+        if (creditLimit.getReservedAmount()
+                .compareTo(creditRequest.getAmount()) < 0) {
+
+            throw new IllegalArgumentException(
+                    "Reserved amount cannot become negative");
+        }
+
         // releases the reserved capacity
         creditLimit.setReservedAmount(
                 creditLimit.getReservedAmount()
