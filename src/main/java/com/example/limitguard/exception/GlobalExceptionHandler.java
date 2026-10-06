@@ -9,8 +9,6 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.mail.MailSendException;
-import com.example.limitguard.exception.CounterpartyNotFoundException;
-import com.example.limitguard.exception.CreditLimitAlreadyExistsException;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -225,4 +223,12 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST
         );
     }
+
+    // handles credit requests that exceed the available headroom
+    @ExceptionHandler(InsufficientHeadroomException.class)
+    public ResponseEntity<Map<String, String>> handleInsufficientHeadroom(
+            InsufficientHeadroomException exception) {
+        return new ResponseEntity<>(Map.of("message", exception.getMessage()), HttpStatus.BAD_REQUEST);
+    }
+
 }
