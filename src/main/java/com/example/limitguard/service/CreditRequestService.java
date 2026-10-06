@@ -24,6 +24,9 @@ import com.example.limitguard.model.AuditLog;
 import com.example.limitguard.repository.AuditLogRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import com.example.limitguard.enums.ApprovalDecisionType;
+import com.example.limitguard.model.ApprovalDecision;
+import com.example.limitguard.repository.ApprovalDecisionRepository;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -39,6 +42,9 @@ public class CreditRequestService {
 
     @Autowired
     private AuditLogRepository auditLogRepository;
+
+    @Autowired
+    private ApprovalDecisionRepository approvalDecisionRepository;
 
     //---------------------------------------------------------------------------
 
@@ -282,6 +288,15 @@ public class CreditRequestService {
 
         CreditRequest savedCreditRequest =
                 creditRequestRepository.save(creditRequest);
+
+        // records the final approval decision
+        ApprovalDecision approvalDecision = new ApprovalDecision();
+
+        approvalDecision.setDecision(ApprovalDecisionType.APPROVED);
+        approvalDecision.setCreditRequest(savedCreditRequest);
+        approvalDecision.setDecidedBy(getCurrentLoggedInUser());
+
+        approvalDecisionRepository.save(approvalDecision);
 
         // records the successful approval in the audit trail
         AuditLog auditLog = new AuditLog();
