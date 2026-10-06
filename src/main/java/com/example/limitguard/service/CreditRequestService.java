@@ -124,6 +124,16 @@ public class CreditRequestService {
         }
     }
 
+    // makes sure only requests waiting for approval can enter the approval workflow
+    private void validateApprovalAction(CreditRequest creditRequest) {
+
+        if (creditRequest.getStatus() != CreditRequestStatus.PENDING_APPROVAL) {
+            throw new IllegalArgumentException(
+                    "Only pending approval requests can be approved or rejected"
+            );
+        }
+    }
+
     // submits a new credit capacity request
     @Transactional
     public CreditRequestResponse createCreditRequest(CreditRequestRequest creditRequestRequest) {
