@@ -283,6 +283,37 @@ public class CreditRequestService {
         );
     }
 
+    // rejects a credit request that is waiting for Risk Officer approval
+    @Transactional
+    public CreditRequestResponse rejectCreditRequest(Long creditRequestId, String reason) {
+
+        // find the credit request
+        CreditRequest creditRequest = creditRequestRepository.findById(creditRequestId)
+                .orElseThrow(() -> new CreditRequestNotFoundException(
+                        "Credit request with id " + creditRequestId + " was not found"));
+
+        // only PENDING_APPROVAL can move to REJECTED
+        validateStatusTransition(creditRequest, CreditRequestStatus.REJECTED);
+
+        // rejection does not reserve or use any credit capacity
+        creditRequest.setStatus(CreditRequestStatus.REJECTED);
+
+        CreditRequest savedCreditRequest =
+                creditRequestRepository.save(creditRequest);
+
+        return new CreditRequestResponse(
+                savedCreditRequest.getId(),
+                savedCreditRequest.getAmount(),
+                savedCreditRequest.getStatus(),
+                savedCreditRequest.getCreditLimit().getId(),
+                savedCreditRequest.getCreditLimit().getCounterparty().getId(),
+                savedCreditRequest.getRequester().getId(),
+                savedCreditRequest.getExpiresAt(),
+                savedCreditRequest.getCreatedAt(),
+                savedCreditRequest.getUpdatedAt()
+        );
+    }
+
     // marks reserved credit capacity as used
     @Transactional
     public CreditRequestResponse markCreditRequestAsUsed(Long creditRequestId) {
