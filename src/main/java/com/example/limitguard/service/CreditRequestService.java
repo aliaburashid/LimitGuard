@@ -56,6 +56,51 @@ public class CreditRequestService {
         return userDetails.getUser();
     }
 
+    // checks whether a credit request is allowed to move
+    // from its current status to the requested new status
+    private void validateStatusTransition(CreditRequest creditRequest, CreditRequestStatus newStatus) {
+        // gets the status the credit request is currently in
+        CreditRequestStatus currentStatus = creditRequest.getStatus();
+
+        // starts as false because a status change should only be allowed
+        // when it matches one of the valid workflow transitions below
+        boolean validTransition = false;
+
+        // a request waiting for Risk approval can only:
+        // 1. be approved and move to RESERVED
+        // 2. be rejected and move to REJECTED
+        if (currentStatus == CreditRequestStatus.PENDING_APPROVAL) {
+            if (newStatus == CreditRequestStatus.RESERVED
+                    || newStatus == CreditRequestStatus.REJECTED) {
+                validTransition = true;
+            }
+        }
+        // once capacity has been reserved, the request can only:
+        // 1. become USED when the reserved capacity is used
+        // 2. become CANCELLED and release the reserved capacity
+        // 3. become EXPIRED and release the reserved capacity
+        else if (currentStatus == CreditRequestStatus.RESERVED) {
+            if (newStatus == CreditRequestStatus.USED
+                    || newStatus == CreditRequestStatus.CANCELLED
+                    || newStatus == CreditRequestStatus.EXPIRED) {
+
+                validTransition = true;
+            }
+        }
+
+        // USED, CANCELLED, REJECTED and EXPIRED do not have any
+        // allowed transitions above because they are terminal statuses.
+        // if the requested transition was not one of the allowed paths,
+        // stop the operation before any request or exposure data is changed
+        if (!validTransition) {
+            throw new IllegalArgumentException(
+                    "Invalid credit request status transition from "
+                            + currentStatus
+                            + " to "
+                            + newStatus
+            );
+        }
+    }
 
     // submits a new credit capacity request
     @Transactional
@@ -207,11 +252,10 @@ public class CreditRequestService {
                     "You do not have permission to use this credit request");
         }
 
-        // only a RESERVED request can become USED
-        if (creditRequest.getStatus() != CreditRequestStatus.RESERVED) {
-            throw new IllegalArgumentException(
-                    "Only a reserved credit request can be marked as used");
-        }
+        // checks that the current request status is allowed to move to USED
+        // this prevents invalid transitions such as CANCELLED -> USED
+        // or EXPIRED -> USED before any exposure amounts are changed
+        validateStatusTransition(creditRequest, CreditRequestStatus.USED);
 
         CreditLimit creditLimit = creditRequest.getCreditLimit();
 
@@ -281,11 +325,11 @@ public class CreditRequestService {
                     "You do not have permission to cancel this credit request");
         }
 
-        // only a RESERVED request can be cancelled
-        if (creditRequest.getStatus() != CreditRequestStatus.RESERVED) {
-            throw new IllegalArgumentException(
-                    "Only a reserved credit request can be cancelled");
-        }
+        // checks that the current request status is allowed to move to CANCELLED
+        // this prevents invalid transitions such as USED -> CANCELLED
+        // or EXPIRED -> CANCELLED before reserved capacity is released
+        validateStatusTransition(creditRequest, CreditRequestStatus.CANCELLED);
+
 
         CreditLimit creditLimit = creditRequest.getCreditLimit();
 
@@ -347,10 +391,10 @@ public class CreditRequestService {
                 .orElseThrow(() ->
                         new CreditRequestNotFoundException("Credit request not found"));
 
-        // only a RESERVED request can expire
-        if (creditRequest.getStatus() != CreditRequestStatus.RESERVED) {
-            throw new IllegalArgumentException("Only a reserved credit request can expire");
-        }
+        // checks that the current request status is allowed to move to EXPIRED
+        // this prevents terminal requests such as USED or CANCELLED
+        // from being expired and releasing capacity again
+        validateStatusTransition(creditRequest, CreditRequestStatus.EXPIRED);
 
         // makes sure the reservation has an expiry time
         if (creditRequest.getExpiresAt() == null) {
