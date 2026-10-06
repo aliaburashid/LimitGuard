@@ -57,6 +57,21 @@ public class CreditRequestService {
         return userDetails.getUser();
     }
 
+    // enforces the maker-checker rule for approval decisions
+    // the user who submitted the request cannot approve or reject their own request
+    private void validateMakerChecker(CreditRequest creditRequest) {
+
+        // gets the authenticated user attempting to make the decision
+        User currentUser = getCurrentLoggedInUser();
+
+        // compares the decision maker with the user who originally submitted the request
+        if (creditRequest.getRequester().getId().equals(currentUser.getId())) {
+
+            // stops the decision before the request status or exposure can be changed
+            throw new AccessDeniedException("You cannot approve or reject your own credit request");
+        }
+    }
+
     // checks whether a credit request is allowed to move
     // from its current status to the requested new status
     private void validateStatusTransition(CreditRequest creditRequest, CreditRequestStatus newStatus) {
