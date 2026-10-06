@@ -482,6 +482,34 @@ public class CreditRequestService {
         );
     }
 
+    // gets all credit requests that are waiting for Risk Officer approval
+    public Page<CreditRequestResponse> getPendingCreditRequests(Pageable pageable) {
+
+        // finds only requests that currently have the PENDING_APPROVAL status
+        // pagination and sorting are applied through the Pageable object
+        Page<CreditRequest> pendingRequests =
+                creditRequestRepository.findByStatus(
+                        CreditRequestStatus.PENDING_APPROVAL,
+                        pageable
+                );
+
+        // converts each CreditRequest entity into a CreditRequestResponse DTO
+        // so the API does not return the database entity directly
+        return pendingRequests.map(creditRequest ->
+                new CreditRequestResponse(
+                        creditRequest.getId(),
+                        creditRequest.getAmount(),
+                        creditRequest.getStatus(),
+                        creditRequest.getCreditLimit().getId(),
+                        creditRequest.getCreditLimit().getCounterparty().getId(),
+                        creditRequest.getRequester().getId(),
+                        creditRequest.getExpiresAt(),
+                        creditRequest.getCreatedAt(),
+                        creditRequest.getUpdatedAt()
+                )
+        );
+    }
+
     // gets a credit request by ID for an authorized user
     public CreditRequestResponse getCreditRequestById(Long creditRequestId) {
 
