@@ -14,7 +14,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-
 @RestController
 @RequestMapping("/api/credit-requests")
 public class CreditRequestController {
@@ -89,5 +88,17 @@ public class CreditRequestController {
         CreditRequestResponse creditRequestResponse =
                 creditRequestService.cancelCreditRequest(creditRequestId);
         return new ResponseEntity<>(creditRequestResponse, HttpStatus.OK);
+    }
+
+    // gets all credit requests waiting for Risk Officer approval
+    @GetMapping("/pending")
+    @PreAuthorize("hasRole('RISK_OFFICER')")
+    public ResponseEntity<Page<CreditRequestResponse>> getPendingCreditRequests(Pageable pageable) {
+        // asks the service for only requests with PENDING_APPROVAL status
+        // Pageable allows the results to support pagination and sorting
+        Page<CreditRequestResponse> pendingRequests =
+                creditRequestService.getPendingCreditRequests(pageable);
+        // returns the pending approval queue with HTTP 200 OK
+        return new ResponseEntity<>(pendingRequests, HttpStatus.OK);
     }
 }
