@@ -345,6 +345,16 @@ public class CreditRequestService {
         CreditRequest savedCreditRequest =
                 creditRequestRepository.save(creditRequest);
 
+        // records the final rejection decision and its reason
+        ApprovalDecision approvalDecision = new ApprovalDecision();
+
+        approvalDecision.setDecision(ApprovalDecisionType.REJECTED);
+        approvalDecision.setReason(reason);
+        approvalDecision.setCreditRequest(savedCreditRequest);
+        approvalDecision.setDecidedBy(getCurrentLoggedInUser());
+
+        approvalDecisionRepository.save(approvalDecision);
+
         // record who rejected the request and why
         AuditLog auditLog = new AuditLog();
         auditLog.setAction("CREDIT_REQUEST_REJECTED");
