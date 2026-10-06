@@ -266,6 +266,10 @@ public class CreditRequestService {
                         )
                 );
 
+        // makes sure the requester and decision maker are different users
+        // this must happen before any request status or exposure is changed
+        validateMakerChecker(creditRequest);
+
         // only PENDING_APPROVAL can move to RESERVED
         validateStatusTransition(creditRequest, CreditRequestStatus.RESERVED);
 
