@@ -330,4 +330,73 @@ public class EmailService {
             );
         }
     }
+
+    // Sends an email when a reserved credit request expires
+    public void SendCreditRequestExpiredEmail(String email, Long creditRequestId) {
+        try {
+
+            // create a new email
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper =
+                    new MimeMessageHelper(message, true, "UTF-8");
+
+            // set who receives the email
+            helper.setTo(email);
+
+            // set the email subject
+            helper.setSubject("Your LimitGuard credit reservation has expired");
+
+            // set the email message
+            String emailMessage = """
+            <html>
+            <body style="margin: 0; padding: 0; background-color: #f4f6f8;
+                         font-family: Arial, sans-serif;">
+
+                <div style="max-width: 600px; margin: 40px auto;
+                            background-color: white; padding: 40px;
+                            border-radius: 10px;">
+
+                    <h1 style="color: #1f2937;">
+                        LimitGuard
+                    </h1>
+
+                    <h2 style="color: #1f2937;">
+                        Credit reservation expired
+                    </h2>
+
+                    <p style="color: #4b5563; line-height: 1.6;">
+                        The reserved credit capacity for your credit request #%s
+                        has expired.
+                    </p>
+
+                    <p style="color: #4b5563; line-height: 1.6;">
+                        The capacity is no longer reserved for this request.
+                    </p>
+
+                    <hr style="border: none;
+                               border-top: 1px solid #e5e7eb;
+                               margin: 30px 0;">
+
+                    <p style="color: #9ca3af; font-size: 12px;">
+                        LimitGuard - Credit Limit & Exposure Management
+                    </p>
+
+                </div>
+
+            </body>
+            </html>
+            """.formatted(creditRequestId);
+
+            // true means the email message contains HTML
+            helper.setText(emailMessage, true);
+
+            // send the email
+            mailSender.send(message);
+
+        } catch (MessagingException exception) {
+            throw new RuntimeException(
+                    "Unable to send credit request expiry email"
+            );
+        }
+    }
 }
