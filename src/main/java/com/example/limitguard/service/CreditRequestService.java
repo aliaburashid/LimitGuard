@@ -49,6 +49,9 @@ public class CreditRequestService {
     @Autowired
     private EmailService emailService;
 
+    @Autowired
+    private CreditRequestEventService creditRequestEventService;
+
     //---------------------------------------------------------------------------
 
     // gets the currently logged-in user
@@ -211,6 +214,12 @@ public class CreditRequestService {
             reservationAuditLog.setActor(requester);
 
             auditLogRepository.save(reservationAuditLog);
+
+            // sends the new RESERVED status to clients listening to the SSE stream
+            creditRequestEventService.publishStatusUpdate(
+                    savedCreditRequest.getId(),
+                    savedCreditRequest.getStatus()
+            );
         }
 
         // return it in a DTO response
@@ -332,6 +341,12 @@ public class CreditRequestService {
                 savedCreditRequest.getId()
         );
 
+        // sends the new RESERVED status to clients listening to the SSE stream
+        creditRequestEventService.publishStatusUpdate(
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus()
+        );
+
         return new CreditRequestResponse(
                 savedCreditRequest.getId(),
                 savedCreditRequest.getAmount(),
@@ -395,6 +410,12 @@ public class CreditRequestService {
                 savedCreditRequest.getRequester().getEmail(),
                 savedCreditRequest.getId(),
                 reason
+        );
+
+        // sends the new REJECTED status to clients listening to the SSE stream
+        creditRequestEventService.publishStatusUpdate(
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus()
         );
 
         return new CreditRequestResponse(
@@ -468,6 +489,12 @@ public class CreditRequestService {
         auditLog.setActor(currentUser);
 
         auditLogRepository.save(auditLog);
+
+        // sends the new USED status to clients listening to the SSE stream
+        creditRequestEventService.publishStatusUpdate(
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus()
+        );
 
         // returns the updated credit request
         return new CreditRequestResponse(
@@ -545,6 +572,12 @@ public class CreditRequestService {
         auditLog.setActor(currentUser);
 
         auditLogRepository.save(auditLog);
+
+        // sends the new CANCELLED status to clients listening to the SSE stream
+        creditRequestEventService.publishStatusUpdate(
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus()
+        );
 
         // returns the updated credit request
         return new CreditRequestResponse(
@@ -630,6 +663,12 @@ public class CreditRequestService {
             );
         } catch (Exception exception) {
             // the reservation expiry should still complete if email delivery fails
+
+            // sends the new EXPIRED status to clients listening to the SSE stream
+            creditRequestEventService.publishStatusUpdate(
+                    savedCreditRequest.getId(),
+                    savedCreditRequest.getStatus()
+            );
         }
 
         // returns the updated credit request
@@ -668,8 +707,7 @@ public class CreditRequestService {
         // not values from when the credit request was originally submitted
         BigDecimal availableHeadroom = calculateAvailableHeadroom(creditLimit);
 
-        String requesterName =
-                creditRequest.getRequester().getFirstName()
+        String requesterName = creditRequest.getRequester().getFirstName()
                         + " "
                         + creditRequest.getRequester().getLastName();
 
