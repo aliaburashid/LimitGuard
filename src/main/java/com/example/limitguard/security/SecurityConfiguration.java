@@ -12,6 +12,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 
 // @Bean tells Spring to create and manage this object
 
@@ -26,6 +27,11 @@ public class SecurityConfiguration {
     // Gives Spring Security access to our JWT filter
     @Autowired
     private JwtRequestFilter jwtRequestFilter;
+
+    // Gives Spring Security access to our rate-limiting filter
+    // This filter protects public endpoints from too many requests
+    @Autowired
+    private RateLimitFilter rateLimitFilter;
 
     // Creates the password encoder that will hash users passwords
     @Bean
@@ -64,6 +70,13 @@ public class SecurityConfiguration {
                         .anyRequest().authenticated()
                 )
 
+                // run rate limiting before JWT authentication
+                // excessive requests are rejected before reaching the controller
+                .addFilterBefore(
+                        rateLimitFilter,
+                        JwtRequestFilter.class
+                )
+
                 // check for a JWT before Springs username/password filter
                 .addFilterBefore(
                         jwtRequestFilter,
@@ -73,6 +86,19 @@ public class SecurityConfiguration {
         // Builds and returns the security configuration
         return http.build();
     }
+
+    // Spring Boot normally registers @Component filters automatically
+    // since we already added RateLimitFilter to Spring Security,
+    // disable its separate servlet registration so it runs only
+    // through the Spring Security filter chain.
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(
+            RateLimitFilter rateLimitFilter) {
+        FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(rateLimitFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
 
     // Creates the AuthenticationManager that handles user authentication
     // when a user tries to log in
