@@ -35,6 +35,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final Map<String, RequestCounter> requestCounters =
             new ConcurrentHashMap<>();
 
+    // get the current time in milliseconds
+    // keeping this in a method allows tests to simulate time passing
+    protected long getCurrentTime() {
+        return System.currentTimeMillis();
+    }
 
     @Override
     protected void doFilterInternal(
@@ -71,7 +76,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String rateLimitKey = clientIp + ":" + path;
 
         // Get the current time in milliseconds.
-        long currentTime = System.currentTimeMillis();
+        long currentTime = getCurrentTime();
 
         // Records whether this request should be blocked.
         // We use an array because a lambda cannot reassign
