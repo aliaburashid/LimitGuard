@@ -15,17 +15,37 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.io.IOException;
 
+import com.example.limitguard.dto.ErrorResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.LocalDateTime;
+
 // Handles exceptions from all controllers in the application
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // Creates the same error response structure for all API errors
+    private ErrorResponse createErrorResponse(HttpStatus status, String message, HttpServletRequest request) {
+        return new ErrorResponse(
+                LocalDateTime.now(),
+                status.value(),
+                status.name(),
+                message,
+                request.getRequestURI()
+        );
+    }
+
     // If an EmailAlreadyExistsException happens, run this method
     @ExceptionHandler(EmailAlreadyExistsException.class)
-    public ResponseEntity<Map<String, String>> handleEmailAlreadyExists(EmailAlreadyExistsException exception) {
-        // Create JSON containing the error response
-        Map<String, String> errorResponse = new HashMap<>();
-        // Add the exception message to the response
-        errorResponse.put("message", exception.getMessage());
+    public ResponseEntity<ErrorResponse> handleEmailAlreadyExists(
+            EmailAlreadyExistsException exception,
+            HttpServletRequest request) {
+
+        ErrorResponse errorResponse = createErrorResponse(
+                HttpStatus.CONFLICT,
+                exception.getMessage(),
+                request
+        );
+
         // Return the error with status 409 CONFLICT
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
     }
