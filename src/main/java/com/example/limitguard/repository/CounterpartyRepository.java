@@ -1,5 +1,6 @@
 package com.example.limitguard.repository;
 
+import com.example.limitguard.enums.CounterpartyStatus;
 import com.example.limitguard.model.Counterparty;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -31,4 +32,17 @@ public interface CounterpartyRepository extends JpaRepository<Counterparty, Long
     // checks whether another counterparty already uses this name
     // does someone other than the counterparty I'm currently updating have this name?
     boolean existsByNameAndIdNot(String name, Long id);
+
+    // filters counterparties by status
+    Page<Counterparty> findByStatus(
+            CounterpartyStatus status,
+            Pageable pageable
+    );
+
+    // searches by name and filters by status at the same time
+    Page<Counterparty> findByNameContainingIgnoreCaseAndStatus(
+            String name,
+            CounterpartyStatus status,
+            Pageable pageable
+    );
 }

@@ -113,17 +113,43 @@ public class CounterpartyService {
         );
     }
 
-    // gets all counterparties or searches them by name
+
+    // gets all counterparties or searches/filters them by name and status
     // Pageable handles pagination and sorting
-    public Page<CounterpartyResponse> getCounterparties(String name, Pageable pageable) {
+    public Page<CounterpartyResponse> getCounterparties(
+            String name,
+            CounterpartyStatus status,
+            Pageable pageable) {
+
         Page<Counterparty> counterparties;
 
-        // if no name was provided, return all counterparties
-        if (name == null || name.isBlank()) {
-            counterparties = counterpartyRepository.findAll(pageable);
+        // if both name and status were provided,
+        // search by name and filter by status
+        if (name != null && !name.isBlank() && status != null) {
+
+            counterparties = counterpartyRepository
+                    .findByNameContainingIgnoreCaseAndStatus(
+                            name,
+                            status,
+                            pageable
+                    );
+
+            // if only name was provided, search by name
+        } else if (name != null && !name.isBlank()) {
+
+            counterparties = counterpartyRepository
+                    .findByNameContainingIgnoreCase(name, pageable);
+
+            // if only status was provided, filter by status
+        } else if (status != null) {
+
+            counterparties = counterpartyRepository
+                    .findByStatus(status, pageable);
+
+            // if no name or status was provided, return all counterparties
         } else {
-            // otherwise search for counterparties containing the given name
-            counterparties = counterpartyRepository.findByNameContainingIgnoreCase(name, pageable);
+
+            counterparties = counterpartyRepository.findAll(pageable);
         }
 
         // converts each Counterparty inside the page into a CounterpartyResponse
