@@ -19,6 +19,8 @@ import com.example.limitguard.repository.UserTokenRepository;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import com.example.limitguard.dto.UpdateUserRoleRequest;
 import com.example.limitguard.enums.UserRole;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -40,6 +42,10 @@ import com.example.limitguard.dto.DeactivateUserRequest;
 // Create and manage an object of this class for me
 @Service
 public class UserService {
+
+    // Logs important authentication and security events
+    // create a logger and label these messages as coming from UserService
+    private static final Logger logger = LoggerFactory.getLogger(UserService.class);
 
     // Gives this service access to users in the database
     @Autowired
@@ -82,6 +88,10 @@ public class UserService {
 
         // Check if an account with the same email already exists
         if (userRepository.findByEmail(registrationDetails.getEmail()).isPresent()) {
+
+            // Log the rejected registration without logging sensitive information
+            logger.warn("Registration rejected because an account with this email already exists");
+
             // Stop registration if an account already uses this email
             throw new EmailAlreadyExistsException("An account with the same email is already registered");
         }
@@ -121,6 +131,9 @@ public class UserService {
         // runtime exception happens here
         // send the verification link to the users email
         emailService.SendVerificationEmail(savedUser.getEmail(), verificationToken.getToken());
+
+        // Log successful registration without logging the verification token
+        logger.info("User ID {} registered successfully", savedUser.getId());
 
         // response that will be sent back after registration
         RegisterResponse registerResponse = new RegisterResponse();
@@ -183,6 +196,9 @@ public class UserService {
         // Save the changes
         userRepository.save(userToVerify);
         userTokenRepository.save(verificationToken);
+
+        // Log successful email verification without logging the verification token
+        logger.info("Email verified successfully for user ID {}", userToVerify.getId());
     }
 
     // creates a password-reset request for a user
@@ -208,6 +224,9 @@ public class UserService {
                 userFound.getEmail(),
                 passwordResetToken.getToken()
         );
+
+        // Log the password-reset request without logging the reset token
+        logger.info("Password reset requested for user ID {}", userFound.getId());
     }
 
 
@@ -244,6 +263,9 @@ public class UserService {
         // save the new password and token status
         userRepository.save(userToUpdate);
         userTokenRepository.save(passwordResetToken);
+
+        // Log successful password reset without logging the password or reset token
+        logger.info("Password reset successfully for user ID {}", userToUpdate.getId());
     }
 
     // Finds a user by their email address
@@ -261,6 +283,8 @@ public class UserService {
 
         // Do not allow the user to log in until their email is verified
         if (!userFound.isEmailVerified()) {
+            // Log the rejected login attempt without logging passwords or tokens
+            logger.warn("Login blocked because email is not verified for user ID {}", userFound.getId());
             throw new EmailNotVerifiedException("Please verify your email before logging in");
         }
 
@@ -282,6 +306,9 @@ public class UserService {
         // Generate a JWT token for the logged-in user
         String jwtToken = jwtUtils.generateJwtToken(userDetails);
 
+        // Log the successful authentication without logging the JWT
+        logger.info("User ID {} logged in successfully", userFound.getId());
+
         // Return the JWT inside the login response
         return new LoginResponse(jwtToken);
     }
@@ -297,6 +324,10 @@ public class UserService {
 
         // checks if the current password entered matches the stored hashed password
         if (!passwordEncoder.matches(changePasswordRequest.getCurrentPassword(), user.getPassword())) {
+
+            // Log the rejected password change without logging either password
+            logger.warn("Password change rejected because current password was incorrect for user ID {}", user.getId());
+
             throw new IncorrectPasswordException("Current password is incorrect");
         }
 
@@ -306,6 +337,9 @@ public class UserService {
 
         // saves the user with the new password
         userRepository.save(user);
+
+        // Log the successful password change
+        logger.info("Password changed successfully for user ID {}", user.getId());
     }
 
 
@@ -475,6 +509,10 @@ public class UserService {
 
         // prevents an admin from deactivating their own account
         if (admin.getId().equals(user.getId())) {
+
+            // Log the rejected security operation
+            logger.warn("Admin user ID {} attempted to deactivate their own account", admin.getId());
+
             throw new IllegalArgumentException("Admin cannot deactivate their own account");
         }
 
@@ -495,6 +533,9 @@ public class UserService {
 
         // saves the audit record
         auditLogRepository.save(auditLog);
+
+        // Log the successful account deactivation
+        logger.info("User ID {} was deactivated by admin user ID {}", user.getId(), admin.getId());
     }
 
 
@@ -516,11 +557,19 @@ public class UserService {
 
         // prevents the admin from changing their own role
         if (admin.getId().equals(user.getId())) {
+
+            // Log the rejected security operation
+            logger.warn("Admin user ID {} attempted to change their own role", admin.getId());
+
             throw new IllegalArgumentException("You cannot change your own role");
         }
 
         // prevents admin from being assigned through this endpoint
         if (updateUserRoleRequest.getRole() == UserRole.ADMIN) {
+
+            // Log the rejected privileged-role assignment
+            logger.warn("Admin user ID {} attempted to assign ADMIN role to user ID {}", admin.getId(), user.getId());
+
             throw new IllegalArgumentException("ADMIN role cannot be assigned");
         }
 
@@ -540,6 +589,9 @@ public class UserService {
         auditLog.setActor(admin);
 
         auditLogRepository.save(auditLog);
+
+        // Log the successful role change
+        logger.info("User ID {} role changed to {} by admin user ID {}", user.getId(), user.getRole(), admin.getId());
 
     }
 }
