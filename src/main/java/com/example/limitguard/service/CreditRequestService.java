@@ -621,11 +621,16 @@ public class CreditRequestService {
 
         auditLogRepository.save(auditLog);
 
-        // sends the expiry notification to the user who created the request
-        emailService.SendCreditRequestExpiredEmail(
-                savedCreditRequest.getRequester().getEmail(),
-                savedCreditRequest.getId()
-        );
+        // tries to notify the requester after the reservation expires
+        // an email failure should not undo the expiry or restore reserved capacity
+        try {
+            emailService.SendCreditRequestExpiredEmail(
+                    savedCreditRequest.getRequester().getEmail(),
+                    savedCreditRequest.getId()
+            );
+        } catch (Exception exception) {
+            // the reservation expiry should still complete if email delivery fails
+        }
 
         // returns the updated credit request
         return new CreditRequestResponse(
