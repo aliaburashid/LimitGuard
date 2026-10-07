@@ -70,17 +70,17 @@ public class SecurityConfiguration {
                         .anyRequest().authenticated()
                 )
 
+                // check for a JWT before Spring Security's username/password filter
+                .addFilterBefore(
+                        jwtRequestFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                )
+
                 // run rate limiting before JWT authentication
                 // excessive requests are rejected before reaching the controller
                 .addFilterBefore(
                         rateLimitFilter,
                         JwtRequestFilter.class
-                )
-
-                // check for a JWT before Springs username/password filter
-                .addFilterBefore(
-                        jwtRequestFilter,
-                        UsernamePasswordAuthenticationFilter.class
                 );
 
         // Builds and returns the security configuration
