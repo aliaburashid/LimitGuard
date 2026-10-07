@@ -621,6 +621,12 @@ public class CreditRequestService {
 
         auditLogRepository.save(auditLog);
 
+        // sends the expiry notification to the user who created the request
+        emailService.SendCreditRequestExpiredEmail(
+                savedCreditRequest.getRequester().getEmail(),
+                savedCreditRequest.getId()
+        );
+
         // returns the updated credit request
         return new CreditRequestResponse(
                 savedCreditRequest.getId(),
