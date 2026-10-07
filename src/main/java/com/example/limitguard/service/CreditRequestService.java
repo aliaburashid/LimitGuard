@@ -27,12 +27,17 @@ import org.springframework.data.domain.Pageable;
 import com.example.limitguard.enums.ApprovalDecisionType;
 import com.example.limitguard.model.ApprovalDecision;
 import com.example.limitguard.repository.ApprovalDecisionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Service
 public class CreditRequestService {
+
+    // Logs important credit request workflow events
+    private static final Logger logger = LoggerFactory.getLogger(CreditRequestService.class);
 
     @Autowired
     private CreditRequestRepository creditRequestRepository;
@@ -121,6 +126,15 @@ public class CreditRequestService {
         // if the requested transition was not one of the allowed paths,
         // stop the operation before any request or exposure data is changed
         if (!validTransition) {
+
+            // Log the rejected workflow transition
+            logger.warn(
+                    "Invalid credit request status transition from {} to {} for request ID {}",
+                    currentStatus,
+                    newStatus,
+                    creditRequest.getId()
+            );
+
             throw new IllegalArgumentException(
                     "Invalid credit request status transition from "
                             + currentStatus
@@ -165,6 +179,14 @@ public class CreditRequestService {
         // rejecting 0 and below
         if (creditRequestRequest.getAmount()
                 .compareTo(availableHeadroom) > 0) {
+
+            logger.warn(
+                    "Credit request rejected because amount {} exceeds available headroom {} for credit limit ID {}",
+                    creditRequestRequest.getAmount(),
+                    availableHeadroom,
+                    creditLimit.getId()
+            );
+
             throw new InsufficientHeadroomException("Requested amount exceeds available headroom");
         }
 
@@ -202,6 +224,13 @@ public class CreditRequestService {
         auditLog.setActor(requester);
 
         auditLogRepository.save(auditLog);
+
+        // Log the successful credit request creation
+        logger.info(
+                "Credit request ID {} created with status {}",
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus()
+        );
 
         // records when credit capacity is reserved
         if (savedCreditRequest.getStatus() == CreditRequestStatus.RESERVED) {
@@ -262,6 +291,14 @@ public class CreditRequestService {
         // checks headroom again immediately before reservation
         // Does the requested money fit inside the available headroom?
         if (creditRequest.getAmount().compareTo(availableHeadroom) > 0) {
+
+            logger.warn(
+                    "Credit reservation rejected because amount {} exceeds available headroom {} for credit limit ID {}",
+                    creditRequest.getAmount(),
+                    availableHeadroom,
+                    creditLimit.getId()
+            );
+
             throw new InsufficientHeadroomException(
                     "Insufficient headroom to reserve credit capacity");
         }
@@ -347,6 +384,12 @@ public class CreditRequestService {
                 savedCreditRequest.getStatus()
         );
 
+        // Log the successful approval
+        logger.info("Credit request ID {} approved and moved to {}",
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus()
+        );
+
         return new CreditRequestResponse(
                 savedCreditRequest.getId(),
                 savedCreditRequest.getAmount(),
@@ -417,6 +460,9 @@ public class CreditRequestService {
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus()
         );
+
+        // Log the successful rejection
+        logger.info("Credit request ID {} was rejected", savedCreditRequest.getId());
 
         return new CreditRequestResponse(
                 savedCreditRequest.getId(),
@@ -495,6 +541,9 @@ public class CreditRequestService {
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus()
         );
+
+        // Log the successful use of reserved capacity
+        logger.info("Credit request ID {} moved to USED", savedCreditRequest.getId());
 
         // returns the updated credit request
         return new CreditRequestResponse(
@@ -579,6 +628,9 @@ public class CreditRequestService {
                 savedCreditRequest.getStatus()
         );
 
+        // Log the successful cancellation
+        logger.info("Credit request ID {} moved to CANCELLED", savedCreditRequest.getId());
+
         // returns the updated credit request
         return new CreditRequestResponse(
                 savedCreditRequest.getId(),
@@ -662,14 +714,25 @@ public class CreditRequestService {
                     savedCreditRequest.getId()
             );
         } catch (Exception exception) {
-            // the reservation expiry should still complete if email delivery fails
-
-            // sends the new EXPIRED status to clients listening to the SSE stream
-            creditRequestEventService.publishStatusUpdate(
+            // logs the email failure but still allows the expiry to complete
+            logger.error(
+                    "Failed to send expiry email for credit request ID {}",
                     savedCreditRequest.getId(),
-                    savedCreditRequest.getStatus()
+                    exception
             );
         }
+
+        // sends the new EXPIRED status to clients listening to the SSE stream
+        creditRequestEventService.publishStatusUpdate(
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus()
+        );
+
+        // logs the successful automatic expiry
+        logger.info(
+                "Credit request ID {} expired and reserved capacity was released",
+                savedCreditRequest.getId()
+        );
 
         // returns the updated credit request
         return new CreditRequestResponse(
