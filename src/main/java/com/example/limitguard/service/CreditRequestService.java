@@ -883,6 +883,96 @@ public class CreditRequestService {
         );
     }
 
+    // searches and filters credit requests for the Risk Officer
+    public Page<CreditRequestResponse> searchCreditRequests(
+            CreditRequestStatus status,
+            Long counterpartyId,
+            Long requesterId,
+            Pageable pageable) {
+
+        Page<CreditRequest> creditRequests;
+
+        // all three filters were provided
+        if (status != null && counterpartyId != null && requesterId != null) {
+
+            creditRequests = creditRequestRepository
+                    .findByStatusAndCreditLimitCounterpartyIdAndRequesterId(
+                            status,
+                            counterpartyId,
+                            requesterId,
+                            pageable
+                    );
+
+            // status + counterparty
+        } else if (status != null && counterpartyId != null) {
+
+            creditRequests = creditRequestRepository
+                    .findByStatusAndCreditLimitCounterpartyId(
+                            status,
+                            counterpartyId,
+                            pageable
+                    );
+
+            // status + requester
+        } else if (status != null && requesterId != null) {
+
+            creditRequests = creditRequestRepository
+                    .findByStatusAndRequesterId(
+                            status,
+                            requesterId,
+                            pageable
+                    );
+
+            // counterparty + requester
+        } else if (counterpartyId != null && requesterId != null) {
+
+            creditRequests = creditRequestRepository
+                    .findByCreditLimitCounterpartyIdAndRequesterId(
+                            counterpartyId,
+                            requesterId,
+                            pageable
+                    );
+
+            // only status
+        } else if (status != null) {
+
+            creditRequests = creditRequestRepository
+                    .findByStatus(status, pageable);
+
+            // only counterparty
+        } else if (counterpartyId != null) {
+
+            creditRequests = creditRequestRepository
+                    .findByCreditLimitCounterpartyId(counterpartyId, pageable);
+
+            // only requester
+        } else if (requesterId != null) {
+
+            creditRequests = creditRequestRepository
+                    .findByRequesterId(requesterId, pageable);
+
+            // no filters - return all credit requests
+        } else {
+
+            creditRequests = creditRequestRepository.findAll(pageable);
+        }
+
+        // converts each CreditRequest entity into a CreditRequestResponse DTO
+        return creditRequests.map(creditRequest ->
+                new CreditRequestResponse(
+                        creditRequest.getId(),
+                        creditRequest.getAmount(),
+                        creditRequest.getStatus(),
+                        creditRequest.getCreditLimit().getId(),
+                        creditRequest.getCreditLimit().getCounterparty().getId(),
+                        creditRequest.getRequester().getId(),
+                        creditRequest.getExpiresAt(),
+                        creditRequest.getCreatedAt(),
+                        creditRequest.getUpdatedAt()
+                )
+        );
+    }
+
 
 
 
