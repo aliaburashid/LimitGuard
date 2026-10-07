@@ -3,6 +3,7 @@ package com.example.limitguard.controller;
 import com.example.limitguard.dto.CreditRequestRequest;
 import com.example.limitguard.dto.CreditRequestResponse;
 import com.example.limitguard.dto.CreditRequestReviewResponse;
+import com.example.limitguard.enums.CreditRequestStatus;
 import com.example.limitguard.service.CreditRequestService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,5 +134,25 @@ public class CreditRequestController {
         CreditRequestResponse creditRequest =
                 creditRequestService.rejectCreditRequest(creditRequestId, request.getReason());
         return new ResponseEntity<>(creditRequest, HttpStatus.OK);
+    }
+
+    // allows a Risk Officer to search and filter credit requests
+    @GetMapping("/search")
+    @PreAuthorize("hasRole('RISK_OFFICER')")
+    public ResponseEntity<Page<CreditRequestResponse>> searchCreditRequests(
+            @RequestParam(required = false) CreditRequestStatus status,
+            @RequestParam(required = false) Long counterpartyId,
+            @RequestParam(required = false) Long requesterId,
+            Pageable pageable) {
+
+        Page<CreditRequestResponse> creditRequests =
+                creditRequestService.searchCreditRequests(
+                        status,
+                        counterpartyId,
+                        requesterId,
+                        pageable
+                );
+
+        return new ResponseEntity<>(creditRequests, HttpStatus.OK);
     }
 }
