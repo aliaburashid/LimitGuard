@@ -7,6 +7,8 @@ import com.example.limitguard.service.CreditRequestService;
 import lombok.AllArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -17,6 +19,10 @@ import java.util.List;
 @AllArgsConstructor
 public class CreditRequestScheduler {
 
+    // Logs important automatic reservation expiry activity
+    private static final Logger logger =
+            LoggerFactory.getLogger(CreditRequestScheduler.class);
+
     // repository is used to find reservations from the database
     private final CreditRequestRepository creditRequestRepository;
 
@@ -25,10 +31,12 @@ public class CreditRequestScheduler {
 
     // Spring automatically runs this method every 1 minute
     // 60,000 milliseconds = 1 minute
-    // does NOT mean reservations expire after one minute the (Reservation lifetime = 24 hours)
+    // does NOT mean reservations expire after one minute
+    // Reservation lifetime = 24 hours
     // this means how often LimitGuard checks = every 1 minute
     @Scheduled(fixedRate = 60000)
     public void expireUnusedReservations() {
+
         // finds all RESERVED requests where expiresAt
         // is earlier than the current time
         List<CreditRequest> expiredReservations =
@@ -40,9 +48,27 @@ public class CreditRequestScheduler {
         // goes through every expired reservation that was found
         for (CreditRequest creditRequest : expiredReservations) {
 
-            // calls the service method which changes
-            // the request from RESERVED to EXPIRED
-            creditRequestService.expireCreditRequest(creditRequest.getId());
+            try {
+                // calls the service method which changes
+                // the request from RESERVED to EXPIRED
+                creditRequestService.expireCreditRequest(creditRequest.getId());
+
+                // logs a successful automatic expiry
+                logger.info(
+                        "Scheduler successfully expired credit request ID {}",
+                        creditRequest.getId()
+                );
+
+            } catch (Exception exception) {
+
+                // logs the failure but allows the scheduler
+                // to continue checking the other reservations
+                logger.error(
+                        "Scheduler failed to expire credit request ID {}",
+                        creditRequest.getId(),
+                        exception
+                );
+            }
         }
     }
 }
