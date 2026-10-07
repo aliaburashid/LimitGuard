@@ -3,6 +3,7 @@ package com.example.limitguard.controller;
 import com.example.limitguard.dto.CounterpartyRequest;
 import com.example.limitguard.dto.CounterpartyResponse;
 import com.example.limitguard.dto.CounterpartyStatusRequest;
+import com.example.limitguard.enums.CounterpartyStatus;
 import com.example.limitguard.service.CounterpartyService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,20 +46,37 @@ public class CounterpartyController {
         return new ResponseEntity<>(counterpartyResponse, HttpStatus.OK);
     }
 
-    // gets all counterparties or searches counterparties by name
+    // gets all counterparties or searches/filters counterparties by name and status
     // also supports pagination and sorting
     @GetMapping
     @PreAuthorize("hasAnyRole('RELATIONSHIP_MANAGER', 'RISK_OFFICER', 'ADMIN')")
     public ResponseEntity<Page<CounterpartyResponse>> getCounterparties(
+
             // name is optional
             // example: /api/counterparties?name=Bahrain
             @RequestParam(required = false) String name,
+
+            // status is optional
+            // example: /api/counterparties?status=ACTIVE
+            @RequestParam(required = false) CounterpartyStatus status,
+
             // default page = 0
             // default size = 10
             // default sorting = name ascending
-            @PageableDefault(page = 0, size = 10, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
+            @PageableDefault(
+                    page = 0,
+                    size = 10,
+                    sort = "name",
+                    direction = Sort.Direction.ASC
+            ) Pageable pageable) {
 
-        Page<CounterpartyResponse> counterparties = counterpartyService.getCounterparties(name, pageable);
+        Page<CounterpartyResponse> counterparties =
+                counterpartyService.getCounterparties(
+                        name,
+                        status,
+                        pageable
+                );
+
         return new ResponseEntity<>(counterparties, HttpStatus.OK);
     }
 
