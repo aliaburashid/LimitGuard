@@ -100,7 +100,6 @@
 			<artifactId>jjwt-api</artifactId>
 			<version>0.13.0</version>
 		</dependency>
-
 		<!-- Contains the JWT implementation used when the application is running -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
@@ -108,13 +107,18 @@
 			<version>0.13.0</version>
 			<scope>runtime</scope>
 		</dependency>
-
 		<!-- Allows JWT data to be converted to and from JSON -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
 			<artifactId>jjwt-jackson</artifactId>
 			<version>0.13.0</version>
 			<scope>runtime</scope>
+		</dependency>
+		<!-- generates Swagger UI and OpenAPI documentation for our REST endpoints -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>3.1.1</version>
 		</dependency>
 	</dependencies>
 
