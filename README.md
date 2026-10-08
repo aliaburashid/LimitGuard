@@ -6,7 +6,7 @@
 
 LimitGuard was built as a Java/Spring Boot software engineering project. It is designed to make an unfamiliar banking process understandable through clear business rules, secure APIs, and an interactive dashboard.
 
-> **Project scope:** LimitGuard is an educational, fictional simulation inspired by common banking risk-and-control concepts. It is not affiliated with Citi and does not implement or claim to represent any institution's internal credit policies. All demo banks, companies, users, and transactions are fictional.
+> **Project scope:** LimitGuard is an educational, fictional simulation inspired by common banking risk-and-control concepts. It is not affiliated with any institution's internal credit policies. All demo banks, companies, users, and transactions are fictional.
 
 ## The idea, in plain English
 
