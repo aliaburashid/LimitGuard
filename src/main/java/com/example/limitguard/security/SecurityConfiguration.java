@@ -63,7 +63,11 @@ public class SecurityConfiguration {
                                 "/api/auth/users/verify-email",
                                 "/api/auth/users/login",
                                 "/api/auth/users/forgot-password",
-                                "/api/auth/users/reset-password"
+                                "/api/auth/users/reset-password",
+                                // allows users to open swagger documentation without logging in
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**"
                         ).permitAll()
 
                         // Every other endpoint requires the user to be authenticated
