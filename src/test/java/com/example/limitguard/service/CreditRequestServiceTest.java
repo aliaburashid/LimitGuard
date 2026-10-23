@@ -9,6 +9,10 @@ import com.example.limitguard.model.Counterparty;
 import com.example.limitguard.model.CreditLimit;
 import com.example.limitguard.model.CreditRequest;
 import com.example.limitguard.model.User;
+import com.example.limitguard.model.FinancialInstitution;
+import com.example.limitguard.enums.UserRole;
+import com.example.limitguard.security.InstitutionAccessService;
+import org.mockito.Spy;
 import com.example.limitguard.repository.ApprovalDecisionRepository;
 import com.example.limitguard.repository.AuditLogRepository;
 import com.example.limitguard.repository.CreditLimitRepository;
@@ -62,6 +66,9 @@ public class CreditRequestServiceTest {
     private CreditRequestEventService creditRequestEventService;
 
     // creates the real service and injects the fake dependencies
+    @Spy
+    private InstitutionAccessService institutionAccessService = new InstitutionAccessService();
+
     @InjectMocks
     private CreditRequestService creditRequestService;
 
@@ -77,9 +84,14 @@ public class CreditRequestServiceTest {
 
         counterparty = new Counterparty();
         counterparty.setId(2L);
+        counterparty.setName("Test Counterparty");
         counterparty.setStatus(CounterpartyStatus.ACTIVE);
 
         creditLimit = new CreditLimit();
+        FinancialInstitution institution = new FinancialInstitution();
+        institution.setId(1L);
+        institution.setName("Test Bank");
+        creditLimit.setFinancialInstitution(institution);
         creditLimit.setId(3L);
         creditLimit.setCounterparty(counterparty);
         creditLimit.setLimitAmount(new BigDecimal("1000000"));
@@ -88,6 +100,11 @@ public class CreditRequestServiceTest {
 
         requester = new User();
         requester.setId(10L);
+        requester.setFirstName("Test");
+        requester.setLastName("Requester");
+        requester.setRole(UserRole.RELATIONSHIP_MANAGER);
+        requester.setFinancialInstitution(institution);
+        loginAs(requester);
 
         creditRequest = new CreditRequest();
         creditRequest.setId(5L);
@@ -106,13 +123,13 @@ public class CreditRequestServiceTest {
     // sets up a fake logged-in user for methods that check authentication
     private void loginAs(User user) {
 
-        MyUserDetails userDetails = mock(MyUserDetails.class);
-        when(userDetails.getUser()).thenReturn(user);
+        MyUserDetails userDetails = new MyUserDetails(user);
 
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
                         userDetails,
-                        null
+                        null,
+                        userDetails.getAuthorities()
                 )
         );
     }
@@ -306,6 +323,8 @@ public class CreditRequestServiceTest {
         // arrange: log in as a different user
         User otherUser = new User();
         otherUser.setId(20L);
+        otherUser.setRole(UserRole.RELATIONSHIP_MANAGER);
+        otherUser.setFinancialInstitution(requester.getFinancialInstitution());
 
         loginAs(otherUser);
 
@@ -324,4 +343,213 @@ public class CreditRequestServiceTest {
         verify(creditRequestRepository, never()).save(any());
         verify(creditLimitRepository, never()).save(any());
     }
+
+
+    // test that the person who created a request cannot approve or reject it
+    // expect AccessDeniedException even if the user is a Risk Officer
+    @Test
+    void shouldPreventMakerFromApprovingOrRejectingOwnRequest() {
+
+        // arrange: give the requester the Risk Officer role
+        requester.setRole(UserRole.RISK_OFFICER);
+
+        // simulate the requester being logged in
+        loginAs(requester);
+
+        // set the request status to pending approval
+        creditRequest.setStatus(CreditRequestStatus.PENDING_APPROVAL);
+
+        // simulate finding the request in the database
+        when(creditRequestRepository.findById(5L))
+                .thenReturn(Optional.of(creditRequest));
+
+        // act and assert: the requester cannot approve their own request
+        assertThrows(
+                AccessDeniedException.class,
+                () -> creditRequestService.approveCreditRequest(5L)
+        );
+
+        // act and assert: the requester cannot reject their own request
+        assertThrows(
+                AccessDeniedException.class,
+                () -> creditRequestService.rejectCreditRequest(5L, "Declined")
+        );
+
+        // assert: no request or approval decision should be saved
+        verify(creditRequestRepository, never()).save(any());
+        verify(approvalDecisionRepository, never()).save(any());
+
+        // assert: the request must remain pending approval
+        assertEquals(
+                CreditRequestStatus.PENDING_APPROVAL,
+                creditRequest.getStatus()
+        );
+    }
+
+
+
+    // test that a different Risk Officer can approve a pending credit request
+    // expect the request to become RESERVED and exposure to increase correctly
+    @Test
+    void shouldAllowCheckerToApproveRequestWithinOwnInstitution() {
+
+        // arrange: create another Risk Officer from the same bank
+        User checker = new User();
+        checker.setId(20L);
+        checker.setRole(UserRole.RISK_OFFICER);
+        checker.setFinancialInstitution(requester.getFinancialInstitution());
+
+        // simulate the checker being logged in
+        loginAs(checker);
+
+        // set the request status and amount
+        creditRequest.setStatus(CreditRequestStatus.PENDING_APPROVAL);
+        creditRequest.setAmount(new BigDecimal("600000.25"));
+
+        // simulate finding the pending request
+        when(creditRequestRepository.findById(5L))
+                .thenReturn(Optional.of(creditRequest));
+
+        // simulate saving the updated request
+        when(creditRequestRepository.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // act: approve the credit request
+        CreditRequestResponse response =
+                creditRequestService.approveCreditRequest(5L);
+
+        // assert: the request should now be reserved
+        assertEquals(
+                CreditRequestStatus.RESERVED,
+                response.getStatus()
+        );
+
+        // assert: reserved exposure increases from 100000 to 700000.25
+        assertEquals(
+                new BigDecimal("700000.25"),
+                creditLimit.getReservedAmount()
+        );
+
+        // assert: used exposure should remain unchanged
+        assertEquals(
+                new BigDecimal("200000"),
+                creditLimit.getUsedAmount()
+        );
+
+        // assert: the approved amount is correct
+        assertEquals(
+                new BigDecimal("600000.25"),
+                response.getAmount()
+        );
+
+        // assert: the reservation has an expiry date
+        assertNotNull(response.getExpiresAt());
+
+        // assert: the response includes the correct business information
+        assertEquals("Test Requester", response.getRequesterName());
+        assertEquals("Test Counterparty", response.getCounterpartyName());
+        assertEquals("Test Bank", response.getFinancialInstitutionName());
+
+        // assert: the approval decision was saved
+        verify(approvalDecisionRepository).save(any());
+    }
+
+
+
+    // test that a scheduled task can expire a credit request automatically
+    // expect EXPIRED and reserved exposure to be released without a logged-in user
+    @Test
+    void shouldExpireReservedRequestWithoutLoggedInUser() {
+
+        // arrange: clear the logged-in user
+        // scheduled background tasks do not have an authenticated user
+        SecurityContextHolder.clearContext();
+
+        // set the reservation expiry time to one minute in the past
+        creditRequest.setExpiresAt(
+                java.time.LocalDateTime.now().minusMinutes(1)
+        );
+
+        // simulate finding the expired request
+        when(creditRequestRepository.findById(5L))
+                .thenReturn(Optional.of(creditRequest));
+
+        // simulate saving the updated request
+        when(creditRequestRepository.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // act: expire the credit request
+        CreditRequestResponse response =
+                creditRequestService.expireCreditRequest(5L);
+
+        // assert: the request status should become EXPIRED
+        assertEquals(
+                CreditRequestStatus.EXPIRED,
+                response.getStatus()
+        );
+
+        // assert: reserved exposure decreases from 100000 to zero
+        assertEquals(
+                BigDecimal.ZERO,
+                creditLimit.getReservedAmount()
+        );
+
+        // assert: used exposure remains unchanged
+        assertEquals(
+                new BigDecimal("200000"),
+                creditLimit.getUsedAmount()
+        );
+    }
+
+
+
+    // test that a Relationship Manager cannot use another bank's credit limit
+    // expect AccessDeniedException and no credit request to be saved
+    @Test
+    void shouldRejectCreditRequestForAnotherFinancialInstitution() {
+
+        // arrange: the logged-in user belongs to institution 1
+        // this is already configured in @BeforeEach
+
+        // create another financial institution
+        FinancialInstitution foreignInstitution = new FinancialInstitution();
+        foreignInstitution.setId(2L);
+        foreignInstitution.setName("Another Bank");
+
+        // create a credit limit belonging to institution 2
+        CreditLimit foreignCreditLimit = new CreditLimit();
+        foreignCreditLimit.setId(4L);
+        foreignCreditLimit.setFinancialInstitution(foreignInstitution);
+        foreignCreditLimit.setCounterparty(counterparty);
+        foreignCreditLimit.setLimitAmount(new BigDecimal("1000000"));
+        foreignCreditLimit.setUsedAmount(new BigDecimal("200000"));
+        foreignCreditLimit.setReservedAmount(new BigDecimal("100000"));
+
+        // prepare a request using the foreign bank's credit limit
+        CreditRequestRequest request = new CreditRequestRequest();
+        request.setCreditLimitId(4L);
+        request.setAmount(new BigDecimal("100000"));
+
+        // simulate finding the foreign credit limit
+        when(creditLimitRepository.findById(4L))
+                .thenReturn(Optional.of(foreignCreditLimit));
+
+        // act and assert: the request should be rejected
+        assertThrows(
+                AccessDeniedException.class,
+                () -> creditRequestService.createCreditRequest(request)
+        );
+
+        // assert: no credit request or credit limit should be saved
+        verify(creditRequestRepository, never()).save(any());
+        verify(creditLimitRepository, never()).save(any());
+
+        // assert: the foreign bank's reserved exposure stays unchanged
+        assertEquals(
+                0,
+                new BigDecimal("100000")
+                        .compareTo(foreignCreditLimit.getReservedAmount())
+        );
+    }
+
 }
