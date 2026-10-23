@@ -8,10 +8,11 @@ export interface Profile {
   financialInstitution: { id: number; name: string };
   profilePicturePath: string | null;
 }
+export type CounterpartyStatus = "ACTIVE" | "FROZEN" | "CLOSED";
 export interface Counterparty {
   id: number;
   name: string;
-  status: string;
+  status: CounterpartyStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,6 +23,11 @@ export interface Request {
   creditLimitId: number;
   counterpartyId: number;
   requesterId: number;
+  requesterName: string;
+  counterpartyName: string;
+  counterpartyStatus: CounterpartyStatus;
+  financialInstitutionId: number;
+  financialInstitutionName: string;
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -41,6 +47,10 @@ export interface Review extends Exposure {
   requesterId: number;
   requesterName: string;
   counterpartyName: string;
+  counterpartyStatus: CounterpartyStatus;
+  financialInstitutionId: number;
+  financialInstitutionName: string;
+  expiresAt: string | null;
   createdAt: string;
 }
 export interface Audit {
