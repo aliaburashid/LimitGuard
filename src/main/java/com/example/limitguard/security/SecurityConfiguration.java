@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import jakarta.servlet.DispatcherType;
 
 // @Bean tells Spring to create and manage this object
 
@@ -56,6 +57,9 @@ public class SecurityConfiguration {
 
                 // Defines which endpoints are public and which require authentication
                 .authorizeHttpRequests(auth -> auth
+
+                        // these internal dispatches follow the original request's security checks
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
 
                         // These endpoints can be accessed without logging in
                         .requestMatchers(

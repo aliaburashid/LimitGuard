@@ -6,6 +6,10 @@ package com.example.limitguard.security;
 // MyUserDetailsService      -> UserDetailsService
 // MyUserDetails             -> UserDetails
 // SecurityConfiguration     -> configures Spring Security
+// InstitutionAccessService  -> Checks access to financial institution data
+// JwtRequestFilter          -> Validates JWT authentication for requests
+// JWTUtils                  -> Generates and validates JWT tokens
+// RateLimitFilter           -> Restricts excessive requests
 
 import com.example.limitguard.model.User;
 import com.example.limitguard.repository.UserRepository;
