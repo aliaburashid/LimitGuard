@@ -14,6 +14,7 @@ import com.example.limitguard.repository.AuditLogRepository;
 import com.example.limitguard.repository.CounterpartyRepository;
 import com.example.limitguard.repository.CreditLimitRepository;
 import com.example.limitguard.repository.FinancialInstitutionRepository;
+import com.example.limitguard.security.InstitutionAccessService;
 import com.example.limitguard.security.MyUserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -41,6 +42,9 @@ public class CreditLimitService {
     @Autowired
     private AuditLogRepository auditLogRepository;
 
+    @Autowired
+    private InstitutionAccessService institutionAccessService;
+
     //-------------------------------------------------------------------------------
 
     // gets the currently logged-in user
@@ -62,9 +66,15 @@ public class CreditLimitService {
     @Transactional
     public CreditLimitResponse createCreditLimit(CreditLimitRequest creditLimitRequest) {
 
+        // get the logged-in user's bank id
+        Long institutionId = institutionAccessService.getCurrentInstitutionId();
+
+        // make sure the requested bank matches the logged-in user's bank
+        institutionAccessService.requireInstitution(creditLimitRequest.getFinancialInstitutionId());
+
         // checks that the financial institution exists
         FinancialInstitution financialInstitution = financialInstitutionRepository
-                        .findById(creditLimitRequest.getFinancialInstitutionId())
+                        .findById(institutionId)
                         .orElseThrow(() ->
                                 new FinancialInstitutionNotFoundException("Financial institution not found"));
 
@@ -107,6 +117,9 @@ public class CreditLimitService {
         auditLog.setDetails("Created credit limit of " + savedCreditLimit.getLimitAmount() + " for counterparty " + counterparty.getName());
         auditLog.setActor(currentUser);
 
+        // save which bank created this credit limit
+        auditLog.setFinancialInstitution(financialInstitution);
+
         auditLogRepository.save(auditLog);
 
         // converts the saved entity into the response DTO
@@ -130,6 +143,10 @@ public class CreditLimitService {
                 .findById(creditLimitId)
                 .orElseThrow(() ->
                         new CreditLimitNotFoundException("Credit limit not found"));
+
+        // deny access if the credit limit belongs to another bank
+        // if it belongs to another bank, we throw AccessDeniedException
+        institutionAccessService.requireInstitution(creditLimit.getFinancialInstitution().getId());
 
         // calculates the remaining available credit
         BigDecimal availableHeadroom = creditLimit.getLimitAmount()
@@ -156,6 +173,9 @@ public class CreditLimitService {
                 .findById(creditLimitId)
                 .orElseThrow(() ->
                         new CreditLimitNotFoundException("Credit limit not found"));
+
+        // deny access if the credit limit belongs to another bank
+        institutionAccessService.requireInstitution(creditLimit.getFinancialInstitution().getId());
 
         // keeps the old limit amount for the audit log
         BigDecimal oldLimitAmount = creditLimit.getLimitAmount();
@@ -187,6 +207,9 @@ public class CreditLimitService {
         auditLog.setEntityId(updatedCreditLimit.getId());
         auditLog.setDetails("Credit limit changed from " + oldLimitAmount + " to " + updatedCreditLimit.getLimitAmount());
         auditLog.setActor(currentUser);
+
+        // save which bank owns this credit limit
+        auditLog.setFinancialInstitution(creditLimit.getFinancialInstitution());
 
         auditLogRepository.save(auditLog);
 
