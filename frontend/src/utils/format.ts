@@ -3,13 +3,13 @@ export const label = (s: string) =>
     .toLowerCase()
     .replace(/_/g, " ")
     .replace(/^./, (x) => x.toUpperCase());
-export const money = (n: number, compact = false) =>
-  new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    notation: compact ? "compact" : "standard",
-    maximumFractionDigits: compact ? 2 : 2,
-  }).format(n);
+const dinars = new Intl.NumberFormat("en-GB", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+export const money = (n: number) => `BD ${dinars.format(n)}`;
+export const requestReference = (id: number) =>
+  `CR-${String(id).padStart(6, "0")}`;
 export const date = (s: string | null) =>
   s
     ? new Date(s).toLocaleString("en-GB", {

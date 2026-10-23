@@ -1,6 +1,7 @@
 package com.example.limitguard.controller;
 
 import com.example.limitguard.service.CreditRequestEventService;
+import com.example.limitguard.security.InstitutionAccessService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -8,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/credit-requests")
@@ -16,6 +18,10 @@ public class CreditRequestEventController {
     @Autowired
     private CreditRequestEventService creditRequestEventService;
 
+    // get the logged-in user's financial institution
+    @Autowired
+    private InstitutionAccessService institutionAccessService;
+
     //----------------------------------------------------------
 
     // Opens an SSE connection so authenticated users can receive live updates
@@ -23,7 +29,12 @@ public class CreditRequestEventController {
     // This endpoint is an SSE stream. Keep the connection available so events can be sent through it
     @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
-    public SseEmitter subscribeToCreditRequestUpdates() {
-        return creditRequestEventService.subscribe();
+    public SseEmitter subscribeToCreditRequestUpdates() throws IOException {
+
+        // get the logged-in user's bank id
+        Long institutionId = institutionAccessService.getCurrentInstitutionId();
+
+        // subscribe the user to their bank's updates
+        return creditRequestEventService.subscribe(institutionId);
     }
 }

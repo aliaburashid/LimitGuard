@@ -1,6 +1,7 @@
 package com.example.limitguard.dto;
 
 import com.example.limitguard.enums.CreditRequestStatus;
+import com.example.limitguard.enums.CounterpartyStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -10,18 +11,6 @@ import java.time.LocalDateTime;
 @Getter
 @AllArgsConstructor
 public class CreditRequestReviewResponse {
-
-    // Risk Officer needs context like this:
-    //    Request #2
-    //    Requested amount: £600,000
-    //    Requester: Alia ...
-    //
-    //    Counterparty: Bahrain Trading Company
-    //
-    //    Limit:      £1,000,000
-    //    Used:       £500,000
-    //    Reserved:   £450,000
-    //    Headroom:    £50,000
 
     // credit request information
     private Long creditRequestId;
@@ -43,4 +32,8 @@ public class CreditRequestReviewResponse {
     private BigDecimal usedAmount;
     private BigDecimal reservedAmount;
     private BigDecimal availableHeadroom;
+    private LocalDateTime expiresAt;
+    private CounterpartyStatus counterpartyStatus;
+    private Long financialInstitutionId;
+    private String financialInstitutionName;
 }

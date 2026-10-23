@@ -45,6 +45,11 @@ public class AuditLog {
     @JoinColumn(name = "actor_id")
     private User actor;
 
+    // the bank this audit log belongs to
+    @ManyToOne
+    @JoinColumn(name = "financial_institution_id")
+    private FinancialInstitution financialInstitution;
+
     // automatically stores when the audit log was created
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

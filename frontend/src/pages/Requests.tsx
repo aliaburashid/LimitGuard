@@ -12,7 +12,7 @@ import {
 } from "../components/ui";
 import { useAuth } from "../context/Auth";
 import type { Exposure, Page, Request, Review } from "../types";
-import { date, label, money } from "../utils/format";
+import { date, label, money, requestReference } from "../utils/format";
 import type { Mutation } from "./MutationDialog";
 export function Requests({
   approval,
@@ -144,7 +144,7 @@ export function Requests({
                   },
                   {
                     name: "amount",
-                    label: "Requested amount (£)",
+                    label: "Requested amount (BHD)",
                     type: "number",
                   },
                 ],
@@ -179,7 +179,8 @@ export function Requests({
               <thead>
                 <tr>
                   <th>Request</th>
-                  <th>Counterparty</th>
+                  <th>Counterparty / institution</th>
+                  <th>Requester</th>
                   <th>Amount</th>
                   <th>Status</th>
                   <th>Created</th>
@@ -195,10 +196,14 @@ export function Requests({
                         className="table-link mono"
                         onClick={() => setSelected(r)}
                       >
-                        CR-{r.id}
+                        {requestReference(r.id)}
                       </button>
                     </td>
-                    <td>Counterparty #{r.counterpartyId}</td>
+                    <td>
+                      <strong>{r.counterpartyName}</strong>
+                      <div className="small">{r.financialInstitutionName}</div>
+                    </td>
+                    <td>{r.requesterName}</td>
                     <td className="numeric">{money(r.amount)}</td>
                     <td>
                       <Badge status={r.status} />
@@ -228,7 +233,7 @@ export function Requests({
       </section>
       {selected && (
         <Modal
-          title={`Credit request CR-${selected.id}`}
+          title={`Credit request ${requestReference(selected.id)}`}
           onClose={() => setSelected(null)}
         >
           <div className="detail-meta">
@@ -237,9 +242,15 @@ export function Requests({
           </div>
           <dl>
             <dt>Counterparty</dt>
-            <dd>{review?.counterpartyName || `#${selected.counterpartyId}`}</dd>
+            <dd>{selected.counterpartyName}</dd>
+            <dt>Institution</dt>
+            <dd>{selected.financialInstitutionName}</dd>
+            <dt>Counterparty status</dt>
+            <dd>
+              <Badge status={selected.counterpartyStatus} />
+            </dd>
             <dt>Requester</dt>
-            <dd>{review?.requesterName || `User #${selected.requesterId}`}</dd>
+            <dd>{selected.requesterName}</dd>
             <dt>Created</dt>
             <dd>{date(selected.createdAt)}</dd>
             <dt>Updated</dt>

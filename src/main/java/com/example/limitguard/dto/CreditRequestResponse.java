@@ -1,6 +1,7 @@
 package com.example.limitguard.dto;
 
 import com.example.limitguard.enums.CreditRequestStatus;
+import com.example.limitguard.enums.CounterpartyStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,4 +23,9 @@ public class CreditRequestResponse {
     private LocalDateTime expiresAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String counterpartyName;
+    private CounterpartyStatus counterpartyStatus;
+    private String requesterName;
+    private Long financialInstitutionId;
+    private String financialInstitutionName;
 }

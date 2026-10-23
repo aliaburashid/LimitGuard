@@ -79,10 +79,15 @@ describe("authenticated SSE", () => {
     const { stream } = await import("./client");
     const controller = new AbortController();
     const onEvent = vi.fn(() => controller.abort());
+    const onState = vi.fn();
     const encoder = new TextEncoder();
     const body = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode("event:credit-request-status\r"));
+        c.enqueue(
+          encoder.encode(
+            ":connected\n\n:heartbeat\n\nevent:credit-request-status\r",
+          ),
+        );
         c.enqueue(
           encoder.encode(
             '\ndata:{"creditRequestId":42,"status":"USED"}\r\n\r\n',
@@ -91,16 +96,16 @@ describe("authenticated SSE", () => {
         c.close();
       },
     });
-    const fetch = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(body, {
-          headers: { "Content-Type": "text/event-stream" },
-        }),
-      );
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(body, {
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    );
     vi.stubGlobal("fetch", fetch);
     setToken("fixture-only-token");
-    await stream(controller.signal, onEvent, vi.fn());
+    await stream(controller.signal, onEvent, onState);
+    expect(onState).toHaveBeenCalledWith("Live");
+    expect(onEvent).toHaveBeenCalledOnce();
     expect(onEvent).toHaveBeenCalledWith({
       creditRequestId: 42,
       status: "USED",

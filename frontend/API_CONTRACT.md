@@ -24,14 +24,14 @@ Base prefix `/api`. Authenticated requests use `Authorization: Bearer <JWT>`. Lo
 | /credit-limits/{id}/exposure | GET | RM, Risk, Admin | CreditExposureResponse |
 | /credit-requests | POST | RM | creditLimitId, amount / CreditRequestResponse |
 | /credit-requests/my | GET | RM | page, size, sortBy, direction / Page<CreditRequestResponse> |
-| /credit-requests/{id} | GET | RM, Risk | CreditRequestResponse, subject to service ownership rules |
+| /credit-requests/{id} | GET | RM, Risk | CreditRequestResponse, subject to institution and ownership rules |
 | /credit-requests/{id}/use | PATCH | RM | no body / CreditRequestResponse |
 | /credit-requests/{id}/cancel | PATCH | RM | no body / CreditRequestResponse |
 | /credit-requests/pending | GET | Risk | Pageable / Page<CreditRequestResponse> |
 | /credit-requests/{id}/review | GET | Risk | CreditRequestReviewResponse |
 | /credit-requests/{id}/approve | PATCH | Risk | no body / CreditRequestResponse |
 | /credit-requests/{id}/reject | PATCH | Risk | reason / CreditRequestResponse |
-| /credit-requests/events | GET | Authenticated | SSE event credit-request-status; creditRequestId, status |
+| /credit-requests/events | GET | Authenticated, institution-scoped | SSE event credit-request-status; creditRequestId, status. Only events belonging to the authenticated user's financial institution are delivered. |
 | /financial-institutions | POST | Admin | name, status / FinancialInstitutionResponse |
 | /financial-institutions/{id} | PUT | Admin | name, status / FinancialInstitutionResponse |
 | /audit-logs | GET | Admin | Pageable; createdAt descending / Page<AuditLogResponse> |
@@ -39,3 +39,13 @@ Base prefix `/api`. Authenticated requests use `Authorization: Bearer <JWT>`. Lo
 Counterparty status: ACTIVE, FROZEN, CLOSED. Institution status: ACTIVE, INACTIVE. Request status: PENDING_APPROVAL, RESERVED, USED, REJECTED, CANCELLED, EXPIRED. Only RESERVED requests expose RM use/cancel actions; only pending requests expose Risk approve/reject. The frontend does not compute approval eligibility or override service rules.
 
 Spring ErrorResponse contains timestamp, status, error, message, path. Only safe messages are displayed. 401 invalidates the local session; 403 is a permissions error; server faults show a generic retry message.
+
+Credit request responses retain existing IDs, amounts, timestamps, and statuses and add `counterpartyName`, `counterpartyStatus`, `requesterName`, `financialInstitutionId`, and `financialInstitutionName`. Review responses additionally include `expiresAt`, `counterpartyStatus`, and institution ID/name. Requester entities, email addresses, and credentials are not returned.
+
+All request list/search/detail/review/action endpoints and credit-limit creation/update/exposure are scoped to the authenticated account's financial institution. ADMIN has the same institution boundary for exposure and does not gain RM or Risk permissions. RM requests also require requester ownership. The existing `financialInstitutionId` field for limit creation must match the authenticated institution; the backend uses the authenticated institution to create the limit. Scheduled expiry remains an internal process across institutions.
+
+The frontend displays monetary amounts in BHD as whole dinars (for example, `BD 750,000`) and request references as `CR-000028`. Display rounding does not change API values or backend BigDecimal calculations; mutation amounts remain decimal strings.
+
+SSE subscriptions send an initial `:connected` comment to flush the response immediately. The frontend ignores SSE comments and uses the response to show live connection status. Internal ASYNC and ERROR dispatches are permitted after the original request security checks; normal API requests remain authenticated.
+
+The counterparty register remains shared under the existing schema. SSE notifications are scoped by financial institution. Authenticated users subscribe to their own institution's events, and credit request status updates are delivered only to subscribers belonging to that institution. Cross-institution event isolation is covered by backend tests.
