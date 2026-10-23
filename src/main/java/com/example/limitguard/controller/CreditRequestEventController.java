@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/credit-requests")
@@ -23,7 +24,7 @@ public class CreditRequestEventController {
     // This endpoint is an SSE stream. Keep the connection available so events can be sent through it
     @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
-    public SseEmitter subscribeToCreditRequestUpdates() {
+    public SseEmitter subscribeToCreditRequestUpdates() throws IOException {
         return creditRequestEventService.subscribe();
     }
 }
