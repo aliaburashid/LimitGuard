@@ -67,7 +67,7 @@ export function ExposurePage({
                   },
                   {
                     name: "limitAmount",
-                    label: "Limit amount (£)",
+                    label: "Limit amount (BHD)",
                     type: "number",
                   },
                 ],
@@ -132,7 +132,7 @@ export function ExposurePage({
                       fields: [
                         {
                           name: "limitAmount",
-                          label: "New limit amount (£)",
+                          label: "New limit amount (BHD)",
                           type: "number",
                           defaultValue: data.limitAmount,
                         },
@@ -148,8 +148,8 @@ export function ExposurePage({
             </div>
             <div className="notice">
               Utilization includes used and reserved exposure. It is a capacity
-              measure, not a credit-risk score. Currency display is GBP; the API
-              does not return a currency field.
+              measure, not a credit-risk score. Amounts are displayed in
+              Bahraini dinars (BHD), rounded to whole dinars.
             </div>
           </section>
         </>
