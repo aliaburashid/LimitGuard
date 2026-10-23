@@ -11,6 +11,9 @@ import com.example.limitguard.model.Counterparty;
 import com.example.limitguard.model.CreditLimit;
 import com.example.limitguard.model.FinancialInstitution;
 import com.example.limitguard.model.User;
+import com.example.limitguard.enums.UserRole;
+import com.example.limitguard.security.InstitutionAccessService;
+import org.mockito.Spy;
 import com.example.limitguard.repository.AuditLogRepository;
 import com.example.limitguard.repository.CounterpartyRepository;
 import com.example.limitguard.repository.CreditLimitRepository;
@@ -23,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -57,6 +61,9 @@ public class CreditLimitServiceTest {
 
     // @InjectMocks creates the real credit limit service
     // and injects the fake repositories above into it
+    @Spy
+    private InstitutionAccessService institutionAccessService = new InstitutionAccessService();
+
     @InjectMocks
     private CreditLimitService creditLimitService;
 
@@ -84,6 +91,13 @@ public class CreditLimitServiceTest {
         creditLimit.setReservedAmount(new BigDecimal("200000"));
         creditLimit.setFinancialInstitution(financialInstitution);
         creditLimit.setCounterparty(counterparty);
+
+        User user = new User();
+        user.setRole(UserRole.RISK_OFFICER);
+        user.setFinancialInstitution(financialInstitution);
+        MyUserDetails details = new MyUserDetails(user);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(details, null, details.getAuthorities()));
     }
 
     // clears the logged-in user after each test
@@ -256,19 +270,6 @@ public class CreditLimitServiceTest {
                     return saved;
                 });
 
-        // creates a mock logged-in user for the audit log
-        User user = new User();
-        MyUserDetails userDetails = mock(MyUserDetails.class);
-
-        when(userDetails.getUser()).thenReturn(user);
-
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null
-                )
-        );
-
         // act: create the credit limit
         CreditLimitResponse response =
                 creditLimitService.createCreditLimit(request);
@@ -288,4 +289,34 @@ public class CreditLimitServiceTest {
         verify(creditLimitRepository).save(any(CreditLimit.class));
         verify(auditLogRepository).save(any());
     }
+
+
+    // test that a Risk Officer cannot access another bank's credit limit
+    // expect AccessDeniedException when the limit belongs to another institution
+    @Test
+    void shouldRejectAccessToAnotherInstitutionsCreditLimit() {
+
+        // arrange: the logged-in user belongs to institution 1
+        // this is already configured in @BeforeEach
+
+        // create another financial institution
+        FinancialInstitution foreignInstitution = new FinancialInstitution();
+        foreignInstitution.setId(2L);
+
+        // create a credit limit belonging to institution 2
+        CreditLimit foreignCreditLimit = new CreditLimit();
+        foreignCreditLimit.setId(4L);
+        foreignCreditLimit.setFinancialInstitution(foreignInstitution);
+
+        // simulate the repository finding the foreign credit limit
+        when(creditLimitRepository.findById(4L))
+                .thenReturn(Optional.of(foreignCreditLimit));
+
+        // act and assert: the user should not access another bank's exposure
+        assertThrows(
+                AccessDeniedException.class,
+                () -> creditLimitService.getCreditExposure(4L)
+        );
+    }
+
 }
