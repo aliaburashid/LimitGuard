@@ -56,4 +56,8 @@ public class CreditRequest {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    // identifies demo requests so they are not created twice
+    @Column(name = "seed_key", unique = true)
+    private String seedKey;
 }

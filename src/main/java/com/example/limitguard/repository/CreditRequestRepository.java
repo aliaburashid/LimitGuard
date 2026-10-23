@@ -2,56 +2,47 @@ package com.example.limitguard.repository;
 
 import com.example.limitguard.enums.CreditRequestStatus;
 import com.example.limitguard.model.CreditRequest;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface CreditRequestRepository extends JpaRepository<CreditRequest, Long> {
-    // filters credit requests by requester
-    Page<CreditRequest> findByRequesterId(Long requesterId, Pageable pageable);
 
-    // filters credit requests by counterparty
-    Page<CreditRequest> findByCreditLimitCounterpartyId(Long counterpartyId, Pageable pageable);
+    @Override
+    @EntityGraph(attributePaths = {"creditLimit.counterparty", "creditLimit.financialInstitution", "requester.financialInstitution"})
+    Optional<CreditRequest> findById(Long id);
 
-    // finds the credit request where the status = RESERVED and expiresAt < current time
+    // gets credit requests with their related company, bank and requester details
+    // filters requests by bank, status, company and requester
+    // makes sure pagination only counts matching requests from the same bank
+    @EntityGraph(attributePaths = {"creditLimit.counterparty", "creditLimit.financialInstitution", "requester.financialInstitution"})
+    @Query("""
+            select r from CreditRequest r
+            where r.creditLimit.financialInstitution.id = :institutionId
+              and (:status is null or r.status = :status)
+              and (:counterpartyId is null or r.creditLimit.counterparty.id = :counterpartyId)
+              and (:requesterId is null or r.requester.id = :requesterId)
+            """)
+    Page<CreditRequest> searchInInstitution(
+            @Param("institutionId") Long institutionId,
+            @Param("status") CreditRequestStatus status,
+            @Param("counterpartyId") Long counterpartyId,
+            @Param("requesterId") Long requesterId,
+            Pageable pageable
+    );
+
+    // scheduled expiry processes all institutions without a user session
     List<CreditRequest> findByStatusAndExpiresAtBefore(CreditRequestStatus status, LocalDateTime currentTime);
 
-    // USED FOR: filters credit requests by their status
-    // finds credit requests waiting for Risk Officer approval
-    // pagination keeps the approval queue manageable when there are many requests
-    Page<CreditRequest> findByStatus(CreditRequestStatus status, Pageable pageable);
-
-    // filters by status and counterparty
-    Page<CreditRequest> findByStatusAndCreditLimitCounterpartyId(
-            CreditRequestStatus status,
-            Long counterpartyId,
-            Pageable pageable
-    );
-
-    // filters by status and requester
-    Page<CreditRequest> findByStatusAndRequesterId(
-            CreditRequestStatus status,
-            Long requesterId,
-            Pageable pageable
-    );
-
-    // filters by counterparty and requester
-    Page<CreditRequest> findByCreditLimitCounterpartyIdAndRequesterId(
-            Long counterpartyId,
-            Long requesterId,
-            Pageable pageable
-    );
-
-    // filters by status, counterparty and requester
-    Page<CreditRequest> findByStatusAndCreditLimitCounterpartyIdAndRequesterId(
-            CreditRequestStatus status,
-            Long counterpartyId,
-            Long requesterId,
-            Pageable pageable
-    );
+    // checks if a demo credit request already exists to avoid duplicates
+    boolean existsBySeedKey(String seedKey);
 }
