@@ -11,7 +11,7 @@ import { api } from "../api/client";
 import { Badge, Empty, ErrorBox, Loading } from "../components/ui";
 import { useAuth } from "../context/Auth";
 import type { Counterparty, Page, Request } from "../types";
-import { date, label, money } from "../utils/format";
+import { date, label, money, requestReference } from "../utils/format";
 export function Dashboard({
   navigate,
   version,
@@ -196,13 +196,14 @@ export function Dashboard({
                         <Clock size={18} />
                       </span>
                       <span>
-                        <strong>Request #{r.id}</strong>
+                        <strong>{requestReference(r.id)}</strong>
                         <small>
-                          Counterparty #{r.counterpartyId} · {date(r.createdAt)}
+                          {r.counterpartyName} · {r.requesterName} ·{" "}
+                          {date(r.createdAt)}
                         </small>
                       </span>
                       <span className="activity-end">
-                        <strong>{money(r.amount, true)}</strong>
+                        <strong>{money(r.amount)}</strong>
                         <Badge status={r.status} />
                       </span>
                     </button>
