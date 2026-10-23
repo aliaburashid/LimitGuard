@@ -38,6 +38,11 @@ import com.example.limitguard.model.AuditLog;
 import com.example.limitguard.enums.UserStatus;
 import com.example.limitguard.dto.DeactivateUserRequest;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.nio.file.StandardOpenOption;
+
 // Class that contains business logic
 // Create and manage an object of this class for me
 @Service
@@ -437,56 +442,212 @@ public class UserService {
         );
     }
 
+
     // uploads a profile picture for the currently logged-in user
+    // MultipartFile contains the image uploaded by the user
+    // throws IOException because reading or saving a file can fail
     public UserProfileResponse uploadProfilePicture(MultipartFile image) throws IOException {
-        // gets the email of the currently logged-in user from Spring Security
+
+        // Spring Security stores information about the currently logged-in user
+        // getContext() gets the current security information
+        // getAuthentication() gets the logged-in user's authentication details
+        // getName() gets the user's email address
         String email = SecurityContextHolder.getContext()
                 .getAuthentication()
                 .getName();
 
-        // finds the logged-in user in the database
+        // find the logged-in user in the database using their email
         User user = findUserByEmail(email);
 
-        // makes sure an image was actually uploaded
-        if (image.isEmpty()) {
+        // if no image provided
+        if (image == null || image.isEmpty()) {
+
+            // stop the method and return an error for an empty upload
             throw new IllegalArgumentException("Profile picture cannot be empty");
         }
 
-        // getting the image filename and storing it in filename
-        String filename = image.getOriginalFilename();
+        // set the maximum allowed image size to 5 MB
+        // 5L means the number 5 is stored as a long
+        // 1024 bytes = 1 KB, and 1024 KB = 1 MB
+        long maxFileSize = 5L * 1024 * 1024;
 
-        // choosing where the uploaded profile pictures will be stored
-        Path uploadPath = Paths.get("uploads");
+        // getSize() returns the uploaded file size in bytes
+        // compare the uploaded file size with our maximum allowed size
+        if (image.getSize() > maxFileSize) {
 
-        // if the uploads folder does not exist, create it
-        if (!Files.exists(uploadPath)) {
-            Files.createDirectories(uploadPath);
+            // reject the upload if the image is larger than 5 MB
+            throw new IllegalArgumentException("Profile picture cannot exceed 5 MB");
         }
 
-        // combines the uploads folder with the image filename
-        // uploads/ + profile.jpg -> uploads/profile.jpg
-        Path filePath = uploadPath.resolve(filename);
+        // getContentType() gets the image type declared by the upload request
+        // examples: image/jpeg, image/png, application/pdf
+        // this value comes from the client, so we cannot fully trust it
+        String contentType = image.getContentType();
 
-        // saves the uploaded image inside the uploads folder
-        Files.write(filePath, image.getBytes());
+        // only allow JPEG and PNG content types
+        if (!"image/jpeg".equals(contentType) &&
+                !"image/png".equals(contentType)) {
 
-        // saves the image location in the logged-in users profile
-        user.setProfilePicturePath(filePath.toString());
+            // reject files that do not declare an allowed image type
+            throw new IllegalArgumentException("Only JPEG and PNG images are allowed");
+        }
 
-        // saves the updated user in the database
+        // getBytes() reads the uploaded file into a byte array
+        // a byte array stores the actual binary data of the image
+        byte[] imageBytes = image.getBytes();
+
+        // create a variable to store the real image format
+        // null means we have not identified the format yet
+        String imageFormat = null;
+
+        // ByteArrayInputStream allows Java to read the byte array like a file
+        // ImageIO.createImageInputStream() prepares the data for image reading
+        // try-with-resources automatically closes the input when finished
+        try (var input = ImageIO.createImageInputStream(
+                new ByteArrayInputStream(imageBytes))) {
+
+            // make sure Java successfully created an image input stream
+            if (input != null) {
+
+                // find image readers that understand the uploaded file's data
+                // Java uses the file content to identify possible image formats
+                var readers = ImageIO.getImageReaders(input);
+
+                // hasNext() checks whether a suitable image reader exists
+                if (readers.hasNext()) {
+
+                    // next() gets the first suitable image reader
+                    var reader = readers.next();
+
+                    try {
+
+                        // tell the reader which image data it should examine
+                        reader.setInput(input);
+
+                        // getFormatName() gets the detected format
+                        // examples: JPEG or PNG
+                        imageFormat = reader.getFormatName();
+
+                    } finally {
+
+                        // dispose() releases resources used by the image reader
+                        // finally runs even if an error occurs while reading
+                        reader.dispose();
+                    }
+                }
+            }
+        }
+
+        // equalsIgnoreCase() compares text without caring about uppercase or lowercase
+        // isJpeg becomes true if the detected format is JPEG
+        boolean isJpeg = "JPEG".equalsIgnoreCase(imageFormat);
+
+        // isPng becomes true if the detected format is PNG
+        boolean isPng = "PNG".equalsIgnoreCase(imageFormat);
+
+        // reject the file if it is neither JPEG nor PNG
+        // also reject it if the detected format does not match the declared content type
+        // this prevents someone from simply claiming a different file is an image
+        if ((!isJpeg && !isPng) ||
+                (isJpeg && !"image/jpeg".equals(contentType)) ||
+                (isPng && !"image/png".equals(contentType))) {
+
+            // stop the upload because the image format is invalid
+            throw new IllegalArgumentException("Invalid image format");
+        }
+
+        // ImageIO.read() tries to decode the actual image data
+        // BufferedImage stores the decoded image in memory
+        // this checks more than just the file extension or declared content type
+        BufferedImage decodedImage = ImageIO.read(
+                new ByteArrayInputStream(imageBytes)
+        );
+
+        // ImageIO.read() returns null if it cannot decode the file as an image
+        if (decodedImage == null) {
+
+            // reject files that Java cannot decode
+            throw new IllegalArgumentException("Invalid or corrupted image");
+        }
+
+        // choose the file extension based on the detected image format
+        // ? : is the ternary operator, which is a shorter way of writing if-else
+        // if isJpeg is true, use .jpg; otherwise use .png
+        String extension = isJpeg ? ".jpg" : ".png";
+
+        // UUID.randomUUID() generates a random unique identifier
+        // we use this instead of the original filename provided by the user
+        // example: 8b7c2d91-4e12-4a83-9c25-33d8f0a1b654.jpg
+        // this prevents users with the same original filename from overwriting each other
+        String filename = UUID.randomUUID() + extension;
+
+        // Paths.get("uploads") selects the folder where images will be stored
+        // toAbsolutePath() converts it into a full filesystem path
+        // normalize() removes unnecessary parts such as "." and ".."
+        Path uploadPath = Paths.get("uploads").toAbsolutePath().normalize();
+
+        // create the uploads folder if it does not already exist
+        // createDirectories() also works when the folder already exists
+        Files.createDirectories(uploadPath);
+
+        // resolve(filename) combines the uploads folder with our generated filename
+        // normalize() cleans up the resulting path
+        // example: /project/uploads/random-id.jpg
+        Path filePath = uploadPath.resolve(filename).normalize();
+
+        // getParent() gets the folder containing the new image
+        // equals(uploadPath) checks that this is our intended uploads folder
+        // this prevents the filename from escaping the uploads directory
+        if (!filePath.getParent().equals(uploadPath)) {
+
+            // reject the file if its path is outside the expected folder
+            throw new IllegalArgumentException("Invalid image file path");
+        }
+
+        // Files.write() saves the image bytes to the selected path
+        // CREATE_NEW creates a new file and fails if that filename already exists
+        // this prevents accidentally overwriting an existing image
+        Files.write(filePath, imageBytes, StandardOpenOption.CREATE_NEW);
+
+        // store the image location in the user's profile
+        // Paths.get("uploads", filename) creates a relative path
+        // toString() converts the Path into text that can be saved in the database
+        // example: uploads/random-id.jpg
+        user.setProfilePicturePath(
+                Paths.get("uploads", filename).toString()
+        );
+
+        // save the user's updated profile picture path in PostgreSQL
+        // save() returns the saved User object
         User updatedUser = userRepository.save(user);
 
-        // returns the users updated profile
+        // create the response that will be returned to the frontend
+        // include the user's ID, name, email, role, institution and picture path
         return new UserProfileResponse(
+
+                // the saved user's database ID
                 updatedUser.getId(),
+
+                // the saved user's first name
                 updatedUser.getFirstName(),
+
+                // the saved user's last name
                 updatedUser.getLastName(),
+
+                // the saved user's email
                 updatedUser.getEmail(),
+
+                // the saved user's role
                 updatedUser.getRole(),
+
+                // the financial institution the user belongs to
                 updatedUser.getFinancialInstitution(),
-                user.getProfilePicturePath()
+
+                // the location of the uploaded profile picture
+                updatedUser.getProfilePicturePath()
         );
     }
+
 
 
 
