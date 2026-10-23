@@ -31,7 +31,7 @@ Base prefix `/api`. Authenticated requests use `Authorization: Bearer <JWT>`. Lo
 | /credit-requests/{id}/review | GET | Risk | CreditRequestReviewResponse |
 | /credit-requests/{id}/approve | PATCH | Risk | no body / CreditRequestResponse |
 | /credit-requests/{id}/reject | PATCH | Risk | reason / CreditRequestResponse |
-| /credit-requests/events | GET | Authenticated | SSE event credit-request-status; creditRequestId, status |
+| /credit-requests/events | GET | Authenticated, institution-scoped | SSE event credit-request-status; creditRequestId, status. Only events belonging to the authenticated user's financial institution are delivered. |
 | /financial-institutions | POST | Admin | name, status / FinancialInstitutionResponse |
 | /financial-institutions/{id} | PUT | Admin | name, status / FinancialInstitutionResponse |
 | /audit-logs | GET | Admin | Pageable; createdAt descending / Page<AuditLogResponse> |
@@ -48,4 +48,4 @@ The frontend displays monetary amounts in BHD as whole dinars (for example, `BD 
 
 SSE subscriptions send an initial `:connected` comment to flush the response immediately. The frontend ignores SSE comments and uses the response to show live connection status. Internal ASYNC and ERROR dispatches are permitted after the original request security checks; normal API requests remain authenticated.
 
-The counterparty register remains shared under the existing schema. SSE event scoping is still pending the approved later security increment; authenticated subscribers currently receive global status events.
+The counterparty register remains shared under the existing schema. SSE notifications are scoped by financial institution. Authenticated users subscribe to their own institution's events, and credit request status updates are delivered only to subscribers belonging to that institution. Cross-institution event isolation is covered by backend tests.

@@ -257,7 +257,9 @@ public class CreditRequestService {
             auditLogRepository.save(reservationAuditLog);
 
             // sends the new RESERVED status to clients listening to the SSE stream
+            // only clients from the same bank receive the update
             creditRequestEventService.publishStatusUpdate(
+                    creditLimit.getFinancialInstitution().getId(),
                     savedCreditRequest.getId(),
                     savedCreditRequest.getStatus()
             );
@@ -386,7 +388,9 @@ public class CreditRequestService {
         );
 
         // sends the new RESERVED status to clients listening to the SSE stream
+        // only clients from the same bank receive the update
         creditRequestEventService.publishStatusUpdate(
+                creditLimit.getFinancialInstitution().getId(),
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus()
         );
@@ -458,7 +462,9 @@ public class CreditRequestService {
         );
 
         // sends the new REJECTED status to clients listening to the SSE stream
+        // only clients from the same bank receive the update
         creditRequestEventService.publishStatusUpdate(
+                creditRequest.getCreditLimit().getFinancialInstitution().getId(),
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus()
         );
@@ -534,7 +540,9 @@ public class CreditRequestService {
         auditLogRepository.save(auditLog);
 
         // sends the new USED status to clients listening to the SSE stream
+        // only clients from the same bank receive the update
         creditRequestEventService.publishStatusUpdate(
+                savedCreditRequest.getCreditLimit().getFinancialInstitution().getId(),
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus()
         );
@@ -615,7 +623,9 @@ public class CreditRequestService {
         auditLogRepository.save(auditLog);
 
         // sends the new CANCELLED status to clients listening to the SSE stream
+        // only clients from the same bank receive the update
         creditRequestEventService.publishStatusUpdate(
+                savedCreditRequest.getCreditLimit().getFinancialInstitution().getId(),
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus()
         );
@@ -708,7 +718,9 @@ public class CreditRequestService {
         }
 
         // sends the new EXPIRED status to clients listening to the SSE stream
+        // only clients from the same bank receive the update
         creditRequestEventService.publishStatusUpdate(
+                savedCreditRequest.getCreditLimit().getFinancialInstitution().getId(),
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus()
         );
