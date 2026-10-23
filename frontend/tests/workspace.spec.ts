@@ -13,6 +13,11 @@ const request = {
   creditLimitId: 8,
   counterpartyId: 12,
   requesterId: 7,
+  requesterName: "Test Requester",
+  counterpartyName: counterparty.name,
+  counterpartyStatus: "ACTIVE",
+  financialInstitutionId: 3,
+  financialInstitutionName: "Test Institution",
   createdAt: "2026-10-06T10:00:00",
   updatedAt: "2026-10-06T10:00:00",
   expiresAt: null,
@@ -61,6 +66,10 @@ async function login(page: Page, role: string) {
         requestedAmount: 600000,
         status: "PENDING_APPROVAL",
         counterpartyName: counterparty.name,
+        counterpartyStatus: "ACTIVE",
+        financialInstitutionId: 3,
+        financialInstitutionName: "Test Institution",
+        expiresAt: null,
         requesterId: 7,
         requesterName: "Test Requester",
         createdAt: request.createdAt,
@@ -99,9 +108,21 @@ test("Risk Officer can review real contracts and confirm an approval", async ({
   await page
     .getByRole("button", { name: "Approval queue", exact: true })
     .click();
+  await expect(
+    page.getByRole("cell", { name: "CR-000042", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Test Requester", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "BD 600,000", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Review", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("CR-000042");
+  await expect(page.getByRole("dialog")).toContainText(counterparty.name);
+  await expect(page.getByRole("dialog")).toContainText("Test Institution");
   await expect(page.getByRole("dialog")).toContainText("Test Requester");
-  await expect(page.getByRole("dialog")).toContainText("£750,000.00");
+  await expect(page.getByRole("dialog")).toContainText("BD 750,000");
   await page.getByRole("button", { name: "Approve & reserve" }).click();
   await expect(page.getByRole("dialog")).toContainText(
     "Approval reserves the requested capacity",
@@ -123,9 +144,16 @@ test("RM sees request creation and no risk or admin actions", async ({
   await page
     .getByRole("button", { name: "Credit requests", exact: true })
     .click();
+  await expect(page.getByRole("cell", { name: "Test Requester", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("Test Requester");
+  await expect(page.getByRole("dialog")).toContainText(counterparty.name);
+  await expect(page.getByRole("dialog")).toContainText("CR-000042");
+  await expect(page.getByRole("dialog")).toContainText("Test Institution");
+  await page.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "New request" }).click();
   await page.getByLabel("Credit-limit ID").fill("8");
-  await page.getByLabel("Requested amount (£)").fill("100000.25");
+  await page.getByLabel("Requested amount (BHD)").fill("100000.25");
   const pending = page.waitForRequest(
     (r) => r.url().endsWith("/credit-requests") && r.method() === "POST",
   );
@@ -168,7 +196,7 @@ test("Exposure lookup submits with keyboard and uses backend values", async ({
   await page.getByLabel("Credit-limit ID").fill("8");
   await page.getByLabel("Credit-limit ID").press("Enter");
   await expect(page.getByText("62.5% utilized")).toBeVisible();
-  await expect(page.getByText("£750,000.00", { exact: true })).toBeVisible();
+  await expect(page.getByText("BD 750,000", { exact: true })).toBeVisible();
   await page.screenshot({
     path: "tests/artifacts/exposure-desktop.png",
     fullPage: true,
@@ -244,7 +272,7 @@ test("backend headroom errors remain visible without fake success", async ({
     .click();
   await page.getByRole("button", { name: "New request" }).click();
   await page.getByLabel("Credit-limit ID").fill("8");
-  await page.getByLabel("Requested amount (£)").fill("900000");
+  await page.getByLabel("Requested amount (BHD)").fill("900000");
   await page
     .getByRole("button", { name: "Confirm create credit request" })
     .click();
