@@ -1,4 +1,3 @@
-
 package com.example.limitguard.documentation;
 
 import com.example.limitguard.dto.FinancialInstitutionRequest;
