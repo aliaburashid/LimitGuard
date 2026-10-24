@@ -12,6 +12,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 
 // tells Spring that this class contains API endpoints
 @RestController
@@ -22,6 +25,29 @@ public class UserController {
     @Autowired
     private UserService userService;
 
+
+    // Swagger: explains what this endpoint does
+    @Operation(
+            summary = "Register a new user",
+            description = "Creates a new LimitGuard user account. "
+                    + "The user must verify their email address before logging in."
+    )
+
+    // Swagger: documents the possible HTTP responses
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "User registered successfully"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid registration details or weak password"
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Email address already registered"
+            )
+    })
     // Registers a new user
     @PostMapping("/register")
     // takes the JSON request and checks the validation rules in RegisterRequest
@@ -36,6 +62,26 @@ public class UserController {
     }
 
 
+
+    // Swagger: documents email verification
+    @Operation(
+            summary = "Verify user email address",
+            description = "Verifies a user's email address using the verification "
+                    + "token sent during registration. Once verified, "
+                    + "the user can log in to LimitGuard."
+    )
+
+    // Swagger: documents possible HTTP responses
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Email verified successfully"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Missing, invalid or expired verification token"
+            )
+    })
     // Handles email verification using the token sent to the users email
     @GetMapping("/verify-email")
     public ResponseEntity<String> verifyEmail(@RequestParam String token) {
@@ -45,6 +91,31 @@ public class UserController {
         return new ResponseEntity<>("Email verified successfully", HttpStatus.OK);
     }
 
+
+
+    // Swagger: documents the login endpoint
+    @Operation(
+            summary = "Log in to LimitGuard",
+            description = "Authenticates a registered user using their email "
+                    + "and password. Returns a JWT access token when the "
+                    + "credentials are valid and the account is verified."
+    )
+
+    // Swagger: explains the possible HTTP responses
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Login successful. JWT token returned."
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request body or missing required fields"
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Invalid email or password"
+            )
+    })
     @PostMapping("/login")
     // Takes the login JSON and checks the validation rules
     public ResponseEntity<LoginResponse> loginUser(@Valid @RequestBody LoginRequest loginDetails) {
@@ -54,6 +125,26 @@ public class UserController {
         return new ResponseEntity<>(loginResponse, HttpStatus.OK);
     }
 
+
+    // Swagger: documents the forgot-password endpoint
+    @Operation(
+            summary = "Request a password reset",
+            description = "Allows a user to request a password reset email. "
+                    + "The email contains a token that can be used "
+                    + "to set a new password."
+    )
+
+    // Swagger: documents possible HTTP responses
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Password reset request processed"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request body or missing email address"
+            )
+    })
     // handles password-reset requests
     @PostMapping("/forgot-password")
     public ResponseEntity<String> forgotPassword(@Valid @RequestBody ForgotPasswordRequest forgotPasswordDetails) {
@@ -63,6 +154,28 @@ public class UserController {
     }
 
 
+
+    // Swagger: documents the reset-password endpoint
+    @Operation(
+            summary = "Reset user password",
+            description = "Allows a user to set a new password using a "
+                    + "password-reset token received by email. "
+                    + "The new password must meet LimitGuard's password "
+                    + "security requirements."
+    )
+
+    // Swagger: explains the possible HTTP responses
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Password reset successfully"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request details, weak password, "
+                            + "or invalid or expired reset token"
+            )
+    })
     // handles setting a new password using a reset token
     @PostMapping("/reset-password")
     public ResponseEntity<String> resetPassword(@Valid @RequestBody ResetPasswordRequest resetPasswordDetails) {
