@@ -1,3 +1,4 @@
+
 package com.example.limitguard.documentation;
 
 import com.example.limitguard.dto.CreditRequestRequest;
@@ -18,7 +19,20 @@ public interface CreditRequestApi {
     // creates a new credit capacity request
     @Operation(
             summary = "Create a credit request",
-            description = "Submits a new credit capacity request. Requires JWT authentication and the RELATIONSHIP_MANAGER role."
+            description = """
+                    Submits a new credit capacity request.
+
+                    **Business Rules:**
+                    - Requests of 500,000 or less reserve credit capacity immediately.
+                    - Requests above 500,000 require Risk Officer approval.
+                    - Reserved capacity expires after 24 hours.
+                    - Requests cannot exceed available headroom.
+                    - Requests cannot be created for frozen or closed counterparties.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RELATIONSHIP_MANAGER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Credit request created successfully"),
@@ -34,8 +48,20 @@ public interface CreditRequestApi {
     // gets the logged-in Relationship Manager's requests
     @Operation(
             summary = "Get my credit requests",
-            description = "Retrieves requests submitted by the authenticated Relationship Manager. "
-                    + "Supports pagination and sorting. Defaults: page 0, size 10, createdAt DESC."
+            description = """
+                    Retrieves credit requests submitted by the authenticated Relationship Manager.
+
+                    **Features:**
+                    - Returns only requests submitted by the current user.
+                    - Supports pagination and sorting.
+                    - Default page: `0`.
+                    - Default page size: `10`.
+                    - Default sorting: `createdAt DESC`.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RELATIONSHIP_MANAGER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Credit requests retrieved successfully"),
@@ -60,7 +86,19 @@ public interface CreditRequestApi {
     // gets a credit request by ID
     @Operation(
             summary = "Get credit request by ID",
-            description = "Retrieves a credit request by ID. Requires the RELATIONSHIP_MANAGER or RISK_OFFICER role."
+            description = """
+                    Retrieves a credit request using its unique ID.
+
+                    **Business Rules:**
+                    - Relationship Managers can retrieve their own requests.
+                    - Risk Officers can retrieve requests within their financial institution.
+                    - Access to requests belonging to another institution is denied.
+                    - Returns `404` when the requested credit request does not exist.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Allowed roles: `RELATIONSHIP_MANAGER`, `RISK_OFFICER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Credit request retrieved successfully"),
@@ -77,7 +115,19 @@ public interface CreditRequestApi {
     // marks a reserved credit request as used
     @Operation(
             summary = "Mark credit request as used",
-            description = "Marks a reserved credit request as used. Requires the RELATIONSHIP_MANAGER role."
+            description = """
+                    Marks a reserved credit request as used.
+
+                    **Business Rules:**
+                    - The request must currently have the `RESERVED` status.
+                    - Only the Relationship Manager who created the request can mark it as used.
+                    - Changes the request status from `RESERVED` to `USED`.
+                    - Requests in other states cannot be marked as used.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RELATIONSHIP_MANAGER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Credit request marked as used"),
@@ -94,7 +144,19 @@ public interface CreditRequestApi {
     // cancels a reserved credit request
     @Operation(
             summary = "Cancel a credit request",
-            description = "Cancels a reserved credit request. Requires the RELATIONSHIP_MANAGER role."
+            description = """
+                    Cancels a reserved credit request and releases its reserved credit capacity.
+
+                    **Business Rules:**
+                    - The request must currently have the `RESERVED` status.
+                    - Only the Relationship Manager who created the request can cancel it.
+                    - Cancelling releases the reserved credit capacity.
+                    - Requests in other states cannot be cancelled through this endpoint.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RELATIONSHIP_MANAGER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Credit request cancelled successfully"),
@@ -111,8 +173,18 @@ public interface CreditRequestApi {
     // gets requests waiting for approval
     @Operation(
             summary = "Get pending credit requests",
-            description = "Retrieves requests awaiting Risk Officer approval. Supports pagination and sorting. "
-                    + "Requires the RISK_OFFICER role."
+            description = """
+                    Retrieves credit requests awaiting Risk Officer approval.
+
+                    **Features:**
+                    - Returns requests with the `PENDING_APPROVAL` status.
+                    - Requests above 500,000 require Risk Officer approval before capacity is reserved.
+                    - Supports pagination and sorting.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RISK_OFFICER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Pending credit requests retrieved successfully"),
@@ -127,7 +199,19 @@ public interface CreditRequestApi {
     // reviews a credit request
     @Operation(
             summary = "Review a credit request",
-            description = "Retrieves information needed to review a credit request. Requires the RISK_OFFICER role."
+            description = """
+                    Retrieves the information required to review a pending credit request.
+
+                    **Business Rules:**
+                    - The request must have the `PENDING_APPROVAL` status.
+                    - Only Risk Officers can review pending requests.
+                    - Risk Officers can review requests within their financial institution.
+                    - Requests from another institution cannot be reviewed.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RISK_OFFICER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Review details retrieved successfully"),
@@ -144,8 +228,21 @@ public interface CreditRequestApi {
     // approves a pending credit request
     @Operation(
             summary = "Approve a credit request",
-            description = "Approves a pending credit request, subject to business rules and available headroom. "
-                    + "Requires the RISK_OFFICER role."
+            description = """
+                    Approves a pending credit request and reserves the required credit capacity.
+
+                    **Business Rules:**
+                    - The request must have the `PENDING_APPROVAL` status.
+                    - Only Risk Officers can approve pending requests.
+                    - A Risk Officer cannot approve a request they originally submitted (maker-checker rule).
+                    - Approval requires sufficient available credit headroom.
+                    - Approved requests move to the `RESERVED` status.
+                    - Reserved requests expire after 24 hours if not marked as used.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RISK_OFFICER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Credit request approved successfully"),
@@ -162,7 +259,20 @@ public interface CreditRequestApi {
     // rejects a pending credit request
     @Operation(
             summary = "Reject a credit request",
-            description = "Rejects a pending credit request with a reason. Requires the RISK_OFFICER role."
+            description = """
+                    Rejects a pending credit request and records the rejection reason.
+
+                    **Business Rules:**
+                    - The request must have the `PENDING_APPROVAL` status.
+                    - Only Risk Officers can reject pending requests.
+                    - A Risk Officer cannot reject a request they originally submitted (maker-checker rule).
+                    - A rejection reason must be provided.
+                    - Rejected requests cannot be approved later through the normal approval endpoint.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RISK_OFFICER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Credit request rejected successfully"),
@@ -180,8 +290,22 @@ public interface CreditRequestApi {
     // searches and filters credit requests
     @Operation(
             summary = "Search and filter credit requests",
-            description = "Searches credit requests by optional status, counterparty ID, and requester ID. "
-                    + "Supports pagination and sorting. Requires the RISK_OFFICER role."
+            description = """
+                    Searches and filters credit requests for review and monitoring.
+
+                    **Available Filters:**
+                    - Request status, such as `PENDING_APPROVAL`, `RESERVED`, or `USED`.
+                    - Counterparty ID.
+                    - Requester ID.
+
+                    **Features:**
+                    - All filters are optional.
+                    - Supports pagination and sorting.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RISK_OFFICER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Credit requests retrieved successfully"),
