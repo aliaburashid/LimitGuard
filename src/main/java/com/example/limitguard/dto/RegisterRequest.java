@@ -5,9 +5,7 @@ package com.example.limitguard.dto;
 // @NotNull: works well for financialInstitutionId because it's a Long, not a String
 // @Email: checks that the email has a valid email format
 
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -31,6 +29,14 @@ public class RegisterRequest {
     // The user's password before it is encrypted
     // The password is required
     @NotBlank(message = "Password is required")
+    // password must contain at least 8 characters
+    @Size(min = 8, message = "Password must be at least 8 characters")
+    // password must contain uppercase, lowercase, number and special character
+    @Pattern(
+            // regex defines the rules that the password must follow
+            regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^a-zA-Z0-9]).+$",
+            message = "Password must contain an uppercase letter, lowercase letter, number and special character"
+    )
     private String password;
 
     // The user must belong to a financial institution
