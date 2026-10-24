@@ -1,3 +1,4 @@
+
 package com.example.limitguard.documentation;
 
 import com.example.limitguard.dto.FinancialInstitutionRequest;
@@ -12,8 +13,19 @@ public interface FinancialInstitutionApi {
 
     @Operation(
             summary = "Create a financial institution",
-            description = "Creates a new financial institution with a name and status. "
-                    + "Requires JWT authentication and the ADMIN role."
+            description = """
+                    Creates a new financial institution with a name and status.
+
+                    **Business Rules:**
+                    - The institution name must not already exist.
+                    - A duplicate institution name returns `409 Conflict`.
+                    - The institution's status is supplied in the request.
+                    - The new institution is recorded in the audit log.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `ADMIN`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Financial institution created successfully"),
@@ -28,8 +40,21 @@ public interface FinancialInstitutionApi {
 
     @Operation(
             summary = "Update a financial institution",
-            description = "Updates the name and status of an existing financial institution using its ID. "
-                    + "Requires JWT authentication and the ADMIN role."
+            description = """
+                    Updates the name and status of an existing financial institution.
+
+                    **Business Rules:**
+                    - The financial institution must exist.
+                    - The institution name must not conflict with another existing institution.
+                    - Keeping the current name is allowed.
+                    - A duplicate name returns `409 Conflict`.
+                    - Successful updates are recorded in the audit log.
+                    - Returns `404 Not Found` if the institution does not exist.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `ADMIN`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Financial institution updated successfully"),
