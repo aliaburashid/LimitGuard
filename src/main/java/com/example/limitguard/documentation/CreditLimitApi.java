@@ -14,7 +14,21 @@ public interface CreditLimitApi {
 
     @Operation(
             summary = "Create a credit limit",
-            description = "Creates a new credit limit. Requires JWT authentication and the RISK_OFFICER role."
+            description = """
+                    Creates a new credit limit for a counterparty within a financial institution.
+
+                    **Business Rules:**
+                    - The financial institution must exist.
+                    - The counterparty must exist.
+                    - A duplicate credit limit for the same institution and counterparty is not allowed.
+                    - Credit limits are managed within the authenticated user's financial institution.
+                    - Returns `409 Conflict` when a credit limit already exists for the same institution and counterparty.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RISK_OFFICER`.
+                    - Access to another financial institution's credit limits is denied.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Credit limit created successfully"),
@@ -30,8 +44,27 @@ public interface CreditLimitApi {
 
     @Operation(
             summary = "Get credit limit exposure and available headroom",
-            description = "Retrieves the current credit exposure and available headroom. "
-                    + "Requires the RELATIONSHIP_MANAGER, RISK_OFFICER, or ADMIN role."
+            description = """
+                    Retrieves the current exposure and available headroom for a credit limit.
+
+                    **Exposure Details:**
+                    - **Credit limit:** The maximum permitted credit capacity.
+                    - **Used exposure:** Credit capacity already consumed by completed usage.
+                    - **Reserved exposure:** Credit capacity allocated to approved or automatically reserved requests that have not yet been marked as used.
+                    - **Available headroom:** The remaining credit capacity available for new requests.
+
+                    **Calculation:**
+                    - `Available Headroom = Credit Limit - Used Exposure - Reserved Exposure`
+
+                    **Business Rules:**
+                    - The credit limit must exist.
+                    - Users can only access credit limits belonging to their financial institution.
+                    - Returns `404 Not Found` when the credit limit does not exist.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Allowed roles: `RELATIONSHIP_MANAGER`, `RISK_OFFICER`, `ADMIN`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Credit exposure retrieved successfully"),
@@ -47,8 +80,28 @@ public interface CreditLimitApi {
 
     @Operation(
             summary = "Update a credit limit",
-            description = "Updates an existing credit limit. The new limit cannot be lower than current exposure. "
-                    + "Requires JWT authentication and the RISK_OFFICER role."
+            description = """
+                    Updates the maximum permitted credit capacity of an existing credit limit.
+
+                    **Business Rules:**
+                    - The credit limit must exist.
+                    - The new limit must not be lower than the combined used and reserved exposure.
+                    - Increasing the limit increases the available headroom.
+                    - Reducing the limit is permitted only when the existing exposure remains fully covered.
+                    - An invalid reduction returns `400 Bad Request`.
+                    - Users cannot update credit limits belonging to another financial institution.
+
+                    **Example:**
+                    - Current credit limit: `1,000,000`
+                    - Used exposure: `400,000`
+                    - Reserved exposure: `200,000`
+                    - Minimum permitted new limit: `600,000`
+                    - Updating the limit to `500,000` is rejected because it is below current exposure.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RISK_OFFICER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Credit limit updated successfully"),
