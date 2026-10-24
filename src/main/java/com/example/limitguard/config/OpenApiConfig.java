@@ -94,8 +94,27 @@ public class OpenApiConfig {
                 // groups every matching operation under its section name
                 if (tag != null) {
                     String selectedTag = tag;
-                    pathItem.readOperations().forEach(operation ->
-                            operation.setTags(List.of(selectedTag)));
+
+                    pathItem.readOperations().forEach(operation -> {
+
+                        // group the endpoint under the correct Swagger section
+                        operation.setTags(List.of(selectedTag));
+
+                        // these authentication endpoints do not require a JWT
+                        boolean isPublicEndpoint =
+                                path.equals("/api/auth/users/register")
+                                        || path.equals("/api/auth/users/login")
+                                        || path.equals("/api/auth/users/verify-email")
+                                        || path.equals("/api/auth/users/forgot-password")
+                                        || path.equals("/api/auth/users/reset-password");
+
+                        // override the global Bearer authentication requirement
+                        // an empty security list means authentication is not required
+                        if (isPublicEndpoint) {
+                            operation.setSecurity(List.of());
+                        }
+                    });
+
                 }
             });
         };
