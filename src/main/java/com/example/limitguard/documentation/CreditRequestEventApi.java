@@ -13,10 +13,31 @@ public interface CreditRequestEventApi {
 
     @Operation(
             summary = "Subscribe to real-time credit request updates",
-            description = "Opens a Server-Sent Events (SSE) connection to receive "
-                    + "real-time credit request updates for the authenticated user's "
-                    + "financial institution. The connection remains open to deliver "
-                    + "events as credit requests change. Requires JWT authentication."
+            description = """
+                    Opens a Server-Sent Events (SSE) connection to receive
+                    real-time credit request updates.
+
+                    **Features:**
+                    - Establishes a persistent HTTP connection for server-to-client notifications.
+                    - Delivers updates as credit requests change.
+                    - Allows clients to receive updates without repeatedly polling the API.
+                    - Uses the `text/event-stream` response format.
+
+                    **Business Rules:**
+                    - Events are scoped to the authenticated user's financial institution.
+                    - Users receive updates associated with their own institution.
+                    - The institution is determined from the authenticated user's identity.
+
+                    **Security:**
+                    - Requires JWT Bearer authentication.
+                    - Unauthenticated requests return `401 Unauthorized`.
+                    - Requests that fail authorization return `403 Forbidden`.
+
+                    **Connection Behaviour:**
+                    - The connection remains open to deliver events.
+                    - Clients should handle connection interruptions and reconnect when necessary.
+                    - The endpoint returns an SSE stream rather than a conventional JSON response.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(
