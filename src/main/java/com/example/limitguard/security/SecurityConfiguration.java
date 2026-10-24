@@ -14,6 +14,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import jakarta.servlet.DispatcherType;
+import org.springframework.http.HttpStatus;
 
 // @Bean tells Spring to create and manage this object
 
@@ -53,6 +54,25 @@ public class SecurityConfiguration {
                 // Spring Security will not store user login sessions
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+
+                // Handles authentication and authorization errors
+                .exceptionHandling(exception -> exception
+
+                        // Return 401 when a user is not authenticated
+                        .authenticationEntryPoint((request, response, authException) -> {
+
+                            // Set HTTP status to 401 Unauthorized
+                            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+
+                            // Return a JSON response
+                            response.setContentType("application/json");
+
+                            // Explain the authentication error
+                            response.getWriter().write(
+                                    "{\"error\":\"Unauthorized\",\"message\":\"Authentication is required\"}"
+                            );
+                        })
                 )
 
                 // Defines which endpoints are public and which require authentication
