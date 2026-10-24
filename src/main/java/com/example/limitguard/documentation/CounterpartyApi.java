@@ -16,7 +16,19 @@ public interface CounterpartyApi {
 
     @Operation(
             summary = "Create a counterparty",
-            description = "Creates a new counterparty. Requires JWT authentication and the RISK_OFFICER role."
+            description = """
+                    Creates a new counterparty in the system.
+
+                    **Business Rules:**
+                    - A counterparty with the same name cannot be created twice.
+                    - Newly created counterparties receive the `ACTIVE` status.
+                    - Returns `409 Conflict` when a duplicate counterparty already exists.
+                    - Active counterparties can be used when creating credit requests, subject to credit limit and headroom checks.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RISK_OFFICER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Counterparty created successfully"),
@@ -31,7 +43,22 @@ public interface CounterpartyApi {
 
     @Operation(
             summary = "Get counterparty by ID",
-            description = "Retrieves a counterparty using its ID. Requires JWT authentication and the RELATIONSHIP_MANAGER, RISK_OFFICER, or ADMIN role."
+            description = """
+                    Retrieves an existing counterparty using its unique ID.
+
+                    **Features:**
+                    - Returns the counterparty's stored information, including its current status.
+                    - Returns `404 Not Found` when the counterparty does not exist.
+
+                    **Counterparty Statuses:**
+                    - `ACTIVE`: Eligible for new credit requests, subject to other business rules.
+                    - `FROZEN`: New credit requests are blocked.
+                    - `CLOSED`: New credit requests are blocked.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Allowed roles: `RELATIONSHIP_MANAGER`, `RISK_OFFICER`, `ADMIN`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Counterparty retrieved successfully"),
@@ -47,9 +74,24 @@ public interface CounterpartyApi {
 
     @Operation(
             summary = "Get, search, and filter counterparties",
-            description = "Retrieves counterparties with optional name search, status filtering, pagination, and sorting. "
-                    + "Default page is 0, size is 10, and sorting is by name ascending. "
-                    + "Requires JWT authentication and the RELATIONSHIP_MANAGER, RISK_OFFICER, or ADMIN role."
+            description = """
+                    Retrieves a paginated list of counterparties with optional search and filtering.
+
+                    **Available Filters:**
+                    - Search counterparties by name.
+                    - Filter by status: `ACTIVE`, `FROZEN`, or `CLOSED`.
+                    - Filters can be used individually or together.
+
+                    **Pagination and Sorting:**
+                    - Default page: `0`.
+                    - Default page size: `10`.
+                    - Default sorting: `name ASC`.
+                    - Supports custom pagination and sorting.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Allowed roles: `RELATIONSHIP_MANAGER`, `RISK_OFFICER`, `ADMIN`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Paginated counterparties retrieved successfully"),
@@ -69,7 +111,20 @@ public interface CounterpartyApi {
 
     @Operation(
             summary = "Update a counterparty",
-            description = "Updates an existing counterparty using its ID. Requires JWT authentication and the RISK_OFFICER role."
+            description = """
+                    Updates the stored information of an existing counterparty.
+
+                    **Business Rules:**
+                    - The counterparty must already exist.
+                    - The updated name must not conflict with another existing counterparty.
+                    - A duplicate name returns `409 Conflict`.
+                    - Updating counterparty information does not change its current status.
+                    - To change the status, use the dedicated Update Counterparty Status endpoint.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RISK_OFFICER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Counterparty updated successfully"),
@@ -87,7 +142,24 @@ public interface CounterpartyApi {
 
     @Operation(
             summary = "Update counterparty status",
-            description = "Updates the status of an existing counterparty. Requires JWT authentication and the RISK_OFFICER role."
+            description = """
+                    Changes the status of an existing counterparty.
+
+                    **Available Statuses:**
+                    - `ACTIVE`: Allows new credit requests, subject to available credit capacity.
+                    - `FROZEN`: Blocks the creation of new credit requests.
+                    - `CLOSED`: Blocks the creation of new credit requests.
+
+                    **Business Rules:**
+                    - The counterparty must already exist.
+                    - Status changes affect whether new credit requests can be created.
+                    - Updating the status is separate from updating counterparty information.
+                    - Returns `404 Not Found` if the counterparty does not exist.
+
+                    **Security:**
+                    - JWT Bearer authentication required.
+                    - Required role: `RISK_OFFICER`.
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Counterparty status updated successfully"),
