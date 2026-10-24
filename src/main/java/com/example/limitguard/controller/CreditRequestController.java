@@ -1,5 +1,6 @@
 package com.example.limitguard.controller;
 
+import com.example.limitguard.documentation.CreditRequestApi;
 import com.example.limitguard.dto.CreditRequestRequest;
 import com.example.limitguard.dto.CreditRequestResponse;
 import com.example.limitguard.dto.CreditRequestReviewResponse;
@@ -19,7 +20,7 @@ import com.example.limitguard.dto.RejectCreditRequestRequest;
 
 @RestController
 @RequestMapping("/api/credit-requests")
-public class CreditRequestController {
+public class CreditRequestController implements CreditRequestApi {
 
     @Autowired
     private CreditRequestService creditRequestService;
@@ -29,6 +30,7 @@ public class CreditRequestController {
     // creates a new credit capacity request
     @PostMapping
     @PreAuthorize("hasRole('RELATIONSHIP_MANAGER')")
+    @Override
     public ResponseEntity<CreditRequestResponse> createCreditRequest(
             @Valid @RequestBody CreditRequestRequest creditRequestRequest) {
         CreditRequestResponse creditRequestResponse =
@@ -40,6 +42,7 @@ public class CreditRequestController {
     // gets the credit requests submitted by the logged-in Relationship Manager
     @GetMapping("/my")
     @PreAuthorize("hasRole('RELATIONSHIP_MANAGER')")
+    @Override
     public ResponseEntity<Page<CreditRequestResponse>> getMyCreditRequests(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -66,6 +69,7 @@ public class CreditRequestController {
     // gets a credit request by ID
     @GetMapping("/{creditRequestId}")
     @PreAuthorize("hasAnyRole('RELATIONSHIP_MANAGER', 'RISK_OFFICER')")
+    @Override
     public ResponseEntity<CreditRequestResponse> getCreditRequestById(
             @PathVariable Long creditRequestId) {
         CreditRequestResponse creditRequestResponse =
@@ -76,6 +80,7 @@ public class CreditRequestController {
     // marks a reserved credit request as used
     @PatchMapping("/{creditRequestId}/use")
     @PreAuthorize("hasRole('RELATIONSHIP_MANAGER')")
+    @Override
     public ResponseEntity<CreditRequestResponse> markCreditRequestAsUsed(
             @PathVariable Long creditRequestId) {
         CreditRequestResponse creditRequestResponse =
@@ -86,6 +91,7 @@ public class CreditRequestController {
     // cancels a reserved credit request
     @PatchMapping("/{creditRequestId}/cancel")
     @PreAuthorize("hasRole('RELATIONSHIP_MANAGER')")
+    @Override
     public ResponseEntity<CreditRequestResponse> cancelCreditRequest(
             @PathVariable Long creditRequestId) {
         CreditRequestResponse creditRequestResponse =
@@ -96,6 +102,7 @@ public class CreditRequestController {
     // gets all credit requests waiting for Risk Officer approval
     @GetMapping("/pending")
     @PreAuthorize("hasRole('RISK_OFFICER')")
+    @Override
     public ResponseEntity<Page<CreditRequestResponse>> getPendingCreditRequests(Pageable pageable) {
         // asks the service for only requests with PENDING_APPROVAL status
         // Pageable allows the results to support pagination and sorting
@@ -108,6 +115,7 @@ public class CreditRequestController {
     // allows a Risk Officer to review the details of a request awaiting approval
     @GetMapping("/{creditRequestId}/review")
     @PreAuthorize("hasRole('RISK_OFFICER')")
+    @Override
     public ResponseEntity<CreditRequestReviewResponse> reviewCreditRequest(
             @PathVariable Long creditRequestId) {
         CreditRequestReviewResponse creditRequest =
@@ -118,6 +126,7 @@ public class CreditRequestController {
     // allows a Risk Officer to approve a pending credit request
     @PatchMapping("/{creditRequestId}/approve")
     @PreAuthorize("hasRole('RISK_OFFICER')")
+    @Override
     public ResponseEntity<CreditRequestResponse> approveCreditRequest(
             @PathVariable Long creditRequestId) {
         CreditRequestResponse creditRequest =
@@ -128,6 +137,7 @@ public class CreditRequestController {
     // Risk Officer rejects a pending credit request
     @PatchMapping("/{creditRequestId}/reject")
     @PreAuthorize("hasRole('RISK_OFFICER')")
+    @Override
     public ResponseEntity<CreditRequestResponse> rejectCreditRequest(
             @PathVariable Long creditRequestId,
             @Valid @RequestBody RejectCreditRequestRequest request) {
@@ -139,6 +149,7 @@ public class CreditRequestController {
     // allows a Risk Officer to search and filter credit requests
     @GetMapping("/search")
     @PreAuthorize("hasRole('RISK_OFFICER')")
+    @Override
     public ResponseEntity<Page<CreditRequestResponse>> searchCreditRequests(
             @RequestParam(required = false) CreditRequestStatus status,
             @RequestParam(required = false) Long counterpartyId,
