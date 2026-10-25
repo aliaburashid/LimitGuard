@@ -8,6 +8,8 @@ import com.example.limitguard.enums.UserRole;
 import com.example.limitguard.exception.CreditLimitNotFoundException;
 import com.example.limitguard.exception.CreditRequestNotFoundException;
 import com.example.limitguard.exception.InsufficientHeadroomException;
+import com.example.limitguard.exception.InvalidCreditRequestStateException;
+import com.example.limitguard.exception.InvalidCreditRequestOperationException;
 import com.example.limitguard.model.CreditLimit;
 import com.example.limitguard.model.CreditRequest;
 import com.example.limitguard.model.User;
@@ -78,6 +80,21 @@ public class CreditRequestService {
         return userDetails.getUser();
     }
 
+    /**
+     * Records credit request activity for traceability
+     * The actor can be null for automatic operations such as reservation expiry
+     */
+    private void recordAuditLog(String action, CreditRequest creditRequest, String details, User actor) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction(action);
+        auditLog.setEntityType("CREDIT_REQUEST");
+        auditLog.setEntityId(creditRequest.getId());
+        auditLog.setDetails(details);
+        auditLog.setActor(actor);
+        auditLog.setFinancialInstitution(creditRequest.getCreditLimit().getFinancialInstitution());
+        auditLogRepository.save(auditLog);
+    }
+
     // enforces the maker-checker rule for approval decisions
     // the user who submitted the request cannot approve or reject their own request
     private void validateMakerChecker(CreditRequest creditRequest) {
@@ -139,7 +156,7 @@ public class CreditRequestService {
                     creditRequest.getId()
             );
 
-            throw new IllegalArgumentException(
+            throw new InvalidCreditRequestStateException(
                     "Invalid credit request status transition from "
                             + currentStatus
                             + " to "
@@ -152,7 +169,7 @@ public class CreditRequestService {
     private void validateApprovalAction(CreditRequest creditRequest) {
 
         if (creditRequest.getStatus() != CreditRequestStatus.PENDING_APPROVAL) {
-            throw new IllegalArgumentException(
+            throw new InvalidCreditRequestStateException(
                     "Only pending approval requests can be approved or rejected"
             );
         }
@@ -174,7 +191,7 @@ public class CreditRequestService {
         if (creditLimit.getCounterparty().getStatus() == CounterpartyStatus.FROZEN
                 || creditLimit.getCounterparty().getStatus() == CounterpartyStatus.CLOSED) {
 
-            throw new IllegalArgumentException(
+            throw new InvalidCreditRequestOperationException(
                     "Credit requests cannot be created for a frozen or closed counterparty");
         }
 
@@ -222,17 +239,13 @@ public class CreditRequestService {
         creditLimitRepository.save(creditLimit);
 
         // records the credit request creation in the audit log
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("CREDIT_REQUEST_CREATED");
-        auditLog.setEntityType("CREDIT_REQUEST");
-        auditLog.setEntityId(savedCreditRequest.getId());
-        auditLog.setDetails("Created credit request of " + savedCreditRequest.getAmount() + " with status " + savedCreditRequest.getStatus());
-        auditLog.setActor(requester);
-
-        // save which bank this request belongs to
-        auditLog.setFinancialInstitution(creditLimit.getFinancialInstitution());
-
-        auditLogRepository.save(auditLog);
+        // associates the audit record with the correct bank for traceability
+        recordAuditLog(
+                "CREDIT_REQUEST_CREATED",
+                savedCreditRequest,
+                "Created credit request of " + savedCreditRequest.getAmount() + " with status " + savedCreditRequest.getStatus(),
+                requester
+        );
 
         // Log the successful credit request creation
         logger.info(
@@ -244,17 +257,13 @@ public class CreditRequestService {
         // records when credit capacity is reserved
         if (savedCreditRequest.getStatus() == CreditRequestStatus.RESERVED) {
 
-            AuditLog reservationAuditLog = new AuditLog();
-            reservationAuditLog.setAction("CREDIT_CAPACITY_RESERVED");
-            reservationAuditLog.setEntityType("CREDIT_REQUEST");
-            reservationAuditLog.setEntityId(savedCreditRequest.getId());
-            reservationAuditLog.setDetails("Reserved credit capacity of " + savedCreditRequest.getAmount());
-            reservationAuditLog.setActor(requester);
-
             // save which bank reserved the credit
-            reservationAuditLog.setFinancialInstitution(creditLimit.getFinancialInstitution());
-
-            auditLogRepository.save(reservationAuditLog);
+            recordAuditLog(
+                    "CREDIT_CAPACITY_RESERVED",
+                    savedCreditRequest,
+                    "Reserved credit capacity of " + savedCreditRequest.getAmount(),
+                    requester
+            );
 
             // sends the new RESERVED status to clients listening to the SSE stream
             // only clients from the same bank receive the update
@@ -284,13 +293,11 @@ public class CreditRequestService {
         // prevents the same request from reserving capacity more than once
         // If we've already reserved this request, STOP. Don't reserve the same money twice
         if (creditRequest.getStatus() == CreditRequestStatus.RESERVED) {
-            throw new IllegalArgumentException("Credit request is already reserved");
+            throw new InvalidCreditRequestStateException("Credit request is already reserved");
         }
 
         // calculates the latest available headroom before reservation
-        BigDecimal availableHeadroom = creditLimit.getLimitAmount()
-                .subtract(creditLimit.getUsedAmount())
-                .subtract(creditLimit.getReservedAmount());
+        BigDecimal availableHeadroom = calculateAvailableHeadroom(creditLimit);
 
         // checks headroom again immediately before reservation
         // Does the requested money fit inside the available headroom?
@@ -367,19 +374,13 @@ public class CreditRequestService {
         approvalDecisionRepository.save(approvalDecision);
 
         // records the successful approval in the audit trail
-        AuditLog auditLog = new AuditLog();
-
-        auditLog.setAction("CREDIT_REQUEST_APPROVED");
-        auditLog.setEntityType("CREDIT_REQUEST");
-        auditLog.setEntityId(savedCreditRequest.getId());
-        auditLog.setDetails("Approved credit request of " + savedCreditRequest.getAmount() + " and reserved the credit capacity");
-
-        auditLog.setActor(getCurrentLoggedInUser());
-
         // save which bank approved the credit request
-        auditLog.setFinancialInstitution(creditLimit.getFinancialInstitution());
-
-        auditLogRepository.save(auditLog);
+        recordAuditLog(
+                "CREDIT_REQUEST_APPROVED",
+                savedCreditRequest,
+                "Approved credit request of " + savedCreditRequest.getAmount() + " and reserved the credit capacity",
+                getCurrentLoggedInUser()
+        );
 
         // sends the approval notification to the user who created the request
         emailService.SendCreditRequestApprovedEmail(
@@ -442,17 +443,13 @@ public class CreditRequestService {
         approvalDecisionRepository.save(approvalDecision);
 
         // record who rejected the request and why
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("CREDIT_REQUEST_REJECTED");
-        auditLog.setEntityType("CREDIT_REQUEST");
-        auditLog.setEntityId(savedCreditRequest.getId());
-        auditLog.setDetails("Rejected credit request of " + savedCreditRequest.getAmount() + ". Reason: " + reason);
-        auditLog.setActor(getCurrentLoggedInUser());
-
         // save which bank rejected the credit request
-        auditLog.setFinancialInstitution(creditRequest.getCreditLimit().getFinancialInstitution());
-
-        auditLogRepository.save(auditLog);
+        recordAuditLog(
+                "CREDIT_REQUEST_REJECTED",
+                savedCreditRequest,
+                "Rejected credit request of " + savedCreditRequest.getAmount() + ". Reason: " + reason,
+                getCurrentLoggedInUser()
+        );
 
         // sends the rejection notification to the user who created the request
         emailService.SendCreditRequestRejectedEmail(
@@ -527,17 +524,13 @@ public class CreditRequestService {
         creditLimitRepository.save(creditLimit);
 
         // records the operation in the audit log
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("CREDIT_CAPACITY_USED");
-        auditLog.setEntityType("CREDIT_REQUEST");
-        auditLog.setEntityId(savedCreditRequest.getId());
-        auditLog.setDetails("Marked reserved credit capacity of " + savedCreditRequest.getAmount() + " as used");
-        auditLog.setActor(currentUser);
-
         // save which bank used the credit
-        auditLog.setFinancialInstitution(creditLimit.getFinancialInstitution());
-
-        auditLogRepository.save(auditLog);
+        recordAuditLog(
+                "CREDIT_CAPACITY_USED",
+                savedCreditRequest,
+                "Marked reserved credit capacity of " + savedCreditRequest.getAmount() + " as used",
+                currentUser
+        );
 
         // sends the new USED status to clients listening to the SSE stream
         // only clients from the same bank receive the update
@@ -590,7 +583,7 @@ public class CreditRequestService {
         if (creditLimit.getReservedAmount()
                 .compareTo(creditRequest.getAmount()) < 0) {
 
-            throw new IllegalArgumentException(
+            throw new InvalidCreditRequestOperationException(
                     "Reserved amount cannot become negative");
         }
 
@@ -610,17 +603,13 @@ public class CreditRequestService {
         creditLimitRepository.save(creditLimit);
 
         // records the cancellation in the audit log
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("CREDIT_REQUEST_CANCELLED");
-        auditLog.setEntityType("CREDIT_REQUEST");
-        auditLog.setEntityId(savedCreditRequest.getId());
-        auditLog.setDetails("Cancelled reserved credit request of " + savedCreditRequest.getAmount() + " and released the reserved capacity");
-        auditLog.setActor(currentUser);
-
         // save which bank canceled the credit request
-        auditLog.setFinancialInstitution(creditLimit.getFinancialInstitution());
-
-        auditLogRepository.save(auditLog);
+        recordAuditLog(
+                "CREDIT_REQUEST_CANCELLED",
+                savedCreditRequest,
+                "Cancelled reserved credit request of " + savedCreditRequest.getAmount() + " and released the reserved capacity",
+                currentUser
+        );
 
         // sends the new CANCELLED status to clients listening to the SSE stream
         // only clients from the same bank receive the update
@@ -654,12 +643,12 @@ public class CreditRequestService {
 
         // makes sure the reservation has an expiry time
         if (creditRequest.getExpiresAt() == null) {
-            throw new IllegalArgumentException("Credit request does not have an expiry time");
+            throw new InvalidCreditRequestStateException("Credit request does not have an expiry time");
         }
 
         // prevents the reservation from expiring before its expiry time
         if (LocalDateTime.now().isBefore(creditRequest.getExpiresAt())) {
-            throw new IllegalArgumentException("Credit request cannot expire before its expiry time");
+            throw new InvalidCreditRequestStateException("Credit request cannot expire before its expiry time");
         }
 
         // gets the credit limit connected to this reservation
@@ -671,7 +660,7 @@ public class CreditRequestService {
         // that would make the reserved amount negative
         if (creditLimit.getReservedAmount()
                 .compareTo(creditRequest.getAmount()) < 0) {
-            throw new IllegalArgumentException("Reserved amount cannot become negative");
+            throw new InvalidCreditRequestOperationException("Reserved amount cannot become negative");
         }
 
         // releases the unused reserved capacity
@@ -690,16 +679,13 @@ public class CreditRequestService {
         CreditRequest savedCreditRequest = creditRequestRepository.save(creditRequest);
 
         // records the automatic expiry in the audit log
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("CREDIT_REQUEST_EXPIRED");
-        auditLog.setEntityType("CREDIT_REQUEST");
-        auditLog.setEntityId(savedCreditRequest.getId());
-        auditLog.setDetails("Credit reservation of " + savedCreditRequest.getAmount() + " expired and released the reserved capacity");
-
         // save which bank this expired request belongs to
-        auditLog.setFinancialInstitution(creditLimit.getFinancialInstitution());
-
-        auditLogRepository.save(auditLog);
+        recordAuditLog(
+                "CREDIT_REQUEST_EXPIRED",
+                savedCreditRequest,
+                "Credit reservation of " + savedCreditRequest.getAmount() + " expired and released the reserved capacity",
+                null
+        );
 
         // tries to notify the requester after the reservation expires
         // an email failure should not undo the expiry or restore reserved capacity
@@ -750,7 +736,7 @@ public class CreditRequestService {
 
         // only requests waiting for approval can enter the approval-review workflow
         if (creditRequest.getStatus() != CreditRequestStatus.PENDING_APPROVAL) {
-            throw new IllegalArgumentException( "Credit request is not awaiting approval");
+            throw new InvalidCreditRequestStateException("Credit request is not awaiting approval");
         }
 
         CreditLimit creditLimit = creditRequest.getCreditLimit();
@@ -760,8 +746,8 @@ public class CreditRequestService {
         BigDecimal availableHeadroom = calculateAvailableHeadroom(creditLimit);
 
         String requesterName = creditRequest.getRequester().getFirstName()
-                        + " "
-                        + creditRequest.getRequester().getLastName();
+                + " "
+                + creditRequest.getRequester().getLastName();
 
         return new CreditRequestReviewResponse(
                 creditRequest.getId(),
@@ -796,10 +782,18 @@ public class CreditRequestService {
         // finds only the credit requests created by this user
         Page<CreditRequest> creditRequests =
                 creditRequestRepository.searchInInstitution(
-                        institutionAccessService.getCurrentInstitutionId(), null, null, requester.getId(), pageable);
+                        institutionAccessService.getCurrentInstitutionId(),
+                        null,
+                        null,
+                        requester.getId(),
+                        pageable
+                );
 
         // converts each CreditRequest into a CreditRequestResponse
-        return creditRequests.map(this::toResponse);
+        Page<CreditRequestResponse> responses = creditRequests.map(request -> toResponse(request));
+
+        // returns the converted credit requests
+        return responses;
     }
 
     // gets all credit requests that are waiting for Risk Officer approval
@@ -810,11 +804,18 @@ public class CreditRequestService {
         Page<CreditRequest> pendingRequests =
                 creditRequestRepository.searchInInstitution(
                         institutionAccessService.getCurrentInstitutionId(),
-                        CreditRequestStatus.PENDING_APPROVAL, null, null, pageable);
+                        CreditRequestStatus.PENDING_APPROVAL,
+                        null,
+                        null,
+                        pageable
+                );
 
         // converts each CreditRequest entity into a CreditRequestResponse DTO
         // so the API does not return the database entity directly
-        return pendingRequests.map(this::toResponse);
+        Page<CreditRequestResponse> responses = pendingRequests.map(request -> toResponse(request));
+
+        // returns the converted credit requests
+        return responses;
     }
 
     // gets a credit request by ID for an authorized user
@@ -851,20 +852,47 @@ public class CreditRequestService {
             Long requesterId,
             Pageable pageable) {
 
-        return creditRequestRepository.searchInInstitution(
-                institutionAccessService.getCurrentInstitutionId(), status, counterpartyId, requesterId, pageable
-        ).map(this::toResponse);
+        // gets the matching credit requests from the database
+        Page<CreditRequest> requests = creditRequestRepository.searchInInstitution(
+                institutionAccessService.getCurrentInstitutionId(),
+                status,
+                counterpartyId,
+                requesterId,
+                pageable
+        );
+
+        // converts each credit request into a response
+        Page<CreditRequestResponse> responses = requests.map(request -> toResponse(request));
+
+        // returns the results
+        return responses;
     }
 
+    // converts a credit request into a response with only the information we want to send
+    // we use this method to avoid writing the same response code in different methods
     private CreditRequestResponse toResponse(CreditRequest request) {
+        // gets the credit limit associated with this credit request
+        // so its financial institution and counterparty details can be included
         CreditLimit limit = request.getCreditLimit();
+
+        // gets the user who originally submitted the credit request
+        // so the response can include their ID and full name
         User requester = request.getRequester();
+
+        // creates a DTO containing only the information required by the API
+        // this avoids returning the database entity and its relationships directly
         return new CreditRequestResponse(
+                // credit request information
                 request.getId(), request.getAmount(), request.getStatus(),
+                // associated credit limit, counterparty and requester IDs
                 limit.getId(), limit.getCounterparty().getId(), requester.getId(),
+                // reservation expiry and request timestamps
                 request.getExpiresAt(), request.getCreatedAt(), request.getUpdatedAt(),
+                // counterparty information
                 limit.getCounterparty().getName(), limit.getCounterparty().getStatus(),
+                // combines the requester's first and last name for display
                 requester.getFirstName() + " " + requester.getLastName(),
+                // identifies the financial institution that owns the credit request
                 limit.getFinancialInstitution().getId(), limit.getFinancialInstitution().getName()
         );
     }

@@ -1,5 +1,6 @@
 package com.example.limitguard.controller;
 
+import com.example.limitguard.documentation.FinancialInstitutionApi;
 import com.example.limitguard.dto.FinancialInstitutionRequest;
 import com.example.limitguard.dto.FinancialInstitutionResponse;
 import com.example.limitguard.service.FinancialInstitutionService;
@@ -12,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/financial-institutions")
-public class FinancialInstitutionController {
+public class FinancialInstitutionController implements FinancialInstitutionApi {
 
     // gives this controller access to the FI service
     @Autowired
@@ -22,6 +23,7 @@ public class FinancialInstitutionController {
     // only a logged-in ADMIN can create a financial institution
     @PreAuthorize("hasRole('ADMIN')")
     // creates a new financial institution
+    @Override
     public ResponseEntity<FinancialInstitutionResponse> createFinancialInstitution (
             @Valid @RequestBody FinancialInstitutionRequest financialInstitutionRequest) {
 
@@ -40,6 +42,7 @@ public class FinancialInstitutionController {
     // only a logged-in ADMIN can update a financial institution
     @PreAuthorize("hasRole('ADMIN')")
     // updates an existing financial institution
+    @Override
     public ResponseEntity<FinancialInstitutionResponse> updateFinancialInstitution(
             // gets the institution ID from the URL
             @PathVariable Long institutionId,

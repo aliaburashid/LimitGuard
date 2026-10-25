@@ -3,6 +3,7 @@ package com.example.limitguard.dto;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -11,6 +12,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 public class CreditLimitResponse {
+    
     private Long id;
     private BigDecimal limitAmount;
     private BigDecimal usedAmount;

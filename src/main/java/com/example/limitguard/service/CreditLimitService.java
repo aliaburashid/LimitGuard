@@ -62,6 +62,33 @@ public class CreditLimitService {
         return userDetails.getUser();
     }
 
+    // records credit limit changes in the audit log without repeating the same code
+    private void recordAuditLog(String action, CreditLimit creditLimit, String details, User actor) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction(action);
+        auditLog.setEntityType("CREDIT_LIMIT");
+        auditLog.setEntityId(creditLimit.getId());
+        auditLog.setDetails(details);
+        auditLog.setActor(actor);
+        auditLog.setFinancialInstitution(creditLimit.getFinancialInstitution());
+        auditLogRepository.save(auditLog);
+    }
+
+    // converts a credit limit into a response with only the information we want to send
+    // we use this method to avoid writing the same response code in different methods
+    private CreditLimitResponse toResponse(CreditLimit creditLimit) {
+        return new CreditLimitResponse(
+                creditLimit.getId(),
+                creditLimit.getLimitAmount(),
+                creditLimit.getUsedAmount(),
+                creditLimit.getReservedAmount(),
+                creditLimit.getFinancialInstitution().getId(),
+                creditLimit.getCounterparty().getId(),
+                creditLimit.getCreatedAt(),
+                creditLimit.getUpdatedAt()
+        );
+    }
+
     // creates a credit limit for a financial institution and counterparty
     @Transactional
     public CreditLimitResponse createCreditLimit(CreditLimitRequest creditLimitRequest) {
@@ -74,15 +101,15 @@ public class CreditLimitService {
 
         // checks that the financial institution exists
         FinancialInstitution financialInstitution = financialInstitutionRepository
-                        .findById(institutionId)
-                        .orElseThrow(() ->
-                                new FinancialInstitutionNotFoundException("Financial institution not found"));
+                .findById(institutionId)
+                .orElseThrow(() ->
+                        new FinancialInstitutionNotFoundException("Financial institution not found"));
 
         // checks that the counterparty exists
         Counterparty counterparty = counterpartyRepository
-                        .findById(creditLimitRequest.getCounterpartyId())
-                        .orElseThrow(() ->
-                                new CounterpartyNotFoundException("Counterparty not found"));
+                .findById(creditLimitRequest.getCounterpartyId())
+                .orElseThrow(() ->
+                        new CounterpartyNotFoundException("Counterparty not found"));
 
         // only one credit limit can exist for the same
         // financial institution and counterparty combination
@@ -110,29 +137,14 @@ public class CreditLimitService {
         User currentUser = getCurrentLoggedInUser();
 
         // records the creation in the audit log
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("CREDIT_LIMIT_CREATED");
-        auditLog.setEntityType("CREDIT_LIMIT");
-        auditLog.setEntityId(savedCreditLimit.getId());
-        auditLog.setDetails("Created credit limit of " + savedCreditLimit.getLimitAmount() + " for counterparty " + counterparty.getName());
-        auditLog.setActor(currentUser);
-
         // save which bank created this credit limit
-        auditLog.setFinancialInstitution(financialInstitution);
-
-        auditLogRepository.save(auditLog);
+        recordAuditLog(
+                "CREDIT_LIMIT_CREATED", savedCreditLimit,
+                "Created credit limit of " + savedCreditLimit.getLimitAmount() + " for counterparty " + counterparty.getName(), currentUser
+        );
 
         // converts the saved entity into the response DTO
-        return new CreditLimitResponse(
-                savedCreditLimit.getId(),
-                savedCreditLimit.getLimitAmount(),
-                savedCreditLimit.getUsedAmount(),
-                savedCreditLimit.getReservedAmount(),
-                savedCreditLimit.getFinancialInstitution().getId(),
-                savedCreditLimit.getCounterparty().getId(),
-                savedCreditLimit.getCreatedAt(),
-                savedCreditLimit.getUpdatedAt()
-        );
+        return toResponse(savedCreditLimit);
     }
 
     // gets the credit exposure and available headroom
@@ -150,8 +162,8 @@ public class CreditLimitService {
 
         // calculates the remaining available credit
         BigDecimal availableHeadroom = creditLimit.getLimitAmount()
-                        .subtract(creditLimit.getUsedAmount())
-                        .subtract(creditLimit.getReservedAmount());
+                .subtract(creditLimit.getUsedAmount())
+                .subtract(creditLimit.getReservedAmount());
 
         // returns the exposure information
         return new CreditExposureResponse(
@@ -201,27 +213,12 @@ public class CreditLimitService {
         User currentUser = getCurrentLoggedInUser();
 
         // records the change in the audit log
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("CREDIT_LIMIT_UPDATED");
-        auditLog.setEntityType("CREDIT_LIMIT");
-        auditLog.setEntityId(updatedCreditLimit.getId());
-        auditLog.setDetails("Credit limit changed from " + oldLimitAmount + " to " + updatedCreditLimit.getLimitAmount());
-        auditLog.setActor(currentUser);
-
         // save which bank owns this credit limit
-        auditLog.setFinancialInstitution(creditLimit.getFinancialInstitution());
-
-        auditLogRepository.save(auditLog);
-
-        return new CreditLimitResponse(
-                updatedCreditLimit.getId(),
-                updatedCreditLimit.getLimitAmount(),
-                updatedCreditLimit.getUsedAmount(),
-                updatedCreditLimit.getReservedAmount(),
-                updatedCreditLimit.getFinancialInstitution().getId(),
-                updatedCreditLimit.getCounterparty().getId(),
-                updatedCreditLimit.getCreatedAt(),
-                updatedCreditLimit.getUpdatedAt()
+        recordAuditLog(
+                "CREDIT_LIMIT_UPDATED", updatedCreditLimit,
+                "Credit limit changed from " + oldLimitAmount + " to " + updatedCreditLimit.getLimitAmount(), currentUser
         );
+
+        return toResponse(updatedCreditLimit);
     }
 }

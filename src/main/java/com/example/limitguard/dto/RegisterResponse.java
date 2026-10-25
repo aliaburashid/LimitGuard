@@ -1,9 +1,11 @@
+
 package com.example.limitguard.dto;
 
 import com.example.limitguard.enums.UserRole;
 import com.example.limitguard.enums.UserStatus;
 import lombok.Getter;
 import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 // The information we send back after a user registers successfully
 

@@ -31,6 +31,8 @@ public class OpenApiConfig {
                 .tags(List.of(
                         new Tag().name("Financial Institutions")
                                 .description("Manage financial institutions"),
+                        new Tag().name("Corporate Groups")
+                                .description("Manage corporate groups and their information"),
                         new Tag().name("Credit Limits")
                                 .description("Manage credit limits and available exposure"),
                         new Tag().name("Counterparties")
@@ -77,6 +79,8 @@ public class OpenApiConfig {
 
                 if (path.startsWith("/api/financial-institutions")) {
                     tag = "Financial Institutions";
+                } else if (path.startsWith("/api/corporate-groups")) {
+                    tag = "Corporate Groups";
                 } else if (path.startsWith("/api/credit-limits")) {
                     tag = "Credit Limits";
                 } else if (path.startsWith("/api/counterparties")) {
@@ -94,8 +98,27 @@ public class OpenApiConfig {
                 // groups every matching operation under its section name
                 if (tag != null) {
                     String selectedTag = tag;
-                    pathItem.readOperations().forEach(operation ->
-                            operation.setTags(List.of(selectedTag)));
+
+                    pathItem.readOperations().forEach(operation -> {
+
+                        // group the endpoint under the correct Swagger section
+                        operation.setTags(List.of(selectedTag));
+
+                        // these authentication endpoints do not require a JWT
+                        boolean isPublicEndpoint =
+                                path.equals("/api/auth/users/register")
+                                        || path.equals("/api/auth/users/login")
+                                        || path.equals("/api/auth/users/verify-email")
+                                        || path.equals("/api/auth/users/forgot-password")
+                                        || path.equals("/api/auth/users/reset-password");
+
+                        // override the global Bearer authentication requirement
+                        // an empty security list means authentication is not required
+                        if (isPublicEndpoint) {
+                            operation.setSecurity(List.of());
+                        }
+                    });
+
                 }
             });
         };

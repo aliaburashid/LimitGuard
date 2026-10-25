@@ -86,6 +86,20 @@ public class UserService {
 
     //-------------------------------------------------------------------------------------------------
 
+    // records user changes in the audit log without repeating the same code
+    private void recordAuditLog(String action, User user, String details, User actor) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction(action);
+        auditLog.setEntityType("USER");
+        auditLog.setEntityId(user.getId());
+        auditLog.setDetails(details);
+        auditLog.setActor(actor);
+
+        // saves the audit log in the database
+        auditLogRepository.save(auditLog);
+    }
+
+
     // makes sure registration is rolled back if part of the process fails
     @Transactional
     // Registers a new user in LimitGuard
@@ -684,16 +698,7 @@ public class UserService {
         userRepository.save(user);
 
         // creates an audit record for the deactivation
-        AuditLog auditLog = new AuditLog();
-
-        auditLog.setAction("USER_DEACTIVATED");
-        auditLog.setEntityType("USER");
-        auditLog.setEntityId(user.getId());
-        auditLog.setDetails(deactivateUserRequest.getReason());
-        auditLog.setActor(admin);
-
-        // saves the audit record
-        auditLogRepository.save(auditLog);
+        recordAuditLog("USER_DEACTIVATED", user, deactivateUserRequest.getReason(), admin);
 
         // Log the successful account deactivation
         logger.info("User ID {} was deactivated by admin user ID {}", user.getId(), admin.getId());
@@ -741,15 +746,7 @@ public class UserService {
         userRepository.save(user);
 
         // records the role change in the audit log
-        AuditLog auditLog = new AuditLog();
-
-        auditLog.setAction("USER_ROLE_UPDATED");
-        auditLog.setEntityType("USER");
-        auditLog.setEntityId(user.getId());
-        auditLog.setDetails("Role changed to: " + updateUserRoleRequest.getRole());
-        auditLog.setActor(admin);
-
-        auditLogRepository.save(auditLog);
+        recordAuditLog("USER_ROLE_UPDATED", user, "Role changed to: " + updateUserRoleRequest.getRole(), admin);
 
         // Log the successful role change
         logger.info("User ID {} role changed to {} by admin user ID {}", user.getId(), user.getRole(), admin.getId());

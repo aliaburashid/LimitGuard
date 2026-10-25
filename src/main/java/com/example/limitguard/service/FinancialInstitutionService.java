@@ -44,6 +44,18 @@ public class FinancialInstitutionService {
         return userDetails.getUser();
     }
 
+    // records financial institution changes in the audit log without repeating the same code
+    private void recordAuditLog(String action, FinancialInstitution financialInstitution, String details, User actor) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction(action);
+        auditLog.setEntityType("FINANCIAL_INSTITUTION");
+        auditLog.setEntityId(financialInstitution.getId());
+        auditLog.setDetails(details);
+        auditLog.setActor(actor);
+        // saves the audit log in the database
+        auditLogRepository.save(auditLog);
+    }
+
     // converts a FinancialInstitution entity into the response we send to the user
     private FinancialInstitutionResponse convertToResponse(FinancialInstitution financialInstitution) {
         return new FinancialInstitutionResponse(
@@ -63,7 +75,7 @@ public class FinancialInstitutionService {
     public FinancialInstitutionResponse createFinancialInstitution(FinancialInstitutionRequest financialInstitutionRequest) {
 
         // checks if another financial institution already has this name
-        if ( financialInstitutionRepository.existsByName(financialInstitutionRequest.getName())) {
+        if (financialInstitutionRepository.existsByName(financialInstitutionRequest.getName())) {
             throw new FinancialInstitutionAlreadyExistsException("Financial institution name already exists");
         }
 
@@ -81,17 +93,10 @@ public class FinancialInstitutionService {
         User currentUser = getCurrentLoggedInUser();
 
         // creates an audit log for the financial institution creation
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("FINANCIAL_INSTITUTION_CREATED");
-        auditLog.setEntityType("FINANCIAL_INSTITUTION");
-        auditLog.setEntityId(savedFinancialInstitution.getId());
-        auditLog.setDetails(
-                "Created financial institution: " + savedFinancialInstitution.getName()
+        recordAuditLog(
+                "FINANCIAL_INSTITUTION_CREATED", savedFinancialInstitution,
+                "Created financial institution: " + savedFinancialInstitution.getName(), currentUser
         );
-        auditLog.setActor(currentUser);
-
-        // saves the audit log in the database
-        auditLogRepository.save(auditLog);
 
         // converts the saved institution into a response DTO and returns it
         return convertToResponse(savedFinancialInstitution);
@@ -129,23 +134,13 @@ public class FinancialInstitutionService {
         User currentUser = getCurrentLoggedInUser();
 
         // creates an audit log for the financial institution update
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("FINANCIAL_INSTITUTION_UPDATED");
-        auditLog.setEntityType("FINANCIAL_INSTITUTION");
-        auditLog.setEntityId(updatedFinancialInstitution.getId());
-
-        auditLog.setDetails(
+        recordAuditLog(
+                "FINANCIAL_INSTITUTION_UPDATED", updatedFinancialInstitution,
                 "Name: " + oldName + " -> " + updatedFinancialInstitution.getName()
-                        + ", Status: " + oldStatus + " -> " + updatedFinancialInstitution.getStatus()
+                        + ", Status: " + oldStatus + " -> " + updatedFinancialInstitution.getStatus(), currentUser
         );
-
-        auditLog.setActor(currentUser);
-
-        // saves the audit log in the database
-        auditLogRepository.save(auditLog);
 
         // converts the updated institution into a response DTO and returns it
         return convertToResponse(updatedFinancialInstitution);
     }
-
 }

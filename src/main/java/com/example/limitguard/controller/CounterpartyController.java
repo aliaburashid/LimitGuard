@@ -1,5 +1,6 @@
 package com.example.limitguard.controller;
 
+import com.example.limitguard.documentation.CounterpartyApi;
 import com.example.limitguard.dto.CounterpartyRequest;
 import com.example.limitguard.dto.CounterpartyResponse;
 import com.example.limitguard.dto.CounterpartyStatusRequest;
@@ -18,14 +19,15 @@ import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/api/counterparties")
-public class CounterpartyController {
+public class CounterpartyController implements CounterpartyApi {
 
     @Autowired
     private CounterpartyService counterpartyService;
 
     // creates a new counterparty
     @PostMapping
-    @PreAuthorize("hasRole('RISK_OFFICER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RISK_OFFICER')")
+    @Override
     public ResponseEntity<CounterpartyResponse> createCounterparty(
             // gets and validates the counterparty information from the request body
             @Valid @RequestBody CounterpartyRequest counterpartyRequest) {
@@ -39,6 +41,7 @@ public class CounterpartyController {
     // gets one counterparty by its id
     @GetMapping("/{counterpartyId}")
     @PreAuthorize("hasAnyRole('RELATIONSHIP_MANAGER', 'RISK_OFFICER', 'ADMIN')")
+    @Override
     public ResponseEntity<CounterpartyResponse> getCounterpartyById(
             @PathVariable Long counterpartyId) {
 
@@ -50,6 +53,7 @@ public class CounterpartyController {
     // also supports pagination and sorting
     @GetMapping
     @PreAuthorize("hasAnyRole('RELATIONSHIP_MANAGER', 'RISK_OFFICER', 'ADMIN')")
+    @Override
     public ResponseEntity<Page<CounterpartyResponse>> getCounterparties(
 
             // name is optional
@@ -81,7 +85,8 @@ public class CounterpartyController {
     }
 
     @PutMapping("/{counterpartyId}")
-    @PreAuthorize("hasRole('RISK_OFFICER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RISK_OFFICER')")
+    @Override
     public ResponseEntity<CounterpartyResponse> updateCounterparty(
             @PathVariable Long counterpartyId,
             @Valid @RequestBody CounterpartyRequest counterpartyRequest) {
@@ -95,7 +100,8 @@ public class CounterpartyController {
     }
 
     @PatchMapping("/{counterpartyId}/status")
-    @PreAuthorize("hasRole('RISK_OFFICER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RISK_OFFICER')")
+    @Override
     public ResponseEntity<CounterpartyResponse> updateCounterpartyStatus(
             @PathVariable Long counterpartyId,
             @Valid @RequestBody CounterpartyStatusRequest statusRequest) {

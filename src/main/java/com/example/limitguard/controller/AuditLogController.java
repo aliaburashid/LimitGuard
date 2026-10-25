@@ -1,5 +1,6 @@
 package com.example.limitguard.controller;
 
+import com.example.limitguard.documentation.AuditLogApi;
 import com.example.limitguard.dto.AuditLogResponse;
 import com.example.limitguard.service.AuditLogService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/audit-logs")
-public class AuditLogController {
+public class AuditLogController implements AuditLogApi {
 
     @Autowired
     private AuditLogService auditLogService;
@@ -27,6 +28,7 @@ public class AuditLogController {
     // only an Admin is allowed to access this endpoint
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
+    @Override
     public ResponseEntity<Page<AuditLogResponse>> getAuditLogs(
             // returns 10 records per page and shows the newest records first
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC)

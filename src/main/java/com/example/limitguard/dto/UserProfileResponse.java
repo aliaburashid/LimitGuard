@@ -1,3 +1,4 @@
+
 package com.example.limitguard.dto;
 
 import com.example.limitguard.model.FinancialInstitution;
@@ -5,6 +6,7 @@ import com.example.limitguard.enums.UserRole;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 @Getter
 @Setter
@@ -25,6 +27,5 @@ public class UserProfileResponse {
 
     // The financial institution the user belongs to
     private FinancialInstitution financialInstitution;
-
     private String profilePicturePath;
 }

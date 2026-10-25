@@ -1,5 +1,6 @@
 package com.example.limitguard.controller;
 
+import com.example.limitguard.documentation.CreditRequestEventApi;
 import com.example.limitguard.service.CreditRequestEventService;
 import com.example.limitguard.security.InstitutionAccessService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +14,7 @@ import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/credit-requests")
-public class CreditRequestEventController {
+public class CreditRequestEventController implements CreditRequestEventApi {
 
     @Autowired
     private CreditRequestEventService creditRequestEventService;
@@ -29,6 +30,7 @@ public class CreditRequestEventController {
     // This endpoint is an SSE stream. Keep the connection available so events can be sent through it
     @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
+    @Override
     public SseEmitter subscribeToCreditRequestUpdates() throws IOException {
 
         // get the logged-in user's bank id

@@ -1,9 +1,11 @@
+
 package com.example.limitguard.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 // Information needed to request a password reset
 @Getter

@@ -4,6 +4,7 @@ import com.example.limitguard.enums.CreditRequestStatus;
 import com.example.limitguard.enums.CounterpartyStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

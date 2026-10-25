@@ -1,5 +1,6 @@
 package com.example.limitguard.controller;
 
+import com.example.limitguard.documentation.UserApi;
 import com.example.limitguard.dto.*;
 import com.example.limitguard.service.UserService;
 import jakarta.validation.Valid;
@@ -16,7 +17,7 @@ import java.io.IOException;
 // tells Spring that this class contains API endpoints
 @RestController
 @RequestMapping("/api/auth/users")
-public class UserController {
+public class UserController implements UserApi {
 
     // Gives the controller access to the user service
     @Autowired
@@ -26,6 +27,7 @@ public class UserController {
     @PostMapping("/register")
     // takes the JSON request and checks the validation rules in RegisterRequest
     // ResponseEntity lets us return both the data AND an HTTP status code.
+    @Override
     public ResponseEntity<RegisterResponse> registerUser(@Valid @RequestBody RegisterRequest registrationDetails) {
 
         // sends the registration details to the service to create the new user
@@ -35,9 +37,9 @@ public class UserController {
         return new ResponseEntity<>(newUser, HttpStatus.CREATED);
     }
 
-
     // Handles email verification using the token sent to the users email
     @GetMapping("/verify-email")
+    @Override
     public ResponseEntity<String> verifyEmail(@RequestParam String token) {
         // Send the verification token to the service
         userService.verifyEmail(token);
@@ -47,6 +49,7 @@ public class UserController {
 
     @PostMapping("/login")
     // Takes the login JSON and checks the validation rules
+    @Override
     public ResponseEntity<LoginResponse> loginUser(@Valid @RequestBody LoginRequest loginDetails) {
         // Send the login details to the service
         LoginResponse loginResponse = userService.loginUser(loginDetails);
@@ -56,15 +59,16 @@ public class UserController {
 
     // handles password-reset requests
     @PostMapping("/forgot-password")
+    @Override
     public ResponseEntity<String> forgotPassword(@Valid @RequestBody ForgotPasswordRequest forgotPasswordDetails) {
         // create and email a password-reset token
         userService.forgotPassword(forgotPasswordDetails);
         return new ResponseEntity<>("Password reset email sent", HttpStatus.OK);
     }
 
-
     // handles setting a new password using a reset token
     @PostMapping("/reset-password")
+    @Override
     public ResponseEntity<String> resetPassword(@Valid @RequestBody ResetPasswordRequest resetPasswordDetails) {
         // validate the token and update the password
         userService.resetPassword(resetPasswordDetails);
@@ -73,6 +77,8 @@ public class UserController {
 
     // allows the currently logged-in user to change their password
     @PatchMapping("/change-password")
+    @PreAuthorize("isAuthenticated()")
+    @Override
     public ResponseEntity<String> changePassword(
             @Valid @RequestBody ChangePasswordRequest changePasswordRequest) {
 
@@ -82,18 +88,20 @@ public class UserController {
         return new ResponseEntity<>("Password changed successfully", HttpStatus.OK);
     }
 
-
     // allows the currently logged-in user to view their own profile
     @GetMapping("/profile")
+    @PreAuthorize("isAuthenticated()")
+    @Override
     public ResponseEntity<UserProfileResponse> getMyProfile() {
         // gets the logged-in users profile from the service
         UserProfileResponse userProfile = userService.getMyProfile();
         return new ResponseEntity<>(userProfile, HttpStatus.OK);
     }
 
-
     // allows the currently logged-in user to update their own profile
     @PatchMapping("/profile")
+    @PreAuthorize("isAuthenticated()")
+    @Override
     public ResponseEntity<UserProfileResponse> updateMyProfile(
             @Valid @RequestBody UpdateProfileRequest updateProfileRequest) {
 
@@ -106,11 +114,12 @@ public class UserController {
 
     // uploads or replaces the profile picture of the currently logged-in user
     @PatchMapping("/profile-picture")
+    @PreAuthorize("isAuthenticated()")
+    @Override
     public ResponseEntity<UserProfileResponse> uploadProfilePicture(@RequestParam("image") MultipartFile image) throws IOException {
         UserProfileResponse updatedProfile = userService.uploadProfilePicture(image);
         return new ResponseEntity<>(updatedProfile, HttpStatus.OK);
     }
-
 
     @PatchMapping("/{userId}/deactivate")
     // a security check that happens before the method is allowed to run
@@ -119,8 +128,9 @@ public class UserController {
     // If no, Spring stops there.
     @PreAuthorize("hasRole('ADMIN')")
     // allows an admin to deactivate another user account
+    @Override
     public ResponseEntity<String> deactivateUser(@PathVariable Long userId,
-            @Valid @RequestBody DeactivateUserRequest deactivateUserRequest) {
+                                                 @Valid @RequestBody DeactivateUserRequest deactivateUserRequest) {
 
         // sends the user id and deactivation reason to the service
         userService.deactivateUser(userId, deactivateUserRequest);
@@ -128,12 +138,12 @@ public class UserController {
         return new ResponseEntity<>("User deactivated successfully", HttpStatus.OK);
     }
 
-
     @PatchMapping("/{userId}/role")
     @PreAuthorize("hasRole('ADMIN')")
     // allows an admin to change another users role
+    @Override
     public ResponseEntity<String> updateUserRole(@PathVariable Long userId,
-            @Valid @RequestBody UpdateUserRoleRequest updateUserRoleRequest) {
+                                                 @Valid @RequestBody UpdateUserRoleRequest updateUserRoleRequest) {
 
         userService.updateUserRole(userId, updateUserRoleRequest);
         return new ResponseEntity<>("User role updated successfully", HttpStatus.OK);

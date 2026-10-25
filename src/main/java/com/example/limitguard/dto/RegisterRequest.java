@@ -1,3 +1,4 @@
+
 package com.example.limitguard.dto;
 
 // The information needed when a new user registers
@@ -8,6 +9,7 @@ package com.example.limitguard.dto;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 @Getter
 @Setter
