@@ -46,6 +46,18 @@ public class CounterpartyService {
         return userDetails.getUser();
     }
 
+    // records counterparty changes in the audit log without repeating the same code
+    private void recordAuditLog(String action, Counterparty counterparty, String details, User actor) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.setAction(action);
+        auditLog.setEntityType("COUNTERPARTY");
+        auditLog.setEntityId(counterparty.getId());
+        auditLog.setDetails(details);
+        auditLog.setActor(actor);
+        auditLog.setFinancialInstitution(actor.getFinancialInstitution());
+        auditLogRepository.save(auditLog);
+    }
+
     // creates a new counterparty
     @Transactional
     public CounterpartyResponse createCounterparty(CounterpartyRequest counterpartyRequest) {
@@ -69,18 +81,12 @@ public class CounterpartyService {
         User currentUser = getCurrentLoggedInUser();
 
         // creates an audit log for the counterparty creation
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("COUNTERPARTY_CREATED");
-        auditLog.setEntityType("COUNTERPARTY");
-        auditLog.setEntityId(savedCounterparty.getId());
-        auditLog.setDetails("Created counterparty: " + savedCounterparty.getName());
-        auditLog.setActor(currentUser);
-
         // save which bank performed this action
-        auditLog.setFinancialInstitution(currentUser.getFinancialInstitution());
-
         // saves the audit log in the database
-        auditLogRepository.save(auditLog);
+        recordAuditLog(
+                "COUNTERPARTY_CREATED", savedCounterparty,
+                "Created counterparty: " + savedCounterparty.getName(), currentUser
+        );
 
         // creates the response with the saved counterparty information
         CounterpartyResponse counterpartyResponse =
@@ -197,17 +203,11 @@ public class CounterpartyService {
         User currentUser = getCurrentLoggedInUser();
 
         // records who updated the counterparty
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("COUNTERPARTY_UPDATED");
-        auditLog.setEntityType("COUNTERPARTY");
-        auditLog.setEntityId(updatedCounterparty.getId());
-        auditLog.setDetails("Updated counterparty: " + updatedCounterparty.getName());
-        auditLog.setActor(currentUser);
-
         // save which bank updated the counterparty
-        auditLog.setFinancialInstitution(currentUser.getFinancialInstitution());
-
-        auditLogRepository.save(auditLog);
+        recordAuditLog(
+                "COUNTERPARTY_UPDATED", updatedCounterparty,
+                "Updated counterparty: " + updatedCounterparty.getName(), currentUser
+        );
 
         // converts the Counterparty entity into the response DTO
         return new CounterpartyResponse(
@@ -242,17 +242,11 @@ public class CounterpartyService {
         User currentUser = getCurrentLoggedInUser();
 
         // records the status change
-        AuditLog auditLog = new AuditLog();
-        auditLog.setAction("COUNTERPARTY_STATUS_UPDATED");
-        auditLog.setEntityType("COUNTERPARTY");
-        auditLog.setEntityId(updatedCounterparty.getId());
-        auditLog.setDetails("Counterparty status changed from " + oldStatus + " to " + updatedCounterparty.getStatus());
-        auditLog.setActor(currentUser);
-
         // save which bank changed the counterparty status
-        auditLog.setFinancialInstitution(currentUser.getFinancialInstitution());
-
-        auditLogRepository.save(auditLog);
+        recordAuditLog(
+                "COUNTERPARTY_STATUS_UPDATED", updatedCounterparty,
+                "Counterparty status changed from " + oldStatus + " to " + updatedCounterparty.getStatus(), currentUser
+        );
 
         // converts the Counterparty entity into the response DTO
         return new CounterpartyResponse(
@@ -266,4 +260,3 @@ public class CounterpartyService {
 
 
 }
-

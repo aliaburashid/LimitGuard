@@ -5,6 +5,7 @@ import com.example.limitguard.dto.CreditRequestResponse;
 import com.example.limitguard.enums.CounterpartyStatus;
 import com.example.limitguard.enums.CreditRequestStatus;
 import com.example.limitguard.exception.InsufficientHeadroomException;
+import com.example.limitguard.exception.InvalidCreditRequestStateException;
 import com.example.limitguard.model.Counterparty;
 import com.example.limitguard.model.CreditLimit;
 import com.example.limitguard.model.CreditRequest;
@@ -297,9 +298,8 @@ public class CreditRequestServiceTest {
                 .thenReturn(Optional.of(creditRequest));
 
         // act and assert: check that cancellation is rejected
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> creditRequestService.cancelCreditRequest(5L)
+        assertThrows(InvalidCreditRequestStateException.class, () ->
+                creditRequestService.cancelCreditRequest(5L)
         );
 
         // assert: the request and exposure remain unchanged
