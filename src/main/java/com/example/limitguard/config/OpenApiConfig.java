@@ -33,6 +33,8 @@ public class OpenApiConfig {
                                 .description("Manage financial institutions"),
                         new Tag().name("Corporate Groups")
                                 .description("Manage corporate groups and their information"),
+                        new Tag().name("Corporate Group Memberships")
+                                .description("Manage counterparties assigned to corporate groups"),
                         new Tag().name("Credit Limits")
                                 .description("Manage credit limits and available exposure"),
                         new Tag().name("Counterparties")
@@ -79,6 +81,8 @@ public class OpenApiConfig {
 
                 if (path.startsWith("/api/financial-institutions")) {
                     tag = "Financial Institutions";
+                } else if (path.startsWith("/api/corporate-group-memberships")) {
+                    tag = "Corporate Group Memberships";
                 } else if (path.startsWith("/api/corporate-groups")) {
                     tag = "Corporate Groups";
                 } else if (path.startsWith("/api/credit-limits")) {
