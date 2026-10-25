@@ -9,11 +9,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Setter
 public class CounterpartyRequest {
     // the counterparty name is required
-    @Schema(
-            description = "Name of the counterparty to be created",
-            example = "ABC Trading Company",
-            requiredMode = Schema.RequiredMode.REQUIRED
-    )
     @NotBlank(message = "Counterparty name is required")
     private String name;
 }

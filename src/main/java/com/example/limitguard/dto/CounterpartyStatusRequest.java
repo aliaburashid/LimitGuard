@@ -11,10 +11,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class CounterpartyStatusRequest {
 
     // status must be provided when changing a counterparty's status
-    @Schema(
-            description = "New status to assign to the counterparty. Must be a valid CounterpartyStatus enum value",
-            requiredMode = Schema.RequiredMode.REQUIRED
-    )
     @NotNull(message = "Counterparty status is required")
     private CounterpartyStatus status;
 }

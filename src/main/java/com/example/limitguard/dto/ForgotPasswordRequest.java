@@ -13,11 +13,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class ForgotPasswordRequest {
 
     // The email belonging to the account
-    @Schema(
-            description = "Email address associated with the account requesting a password reset",
-            example = "sara.ahmed@example.com",
-            requiredMode = Schema.RequiredMode.REQUIRED
-    )
     @NotBlank(message = "Email is required")
     @Email(message = "Please enter a valid email address")
     private String email;

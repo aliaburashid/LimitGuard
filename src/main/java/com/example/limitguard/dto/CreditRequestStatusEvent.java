@@ -12,17 +12,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class CreditRequestStatusEvent {
 
     // Which request changed?
-    @Schema(
-            description = "Unique identifier of the credit request whose status has changed",
-            example = "1",
-            accessMode = Schema.AccessMode.READ_ONLY
-    )
     private Long creditRequestId;
 
     // What is its new status?
-    @Schema(
-            description = "New status of the credit request after the status change",
-            accessMode = Schema.AccessMode.READ_ONLY
-    )
     private CreditRequestStatus status;
 }

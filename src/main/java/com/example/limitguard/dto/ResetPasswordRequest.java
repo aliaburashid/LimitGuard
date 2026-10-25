@@ -13,24 +13,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Setter
 public class ResetPasswordRequest {
     // The password-reset token sent to the users email
-    @Schema(
-            description = "Password-reset token received in the email sent to the user",
-            example = "example-reset-token-123",
-            requiredMode = Schema.RequiredMode.REQUIRED
-    )
     @NotBlank(message = "Reset token is required")
     private String token;
 
     // the new password the user wants to use
     // new password cannot be empty
-    @Schema(
-            description = "New password containing at least 8 characters, "
-                    + "including uppercase and lowercase letters, "
-                    + "a number, and a special character",
-            example = "NewSecurePass123!",
-            format = "password",
-            requiredMode = Schema.RequiredMode.REQUIRED
-    )
     @NotBlank(message = "New password is required")
     // new password must contain at least 8 characters
     @Size(min = 8, message = "Password must be at least 8 characters")
