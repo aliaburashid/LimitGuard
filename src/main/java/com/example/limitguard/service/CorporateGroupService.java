@@ -9,6 +9,8 @@ import com.example.limitguard.model.CorporateGroup;
 import com.example.limitguard.repository.CorporateGroupRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -60,16 +62,14 @@ public class CorporateGroupService {
         return convertToResponse(savedGroup);
     }
 
-    // retrieves all corporate groups
-    public List<CorporateGroupResponse> getAllGroups() {
+    // retrieves corporate groups with pagination and sorting
+    public Page<CorporateGroupResponse> getAllGroups(Pageable pageable) {
 
-        // gets all corporate groups from the database
-        List<CorporateGroup> groups = corporateGroupRepository.findAll();
+        // gets corporate groups from the database using pagination and sorting
+        Page<CorporateGroup> groups = corporateGroupRepository.findAll(pageable);
 
-        // converts each corporate group into a response DTO
-        return groups.stream()
-                .map(this::convertToResponse)
-                .toList();
+        // converts each corporate group entity into a response dto
+        return groups.map(this::convertToResponse);
     }
 
     // retrieves a corporate group using its ID

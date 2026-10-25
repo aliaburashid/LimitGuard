@@ -11,6 +11,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
+
 import java.util.List;
 
 @RestController
@@ -50,17 +55,21 @@ public class CorporateGroupController implements CorporateGroupApi {
         return new ResponseEntity<>(group, HttpStatus.OK);
     }
 
-    // gets all corporate groups
+    // gets all corporate groups with pagination and sorting
     @GetMapping
-    @PreAuthorize("hasAnyRole('RELATIONSHIP_MANAGER', 'RISK_OFFICER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RISK_OFFICER', 'RELATIONSHIP_MANAGER')")
     @Override
-    public ResponseEntity<List<CorporateGroupResponse>> getAllGroups() {
+    public ResponseEntity<Page<CorporateGroupResponse>> getAllGroups(
 
-        // gets all corporate groups from the service
-        List<CorporateGroupResponse> groups = corporateGroupService.getAllGroups();
+            // sets the default page size to 10 and sorts groups by id
+            @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.ASC)
+            Pageable pageable) {
 
-        // returns the corporate groups with 200 OK
-        return new ResponseEntity<>(groups, HttpStatus.OK);
+        // gets the requested page of corporate groups from the service
+        Page<CorporateGroupResponse> groups = corporateGroupService.getAllGroups(pageable);
+
+        // returns the paginated groups with status 200
+        return ResponseEntity.ok(groups);
     }
 
     // updates an existing corporate group
