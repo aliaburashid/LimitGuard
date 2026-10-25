@@ -77,6 +77,7 @@ public class UserController implements UserApi {
 
     // allows the currently logged-in user to change their password
     @PatchMapping("/change-password")
+    @PreAuthorize("isAuthenticated()")
     @Override
     public ResponseEntity<String> changePassword(
             @Valid @RequestBody ChangePasswordRequest changePasswordRequest) {
@@ -89,6 +90,7 @@ public class UserController implements UserApi {
 
     // allows the currently logged-in user to view their own profile
     @GetMapping("/profile")
+    @PreAuthorize("isAuthenticated()")
     @Override
     public ResponseEntity<UserProfileResponse> getMyProfile() {
         // gets the logged-in users profile from the service
@@ -98,6 +100,7 @@ public class UserController implements UserApi {
 
     // allows the currently logged-in user to update their own profile
     @PatchMapping("/profile")
+    @PreAuthorize("isAuthenticated()")
     @Override
     public ResponseEntity<UserProfileResponse> updateMyProfile(
             @Valid @RequestBody UpdateProfileRequest updateProfileRequest) {
@@ -111,6 +114,7 @@ public class UserController implements UserApi {
 
     // uploads or replaces the profile picture of the currently logged-in user
     @PatchMapping("/profile-picture")
+    @PreAuthorize("isAuthenticated()")
     @Override
     public ResponseEntity<UserProfileResponse> uploadProfilePicture(@RequestParam("image") MultipartFile image) throws IOException {
         UserProfileResponse updatedProfile = userService.uploadProfilePicture(image);
