@@ -66,7 +66,8 @@ public class GlobalExceptionHandler {
             FinancialInstitutionAlreadyExistsException.class,
             CounterpartyAlreadyExistsException.class,
             CreditLimitAlreadyExistsException.class,
-            CorporateGroupAlreadyExistsException.class
+            CorporateGroupAlreadyExistsException.class,
+            MembershipExistsException.class
     })
     public ResponseEntity<ErrorResponse> handleAlreadyExists(
             RuntimeException exception,
@@ -92,7 +93,8 @@ public class GlobalExceptionHandler {
             InsufficientHeadroomException.class,
             InvalidCreditRequestOperationException.class,
             InvalidCreditRequestStateException.class,
-            InvalidCorporateGroupException.class
+            InvalidCorporateGroupException.class,
+            InvalidMembershipException.class
     })
     public ResponseEntity<ErrorResponse> handleBadRequest(
             RuntimeException exception,
@@ -191,7 +193,8 @@ public class GlobalExceptionHandler {
             CounterpartyNotFoundException.class,
             CreditLimitNotFoundException.class,
             CreditRequestNotFoundException.class,
-            CorporateGroupNotFoundException.class
+            CorporateGroupNotFoundException.class,
+            MembershipNotFoundException.class
     })
     public ResponseEntity<ErrorResponse> handleNotFound(
             RuntimeException exception,
