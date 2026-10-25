@@ -1,3 +1,4 @@
+
 package com.example.limitguard.documentation;
 
 import com.example.limitguard.dto.CounterpartyRequest;
@@ -27,14 +28,14 @@ public interface CounterpartyApi {
 
                     **Security:**
                     - JWT Bearer authentication required.
-                    - Required role: `RISK_OFFICER`.
+                    - Allowed roles: `ADMIN`, `RISK_OFFICER`.
                     """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Counterparty created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid counterparty request data"),
             @ApiResponse(responseCode = "401", description = "Authentication required or invalid JWT"),
-            @ApiResponse(responseCode = "403", description = "Access denied. RISK_OFFICER role required"),
+            @ApiResponse(responseCode = "403", description = "Access denied. ADMIN or RISK_OFFICER role required"),
             @ApiResponse(responseCode = "409", description = "Counterparty already exists")
     })
     ResponseEntity<CounterpartyResponse> createCounterparty(
@@ -123,14 +124,14 @@ public interface CounterpartyApi {
 
                     **Security:**
                     - JWT Bearer authentication required.
-                    - Required role: `RISK_OFFICER`.
+                    - Allowed roles: `ADMIN`, `RISK_OFFICER`.
                     """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Counterparty updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid counterparty request data or ID"),
             @ApiResponse(responseCode = "401", description = "Authentication required or invalid JWT"),
-            @ApiResponse(responseCode = "403", description = "Access denied. RISK_OFFICER role required"),
+            @ApiResponse(responseCode = "403", description = "Access denied. ADMIN or RISK_OFFICER role required"),
             @ApiResponse(responseCode = "404", description = "Counterparty not found"),
             @ApiResponse(responseCode = "409", description = "Counterparty name already exists")
     })
@@ -158,14 +159,14 @@ public interface CounterpartyApi {
 
                     **Security:**
                     - JWT Bearer authentication required.
-                    - Required role: `RISK_OFFICER`.
+                    - Allowed roles: `ADMIN`, `RISK_OFFICER`.
                     """
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Counterparty status updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid counterparty status or ID"),
             @ApiResponse(responseCode = "401", description = "Authentication required or invalid JWT"),
-            @ApiResponse(responseCode = "403", description = "Access denied. RISK_OFFICER role required"),
+            @ApiResponse(responseCode = "403", description = "Access denied. ADMIN or RISK_OFFICER role required"),
             @ApiResponse(responseCode = "404", description = "Counterparty not found")
     })
     ResponseEntity<CounterpartyResponse> updateCounterpartyStatus(
