@@ -26,7 +26,7 @@ public class CounterpartyController implements CounterpartyApi {
 
     // creates a new counterparty
     @PostMapping
-    @PreAuthorize("hasRole('RISK_OFFICER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RISK_OFFICER')")
     @Override
     public ResponseEntity<CounterpartyResponse> createCounterparty(
             // gets and validates the counterparty information from the request body
@@ -85,7 +85,7 @@ public class CounterpartyController implements CounterpartyApi {
     }
 
     @PutMapping("/{counterpartyId}")
-    @PreAuthorize("hasRole('RISK_OFFICER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RISK_OFFICER')")
     @Override
     public ResponseEntity<CounterpartyResponse> updateCounterparty(
             @PathVariable Long counterpartyId,
@@ -100,7 +100,7 @@ public class CounterpartyController implements CounterpartyApi {
     }
 
     @PatchMapping("/{counterpartyId}/status")
-    @PreAuthorize("hasRole('RISK_OFFICER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RISK_OFFICER')")
     @Override
     public ResponseEntity<CounterpartyResponse> updateCounterpartyStatus(
             @PathVariable Long counterpartyId,
