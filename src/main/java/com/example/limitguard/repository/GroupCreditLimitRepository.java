@@ -3,6 +3,8 @@ package com.example.limitguard.repository;
 import com.example.limitguard.model.GroupCreditLimit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.Optional;
 
@@ -19,5 +21,17 @@ public interface GroupCreditLimitRepository extends JpaRepository<GroupCreditLim
     Optional<GroupCreditLimit> findByFinancialInstitutionIdAndCorporateGroupId(
             Long financialInstitutionId,
             Long corporateGroupId
+    );
+
+    // finds a group credit limit by id only if it belongs to the logged-in user's bank
+    Optional<GroupCreditLimit> findByIdAndFinancialInstitutionId(
+            Long id,
+            Long financialInstitutionId
+    );
+
+    // gets all group credit limits belonging to the bank with pagination and sorting
+    Page<GroupCreditLimit> findByFinancialInstitutionId(
+            Long financialInstitutionId,
+            Pageable pageable
     );
 }
