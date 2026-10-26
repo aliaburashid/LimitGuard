@@ -35,6 +35,8 @@ public class OpenApiConfig {
                                 .description("Manage corporate groups and their information"),
                         new Tag().name("Corporate Group Memberships")
                                 .description("Manage counterparties assigned to corporate groups"),
+                        new Tag().name("Group Credit Limits")
+                                .description("Manage corporate group credit limits and group-level exposure"),
                         new Tag().name("Credit Limits")
                                 .description("Manage credit limits and available exposure"),
                         new Tag().name("Counterparties")
@@ -83,6 +85,8 @@ public class OpenApiConfig {
                     tag = "Financial Institutions";
                 } else if (path.startsWith("/api/corporate-group-memberships")) {
                     tag = "Corporate Group Memberships";
+                } else if (path.startsWith("/api/group-credit-limits")) {
+                    tag = "Group Credit Limits";
                 } else if (path.startsWith("/api/corporate-groups")) {
                     tag = "Corporate Groups";
                 } else if (path.startsWith("/api/credit-limits")) {
@@ -105,7 +109,7 @@ public class OpenApiConfig {
 
                     pathItem.readOperations().forEach(operation -> {
 
-                        // group the endpoint under the correct Swagger section
+                        // group the endpoint under the correct swagger section
                         operation.setTags(List.of(selectedTag));
 
                         // these authentication endpoints do not require a JWT
@@ -116,7 +120,7 @@ public class OpenApiConfig {
                                         || path.equals("/api/auth/users/forgot-password")
                                         || path.equals("/api/auth/users/reset-password");
 
-                        // override the global Bearer authentication requirement
+                        // override the global bearer authentication requirement
                         // an empty security list means authentication is not required
                         if (isPublicEndpoint) {
                             operation.setSecurity(List.of());

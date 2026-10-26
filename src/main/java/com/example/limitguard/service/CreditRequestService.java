@@ -10,9 +10,7 @@ import com.example.limitguard.exception.CreditRequestNotFoundException;
 import com.example.limitguard.exception.InsufficientHeadroomException;
 import com.example.limitguard.exception.InvalidCreditRequestStateException;
 import com.example.limitguard.exception.InvalidCreditRequestOperationException;
-import com.example.limitguard.model.CreditLimit;
-import com.example.limitguard.model.CreditRequest;
-import com.example.limitguard.model.User;
+import com.example.limitguard.model.*;
 import com.example.limitguard.repository.CreditLimitRepository;
 import com.example.limitguard.repository.CreditRequestRepository;
 import com.example.limitguard.security.InstitutionAccessService;
@@ -23,18 +21,19 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.limitguard.enums.CounterpartyStatus;
-import com.example.limitguard.model.AuditLog;
 import com.example.limitguard.repository.AuditLogRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.example.limitguard.enums.ApprovalDecisionType;
-import com.example.limitguard.model.ApprovalDecision;
 import com.example.limitguard.repository.ApprovalDecisionRepository;
+import com.example.limitguard.repository.CorporateGroupMembershipRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 public class CreditRequestService {
@@ -62,6 +61,15 @@ public class CreditRequestService {
 
     @Autowired
     private InstitutionAccessService institutionAccessService;
+
+    // finds which corporate group a counterparty belongs to
+    @Autowired
+    private CorporateGroupMembershipRepository corporateGroupMembershipRepository;
+
+    // reuses the existing group headroom calculation
+    @Autowired
+    private GroupCreditLimitService groupCreditLimitService;
+
 
     //---------------------------------------------------------------------------
 
@@ -314,6 +322,37 @@ public class CreditRequestService {
                     "Insufficient headroom to reserve credit capacity");
         }
 
+        // finds the counterparty's corporate group
+        // it looks up which group the counterparty belongs to using its ID
+        Optional<CorporateGroupMembership> membership =
+                corporateGroupMembershipRepository.findByCounterpartyId(
+                        creditLimit.getCounterparty().getId()
+                );
+
+        // checks whether a group exists
+        // If the counterparty doesn't belong to a group, it skips the group validation
+        if (membership.isPresent()) {
+            // gets the corporate group id
+            Long corporateGroupId = membership.get().getCorporateGroup().getId();
+
+            // calculates the group's available headroom
+            BigDecimal groupHeadroom = groupCreditLimitService
+                    .calculateGroupHeadroom(corporateGroupId);
+
+            // compare the requested amount with the available credit
+            // If the requested amount is greater than the group's remaining headroom,
+            // it rejects the reservation
+
+            // DESIGN LOGIC:
+            // Even if an individual counterparty has enough credit available,
+            // LimitGuard won't allow a reservation that would push its entire corporate group over
+            // the approved group limit.
+            if (creditRequest.getAmount().compareTo(groupHeadroom) > 0) {
+                throw new InsufficientHeadroomException(
+                        "Requested amount exceeds corporate group available headroom");
+            }
+        }
+
         // increases the reserved exposure by the request amount
         // If it does fit, we add the money to the reserved amount
         creditLimit.setReservedAmount(
@@ -321,7 +360,7 @@ public class CreditRequestService {
                         .add(creditRequest.getAmount())
         );
 
-        // changes the request status to RESERVED
+        // changes the request status to RESERVE
         // The money is now successfully held for this request
         creditRequest.setStatus(CreditRequestStatus.RESERVED);
 
