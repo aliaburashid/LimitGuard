@@ -96,9 +96,6 @@ public class CreditLimitService {
         // get the logged-in user's bank id
         Long institutionId = institutionAccessService.getCurrentInstitutionId();
 
-        // make sure the requested bank matches the logged-in user's bank
-        institutionAccessService.requireInstitution(creditLimitRequest.getFinancialInstitutionId());
-
         // checks that the financial institution exists
         FinancialInstitution financialInstitution = financialInstitutionRepository
                 .findById(institutionId)

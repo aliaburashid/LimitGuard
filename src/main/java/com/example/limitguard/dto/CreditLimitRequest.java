@@ -12,10 +12,6 @@ import java.math.BigDecimal;
 @Setter
 public class CreditLimitRequest {
 
-    // financial institution that owns the credit limit
-    @NotNull(message = "Financial institution ID is required")
-    private Long financialInstitutionId;
-
     // counterparty that the limit applies to
     @NotNull(message = "Counterparty ID is required")
     private Long counterpartyId;
