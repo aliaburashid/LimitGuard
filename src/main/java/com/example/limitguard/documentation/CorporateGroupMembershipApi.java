@@ -23,10 +23,12 @@ public interface CorporateGroupMembershipApi {
                     - The corporate group must exist.
                     - The counterparty must exist.
                     - A counterparty can belong to only one corporate group.
+                    - A duplicate membership returns `409 Conflict`.
+                    - A missing corporate group or counterparty returns `404 Not Found`.
 
                     Security:
                     - JWT authentication required.
-                    - Allowed roles: ADMIN, RISK_OFFICER.
+                    - Allowed roles: `ADMIN`, `RISK_OFFICER`.
                     """
     )
     @ApiResponses({
@@ -49,7 +51,7 @@ public interface CorporateGroupMembershipApi {
 
                     Security:
                     - JWT authentication required.
-                    - Allowed roles: ADMIN, RISK_OFFICER, RELATIONSHIP_MANAGER.
+                    - Allowed roles: `ADMIN`, `RISK_OFFICER`, `RELATIONSHIP_MANAGER`.
                     """
     )
     @ApiResponses({
@@ -68,7 +70,7 @@ public interface CorporateGroupMembershipApi {
 
                     Security:
                     - JWT authentication required.
-                    - Allowed roles: ADMIN, RISK_OFFICER, RELATIONSHIP_MANAGER.
+                    - Allowed roles: `ADMIN`, `RISK_OFFICER`, `RELATIONSHIP_MANAGER`.
                     """
     )
     @ApiResponses({
@@ -89,7 +91,7 @@ public interface CorporateGroupMembershipApi {
 
                     Security:
                     - JWT authentication required.
-                    - Allowed roles: ADMIN, RISK_OFFICER, RELATIONSHIP_MANAGER.
+                    - Allowed roles: `ADMIN`, `RISK_OFFICER`, `RELATIONSHIP_MANAGER`.
                     """
     )
     @ApiResponses({
@@ -112,7 +114,7 @@ public interface CorporateGroupMembershipApi {
 
                     Security:
                     - JWT authentication required.
-                    - Allowed roles: ADMIN, RISK_OFFICER.
+                    - Allowed roles: `ADMIN`, `RISK_OFFICER`.
                     """
     )
     @ApiResponses({
