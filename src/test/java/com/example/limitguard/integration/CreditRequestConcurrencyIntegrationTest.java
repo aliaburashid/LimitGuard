@@ -58,37 +58,37 @@ public class CreditRequestConcurrencyIntegrationTest {
     @Autowired
     private CounterpartyRepository counterpartyRepository;
 
-    // Handles corporate groups in the test database.
+    // Handles corporate groups in the test database
     @Autowired
     private CorporateGroupRepository corporateGroupRepository;
 
-    // Handles companies belonging to a corporate group.
+    // Handles companies belonging to a corporate group
     @Autowired
     private CorporateGroupMembershipRepository corporateGroupMembershipRepository;
 
-    // Handles the shared credit limit for a corporate group.
+    // Handles the shared credit limit for a corporate group
     @Autowired
     private GroupCreditLimitRepository groupCreditLimitRepository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // Prevent real emails from being sent during tests.
+    // Prevent real emails from being sent during tests
     @MockitoBean
     private EmailService emailService;
 
-    // Prevent real SSE notifications from being published.
+    // Prevent real SSE notifications from being published
     @MockitoBean
     private CreditRequestEventService creditRequestEventService;
 
-    // IDs of the sample records created before each test.
+    // IDs of the sample records created before each test
     private Long creditLimitId;
     private Long requesterId;
     private Long checkerOneId;
     private Long checkerTwoId;
 
-    // A simple result for each thread.
-    // If error is null, the operation succeeded.
+    // A simple result for each thread
+    // If error is null, the operation succeeded
     private record Result(boolean success, Exception error) {
     }
 
@@ -802,5 +802,62 @@ public class CreditRequestConcurrencyIntegrationTest {
                 "Corporate group exposure must not exceed the shared limit. "
                         + describeResults(results)
         );
+    }
+
+    // =========================================================
+    // SCENARIO 9: CREDIT APPROVAL VS CANCELLATION
+    // =========================================================
+
+    @Test
+    void shouldHandleConcurrentApprovalAndCancellation() throws Exception {
+
+        // STEP 1: Create a BHD 600,000 request waiting for approval.
+        Long requestId = createStoredRequest(
+                "600000",
+                CreditRequestStatus.PENDING_APPROVAL,
+                null
+        );
+
+        // STEP 2: A Risk Officer approves while the requester cancels.
+        List<Result> results = runConcurrently(
+                checkerOneId,
+                () -> creditRequestService.approveCreditRequest(requestId),
+                requesterId,
+                () -> creditRequestService.cancelCreditRequest(requestId)
+        );
+
+        // STEP 3: Approval should succeed.
+        assertTrue(
+                results.get(0).success(),
+                describeResults(results)
+        );
+
+        // STEP 4: Read the final request status.
+        CreditRequestStatus finalStatus = getRequest(requestId).getStatus();
+
+        // STEP 5: If cancellation succeeded, credit must be released.
+        if (results.get(1).success()) {
+
+            assertEquals(
+                    CreditRequestStatus.CANCELLED,
+                    finalStatus
+            );
+
+            assertMoneyEquals("0", getLimit().getReservedAmount());
+
+        } else {
+
+            // If cancellation ran before approval finished,
+            // it must not cancel a PENDING_APPROVAL request.
+            assertEquals(
+                    CreditRequestStatus.RESERVED,
+                    finalStatus
+            );
+
+            assertMoneyEquals("600000", getLimit().getReservedAmount());
+        }
+
+        // STEP 6: No credit should have been marked as used.
+        assertMoneyEquals("0", getLimit().getUsedAmount());
     }
 }
