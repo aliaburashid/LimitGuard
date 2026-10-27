@@ -27,12 +27,18 @@ import com.example.limitguard.model.CreditLimit;
 import com.example.limitguard.repository.CorporateGroupMembershipRepository;
 import com.example.limitguard.repository.CreditLimitRepository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.List;
 
 import java.math.BigDecimal;
 
 @Service
 public class GroupCreditLimitService {
+
+    private static final Logger logger =
+            LoggerFactory.getLogger(GroupCreditLimitService.class);
 
     // handles database operations for group credit limits
     @Autowired
@@ -246,12 +252,24 @@ public class GroupCreditLimitService {
         // gets the logged-in user's financial institution id
         Long institutionId = institutionAccessService.getCurrentInstitutionId();
 
-        // checks that the group credit limit exists and belongs to this bank
+        logger.info("[{}] GROUP LIMIT UPDATE | WAITING FOR LOCK | Group Limit ID={}",
+                Thread.currentThread().getName(), id);
+
+        // locks the group credit limit before checking its exposure
+        // prevents concurrent allocations from conflicting with a limit update
         GroupCreditLimit groupCreditLimit = groupCreditLimitRepository
-                .findByIdAndFinancialInstitutionId(id, institutionId)
+                .findWithLockById(id)
                 .orElseThrow(() -> new GroupCreditLimitNotFoundException(
                         "Group credit limit not found with ID: " + id
                 ));
+
+        logger.info("[{}] GROUP LIMIT UPDATE | LOCK ACQUIRED | Group Limit ID={}",
+                Thread.currentThread().getName(), id);
+
+       // security check to make sure the group credit limit belongs to the bank of the currently logged-in user
+        institutionAccessService.requireInstitution(
+                groupCreditLimit.getFinancialInstitution().getId()
+        );
 
         // checks if the updated credit limit amount is greater than zero
         if (request == null || request.getLimitAmount() == null ||

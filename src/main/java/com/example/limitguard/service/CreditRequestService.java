@@ -13,6 +13,8 @@ import com.example.limitguard.exception.InvalidCreditRequestOperationException;
 import com.example.limitguard.model.*;
 import com.example.limitguard.repository.CreditLimitRepository;
 import com.example.limitguard.repository.CreditRequestRepository;
+import com.example.limitguard.repository.GroupCreditLimitRepository;
+import com.example.limitguard.exception.GroupCreditLimitNotFoundException;
 import com.example.limitguard.security.InstitutionAccessService;
 import com.example.limitguard.security.MyUserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -75,6 +77,8 @@ public class CreditRequestService {
     @Autowired
     private EntityManager entityManager;
 
+    @Autowired
+    private GroupCreditLimitRepository groupCreditLimitRepository;
 
     //---------------------------------------------------------------------------
 
@@ -194,42 +198,99 @@ public class CreditRequestService {
         }
     }
 
-    // submits a new credit capacity request
+    // Creates a new credit request for a counterparty
     @Transactional
     public CreditRequestResponse createCreditRequest(CreditRequestRequest creditRequestRequest) {
 
-        // logs when a user submits a new credit request
+        // Log when a Relationship Manager starts creating a credit request
         logger.info("[{}] CREATE | START | Limit ID={} | Amount={}",
                 Thread.currentThread().getName(),
                 creditRequestRequest.getCreditLimitId(),
                 creditRequestRequest.getAmount());
 
-        // logs when the thread attempts to acquire the database lock
+        // STEP 1: Find the credit limit without locking it yet
+        // We need to know which company this credit limit belongs to
+        CreditLimit creditLimitLookup = creditLimitRepository
+                .findById(creditRequestRequest.getCreditLimitId())
+                .orElseThrow(() ->
+                        new CreditLimitNotFoundException("Credit limit not found"));
+
+        // Make sure the credit limit belongs to the logged-in user's bank
+        institutionAccessService.requireInstitution(
+                creditLimitLookup.getFinancialInstitution().getId()
+        );
+
+        // STEP 2: Check whether this company belongs to a corporate group
+        Optional<CorporateGroupMembership> groupMembership =
+                corporateGroupMembershipRepository.findByCounterpartyId(
+                        creditLimitLookup.getCounterparty().getId()
+                );
+
+        if (groupMembership.isPresent()) {
+
+            // Get the corporate group ID
+            Long corporateGroupId =
+                    groupMembership.get().getCorporateGroup().getId();
+
+            // Get the bank ID
+            Long institutionId =
+                    creditLimitLookup.getFinancialInstitution().getId();
+
+            // Find the shared credit limit for this corporate group
+            GroupCreditLimit groupLimit = groupCreditLimitRepository
+                    .findByFinancialInstitutionIdAndCorporateGroupId(
+                            institutionId,
+                            corporateGroupId
+                    )
+                    .orElseThrow(() -> new GroupCreditLimitNotFoundException(
+                            "Group credit limit not found for corporate group ID: "
+                                    + corporateGroupId
+                    ));
+
+            // Log that we are about to lock the corporate group
+            logger.info("[{}] GROUP ALLOCATION | WAITING FOR LOCK | Group Limit ID={}",
+                    Thread.currentThread().getName(),
+                    groupLimit.getId());
+
+            // STEP 3: Lock the shared corporate group credit limit FIRST
+            // If another Relationship Manager is using this group, we wait
+            groupCreditLimitRepository.findWithLockById(groupLimit.getId())
+                    .orElseThrow(() -> new GroupCreditLimitNotFoundException(
+                            "Group credit limit not found"
+                    ));
+
+            // Log that we successfully acquired the group lock
+            logger.info("[{}] GROUP ALLOCATION | LOCK ACQUIRED | Group Limit ID={}",
+                    Thread.currentThread().getName(),
+                    groupLimit.getId());
+        }
+
         logger.info("[{}] CREATE | WAITING FOR LOCK | Limit ID={}",
                 Thread.currentThread().getName(),
                 creditRequestRequest.getCreditLimitId());
 
-        // locks the credit limit so two requests cannot reserve the same balance at once
+        // STEP 4: Lock the individual company's credit limit
         CreditLimit creditLimit = creditLimitRepository
                 .findWithLockById(creditRequestRequest.getCreditLimitId())
                 .orElseThrow(() ->
                         new CreditLimitNotFoundException("Credit limit not found"));
 
-        // logs when the database lock has been acquired
         logger.info("[{}] CREATE | LOCK ACQUIRED | Limit ID={}",
                 Thread.currentThread().getName(),
                 creditLimit.getId());
 
-        // gets the latest balance from the database before checking available credit
+        // Refresh the credit limit to get its latest balance from PostgreSQL
         entityManager.refresh(creditLimit, LockModeType.PESSIMISTIC_WRITE);
 
-        institutionAccessService.requireInstitution(creditLimit.getFinancialInstitution().getId());
+        // Check bank ownership again using the locked credit limit
+        institutionAccessService.requireInstitution(
+                creditLimit.getFinancialInstitution().getId()
+        );
 
-        // prevents new credit requests for frozen or closed counterparties
+        // STEP 5: Prevent requests for frozen or closed companies
         if (creditLimit.getCounterparty().getStatus() == CounterpartyStatus.FROZEN
                 || creditLimit.getCounterparty().getStatus() == CounterpartyStatus.CLOSED) {
 
-            // logs why a request cannot be created for this counterparty
             logger.warn("[{}] CREATE | FAILED | Limit ID={} | Counterparty status={}",
                     Thread.currentThread().getName(),
                     creditLimit.getId(),
@@ -239,13 +300,11 @@ public class CreditRequestService {
                     "Credit requests cannot be created for a frozen or closed counterparty");
         }
 
-        // checks the current available headroom before accepting the request
+        // STEP 6: Calculate how much credit the company still has available
         BigDecimal availableHeadroom = calculateAvailableHeadroom(creditLimit);
 
-        // prevents a credit request from exceeding the available headroom
-        // rejecting 0 and below
-        if (creditRequestRequest.getAmount()
-                .compareTo(availableHeadroom) > 0) {
+        // Reject the request if the company does not have enough credit
+        if (creditRequestRequest.getAmount().compareTo(availableHeadroom) > 0) {
 
             logger.warn("[{}] CREATE | FAILED | Limit ID={} | Insufficient headroom | Requested={} | Available={}",
                     Thread.currentThread().getName(),
@@ -253,54 +312,58 @@ public class CreditRequestService {
                     creditRequestRequest.getAmount(),
                     availableHeadroom);
 
-            throw new InsufficientHeadroomException("Requested amount exceeds available headroom");
+            throw new InsufficientHeadroomException(
+                    "Requested amount exceeds available headroom");
         }
 
-        // gets the requester from the logged-in user
+        // Get the Relationship Manager who submitted the request
         User requester = getCurrentLoggedInUser();
 
-        // create a credit request object
+        // STEP 7: Create the new credit request
         CreditRequest creditRequest = new CreditRequest();
 
         creditRequest.setAmount(creditRequestRequest.getAmount());
         creditRequest.setCreditLimit(creditLimit);
         creditRequest.setRequester(requester);
 
-        // requests above 500,000 require Risk Officer approval
+        // Requests above 500,000 must be approved by a Risk Officer
         if (creditRequestRequest.getAmount()
                 .compareTo(new BigDecimal("500000")) > 0) {
+
             creditRequest.setStatus(CreditRequestStatus.PENDING_APPROVAL);
 
         } else {
-            // requests of 500,000 or less can reserve capacity directly
+
+            // Requests of 500,000 or less reserve credit immediately
+            // This also checks the corporate group's available headroom
             reserveCreditCapacity(creditRequest, creditLimit);
         }
 
-        // save the credit request
-        CreditRequest savedCreditRequest = creditRequestRepository.save(creditRequest);
+        // STEP 8: Save the new credit request
+        CreditRequest savedCreditRequest =
+                creditRequestRepository.save(creditRequest);
 
-        // saves the updated reserved amount
+        // Save the updated company's reserved amount
         creditLimitRepository.save(creditLimit);
 
-        // records the credit request creation in the audit log
-        // associates the audit record with the correct bank for traceability
+        // Record the creation in the audit log
         recordAuditLog(
                 "CREDIT_REQUEST_CREATED",
                 savedCreditRequest,
-                "Created credit request of " + savedCreditRequest.getAmount() + " with status " + savedCreditRequest.getStatus(),
+                "Created credit request of " + savedCreditRequest.getAmount()
+                        + " with status " + savedCreditRequest.getStatus(),
                 requester
         );
 
-        // Log the successful credit request creation
         logger.info("[{}] CREATE | SUCCESS | Request ID={} | Status={}",
                 Thread.currentThread().getName(),
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus());
 
-        // records when credit capacity is reserved
+        // STEP 9: If credit was reserved immediately, record and notify
         if (savedCreditRequest.getStatus() == CreditRequestStatus.RESERVED) {
 
-            // save which bank reserved the credit
+            // Record the reservation in the audit log
             recordAuditLog(
                     "CREDIT_CAPACITY_RESERVED",
                     savedCreditRequest,
@@ -308,8 +371,7 @@ public class CreditRequestService {
                     requester
             );
 
-            // sends the new RESERVED status to clients listening to the SSE stream
-            // only clients from the same bank receive the update
+            // Notify connected users through SSE
             creditRequestEventService.publishStatusUpdate(
                     creditLimit.getFinancialInstitution().getId(),
                     savedCreditRequest.getId(),
@@ -317,7 +379,7 @@ public class CreditRequestService {
             );
         }
 
-        // return it in a DTO response
+        // Return the created request to the frontend
         return toResponse(savedCreditRequest);
     }
 
@@ -329,88 +391,104 @@ public class CreditRequestService {
                 .subtract(creditLimit.getReservedAmount());
     }
 
-    // reserves available credit capacity for a credit request
-    // Take this credit request and actually reserve its money from the credit limit.
+    // Reserves credit capacity for a request
+    // This method is called when creating or approving a credit request
     private void reserveCreditCapacity(CreditRequest creditRequest, CreditLimit creditLimit) {
 
-        // prevents the same request from reserving capacity more than once
-        // If we've already reserved this request, STOP. Don't reserve the same money twice
+        // STEP 1: Make sure this request has not already reserved credit
+        // We don't want the same request to reserve money twice
         if (creditRequest.getStatus() == CreditRequestStatus.RESERVED) {
-            throw new InvalidCreditRequestStateException("Credit request is already reserved");
+            throw new InvalidCreditRequestStateException(
+                    "Credit request is already reserved"
+            );
         }
 
-        // calculates the latest available headroom before reservation
+        // STEP 2: Calculate the company's available credit
+        // Available headroom = total limit - used amount - reserved amount
         BigDecimal availableHeadroom = calculateAvailableHeadroom(creditLimit);
 
-        // checks headroom again immediately before reservation
-        // Does the requested money fit inside the available headroom?
+        // Check if the requested amount is greater than the company's available credit
         if (creditRequest.getAmount().compareTo(availableHeadroom) > 0) {
 
-            logger.warn(
-                    "Credit reservation rejected because amount {} exceeds available headroom {} for credit limit ID {}",
+            logger.warn("[{}] RESERVE | FAILED | Limit ID={} | Requested={} | Available={}",
+                    Thread.currentThread().getName(),
+                    creditLimit.getId(),
                     creditRequest.getAmount(),
-                    availableHeadroom,
-                    creditLimit.getId()
-            );
+                    availableHeadroom);
 
             throw new InsufficientHeadroomException(
-                    "Insufficient headroom to reserve credit capacity");
+                    "Insufficient headroom to reserve credit capacity"
+            );
         }
 
-        // finds the counterparty's corporate group
-        // it looks up which group the counterparty belongs to using its ID
+        // STEP 3: Check whether the company belongs to a corporate group
         Optional<CorporateGroupMembership> membership =
                 corporateGroupMembershipRepository.findByCounterpartyId(
                         creditLimit.getCounterparty().getId()
                 );
 
-        // checks whether a group exists
-        // If the counterparty doesn't belong to a group, it skips the group validation
+        // If the company belongs to a group, we must also check the group's credit
         if (membership.isPresent()) {
-            // gets the corporate group id
-            Long corporateGroupId = membership.get().getCorporateGroup().getId();
 
-            // calculates the group's available headroom
+            // Get the corporate group ID
+            Long corporateGroupId =
+                    membership.get().getCorporateGroup().getId();
+
+            // STEP 4: Calculate the group's available credit
+            // Group headroom = group limit - total used and reserved amounts
+            // of all companies belonging to this corporate group
+            //
+            // IMPORTANT:
+            // The method calling reserveCreditCapacity() must lock the corporate group first.
+            // createCreditRequest() locks the group before creating a reservation.
+            // PostgreSQL holds the lock until the transaction finishes.
             BigDecimal groupHeadroom = groupCreditLimitService
                     .calculateGroupHeadroom(corporateGroupId);
 
-            // compare the requested amount with the available credit
-            // If the requested amount is greater than the group's remaining headroom,
-            // it rejects the reservation
+            // Log the requested amount and remaining group credit
+            logger.info("[{}] GROUP ALLOCATION | HEADROOM CHECK | Group ID={} | Requested={} | Available={}",
+                    Thread.currentThread().getName(),
+                    corporateGroupId,
+                    creditRequest.getAmount(),
+                    groupHeadroom);
 
-            // DESIGN LOGIC:
-            // Even if an individual counterparty has enough credit available,
-            // LimitGuard won't allow a reservation that would push its entire corporate group over
-            // the approved group limit.
+            // STEP 5: Check whether the group has enough credit
+            // Even if this company has enough credit individually,
+            // we cannot exceed the shared corporate group limit
             if (creditRequest.getAmount().compareTo(groupHeadroom) > 0) {
-                // logs the shared corporate group headroom rejection
-                logger.warn("[{}] RESERVE | FAILED | Limit ID={} | Group ID={} | Insufficient group headroom",
+
+                logger.warn("[{}] GROUP ALLOCATION | FAILED | Group ID={} | Requested={} | Available={}",
                         Thread.currentThread().getName(),
-                        creditLimit.getId(),
-                        corporateGroupId);
+                        corporateGroupId,
+                        creditRequest.getAmount(),
+                        groupHeadroom);
 
                 throw new InsufficientHeadroomException(
-                        "Requested amount exceeds corporate group available headroom");
+                        "Requested amount exceeds corporate group available headroom"
+                );
             }
         }
 
-        // increases the reserved exposure by the request amount
-        // If it does fit, we add the money to the reserved amount
+        // STEP 6: Reserve the requested amount
+        // Add the requested money to the company's reserved balance
         creditLimit.setReservedAmount(
-                creditLimit.getReservedAmount()
-                        .add(creditRequest.getAmount())
+                creditLimit.getReservedAmount().add(creditRequest.getAmount())
         );
 
-        // changes the request status to RESERVE
-        // The money is now successfully held for this request
+        // STEP 7: Change the request status to RESERVED
         creditRequest.setStatus(CreditRequestStatus.RESERVED);
 
-        // every reservation receives an expiry time
+        // STEP 8: Set the reservation to expire after 24 hours
         creditRequest.setExpiresAt(LocalDateTime.now().plusHours(24));
+
+        // Log that the credit capacity has been reserved
+        logger.info("[{}] RESERVE | SUCCESS | Limit ID={} | Amount={}",
+                Thread.currentThread().getName(),
+                creditLimit.getId(),
+                creditRequest.getAmount());
     }
 
-
-    // approves a credit request that is waiting for Risk Officer approval
+    // Approves a credit request that is waiting for Risk Officer approval
     // Transactional: all database changes succeed together, or are rolled back
     @Transactional
     public CreditRequestResponse approveCreditRequest(Long creditRequestId) {
@@ -419,12 +497,14 @@ public class CreditRequestService {
                 Thread.currentThread().getName(),
                 creditRequestId);
 
+        // STEP 1: Lock the credit request
+        // Prevents two Risk Officers from approving the same request at the same time
         logger.info("[{}] APPROVE | WAITING FOR LOCK | Request ID={}",
                 Thread.currentThread().getName(),
                 creditRequestId);
 
-        // finds the credit request
-        CreditRequest creditRequest = creditRequestRepository.findWithLockById(creditRequestId)
+        CreditRequest creditRequest = creditRequestRepository
+                .findWithLockById(creditRequestId)
                 .orElseThrow(() ->
                         new CreditRequestNotFoundException(
                                 "Credit request with id " + creditRequestId + " was not found"
@@ -435,33 +515,87 @@ public class CreditRequestService {
                 Thread.currentThread().getName(),
                 creditRequestId);
 
+        // DEMO ONLY: Keep the request lock for 5 seconds
+        // This lets us see another Risk Officer waiting for the same request
         try {
-            // DEMO ONLY: Hold the database lock for 5 seconds
-            // to allow another Risk Officer to attempt approval
             Thread.sleep(5000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Approval interrupted", e);
         }
 
-        institutionAccessService.requireInstitution(creditRequest.getCreditLimit().getFinancialInstitution().getId());
+        // STEP 2: Make sure the request belongs to the logged-in user's bank
+        institutionAccessService.requireInstitution(
+                creditRequest.getCreditLimit().getFinancialInstitution().getId()
+        );
 
-        // makes sure only a PENDING_APPROVAL request can be approved
+        // Make sure the request is waiting for approval
         validateApprovalAction(creditRequest);
 
-        // makes sure the requester and decision maker are different users
-        // this must happen before any request status or exposure is changed
+        // The person approving must be different from the person who created it
         validateMakerChecker(creditRequest);
 
-        // only PENDING_APPROVAL can move to RESERVED
+        // Only PENDING_APPROVAL requests can become RESERVED
         validateStatusTransition(creditRequest, CreditRequestStatus.RESERVED);
 
+        // STEP 3: Check whether this counterparty belongs to a corporate group
+        // We use the counterparty ID from the credit request's credit limit
+        Long counterpartyId = creditRequest.getCreditLimit()
+                .getCounterparty().getId();
+
+        Optional<CorporateGroupMembership> membership =
+                corporateGroupMembershipRepository.findByCounterpartyId(counterpartyId);
+
+        // STEP 4: If the counterparty belongs to a group, lock the shared group limit FIRST
+        if (membership.isPresent()) {
+
+            // Get the corporate group ID
+            Long corporateGroupId =
+                    membership.get().getCorporateGroup().getId();
+
+            // Get the bank that owns this credit request
+            Long institutionId = creditRequest.getCreditLimit()
+                    .getFinancialInstitution().getId();
+
+            // Find the corporate group's credit limit for this bank
+            GroupCreditLimit groupLimit = groupCreditLimitRepository
+                    .findByFinancialInstitutionIdAndCorporateGroupId(
+                            institutionId,
+                            corporateGroupId
+                    )
+                    .orElseThrow(() ->
+                            new GroupCreditLimitNotFoundException(
+                                    "Corporate group credit limit not found"
+                            )
+                    );
+
+            logger.info("[{}] APPROVE | WAITING FOR GROUP LOCK | Group ID={}",
+                    Thread.currentThread().getName(),
+                    corporateGroupId);
+
+            // Lock the corporate group's credit limit in PostgreSQL
+            // Another transaction using the same group lock must wait
+            groupCreditLimitRepository.findWithLockById(groupLimit.getId())
+                    .orElseThrow(() ->
+                            new GroupCreditLimitNotFoundException(
+                                    "Corporate group credit limit not found"
+                            )
+                    );
+
+            logger.info("[{}] APPROVE | GROUP LOCK ACQUIRED | Group ID={}",
+                    Thread.currentThread().getName(),
+                    corporateGroupId);
+
+            // PostgreSQL keeps this lock until the transaction finishes
+            // We now lock the individual credit limit while holding the group lock
+        }
+
+        // STEP 5: Lock the individual company's credit limit
+        // Prevents different requests from reserving the same individual credit
         logger.info("[{}] APPROVE | WAITING FOR LOCK | Limit ID={}",
                 Thread.currentThread().getName(),
                 creditRequest.getCreditLimit().getId());
 
-        // finds the credit limit and locks it before checking the available balance
-        // prevents different requests from reserving the same available credit at the same time
         CreditLimit creditLimit = creditLimitRepository
                 .findWithLockById(creditRequest.getCreditLimit().getId())
                 .orElseThrow(() ->
@@ -472,18 +606,27 @@ public class CreditRequestService {
                 Thread.currentThread().getName(),
                 creditLimit.getId());
 
-        // refreshes the locked credit limit to get the latest balance from PostgreSQL
-        // so we don't use an old balance when approving a request
+        // STEP 6: Refresh the individual credit limit
+        // Read the latest balance from PostgreSQL after acquiring the lock
+        // This prevents using an outdated individual reserved amount
         entityManager.refresh(creditLimit, LockModeType.PESSIMISTIC_WRITE);
 
-        // approval reserves the requested capacity using the same
-        // reservation rules used by other credit requests
+        // STEP 7: Reserve the requested credit
+        // reserveCreditCapacity() checks:
+        // 1. Individual available headroom
+        // 2. Corporate group available headroom (if the company belongs to a group)
+        //
+        // Both required locks are already held before these checks
         reserveCreditCapacity(creditRequest, creditLimit);
 
+        // Save the approved request with its new RESERVED status
         CreditRequest savedCreditRequest =
                 creditRequestRepository.save(creditRequest);
 
-        // records the final approval decision
+        // Save the updated reserved balance for the individual credit limit
+        creditLimitRepository.save(creditLimit);
+
+        // STEP 8: Record the Risk Officer's approval decision
         ApprovalDecision approvalDecision = new ApprovalDecision();
 
         approvalDecision.setDecision(ApprovalDecisionType.APPROVED);
@@ -492,35 +635,37 @@ public class CreditRequestService {
 
         approvalDecisionRepository.save(approvalDecision);
 
-        // records the successful approval in the audit trail
-        // save which bank approved the credit request
+        // STEP 9: Record the successful approval in the audit trail
         recordAuditLog(
-                "CREDIT_REQUEST_APPROVED", savedCreditRequest,
-                "Approved credit request of " + savedCreditRequest.getAmount() + " and reserved the credit capacity",
+                "CREDIT_REQUEST_APPROVED",
+                savedCreditRequest,
+                "Approved credit request of " + savedCreditRequest.getAmount()
+                        + " and reserved the credit capacity",
                 getCurrentLoggedInUser()
         );
 
-        // sends the approval notification to the user who created the request
+        // STEP 10: Send an approval email to the person who created the request
         emailService.SendCreditRequestApprovedEmail(
                 savedCreditRequest.getRequester().getEmail(),
                 savedCreditRequest.getId()
         );
 
-        // sends the new RESERVED status to clients listening to the SSE stream
-        // only clients from the same bank receive the update
+        // STEP 11: Notify connected clients about the new RESERVED status
+        // Only clients from the same bank receive the update
         creditRequestEventService.publishStatusUpdate(
                 creditLimit.getFinancialInstitution().getId(),
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus()
         );
 
-        // Log the successful approval
         logger.info("[{}] APPROVE | SUCCESS | Request ID={} | Status={}",
                 Thread.currentThread().getName(),
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus());
+
         return toResponse(savedCreditRequest);
     }
+
 
     // rejects a credit request that is waiting for Risk Officer approval
     @Transactional
