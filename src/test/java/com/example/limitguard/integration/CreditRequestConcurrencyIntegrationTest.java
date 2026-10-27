@@ -1,4 +1,3 @@
-
 package com.example.limitguard.integration;
 
 import com.example.limitguard.dto.CreditRequestRequest;
@@ -58,6 +57,18 @@ public class CreditRequestConcurrencyIntegrationTest {
 
     @Autowired
     private CounterpartyRepository counterpartyRepository;
+
+    // Handles corporate groups in the test database.
+    @Autowired
+    private CorporateGroupRepository corporateGroupRepository;
+
+    // Handles companies belonging to a corporate group.
+    @Autowired
+    private CorporateGroupMembershipRepository corporateGroupMembershipRepository;
+
+    // Handles the shared credit limit for a corporate group.
+    @Autowired
+    private GroupCreditLimitRepository groupCreditLimitRepository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -350,16 +361,14 @@ public class CreditRequestConcurrencyIntegrationTest {
     @Test
     void shouldPreventDoubleApproval() throws Exception {
 
-        // Arrange:
-        // A request for BHD 600,000 is waiting for approval.
+        // STEP 1: Create a BHD 600,000 request waiting for approval.
         Long requestId = createStoredRequest(
                 "600000",
                 CreditRequestStatus.PENDING_APPROVAL,
                 null
         );
 
-        // Act:
-        // Two different Risk Officers approve at the same time.
+        // STEP 2: Two Risk Officers try to approve the same request.
         List<Result> results = runConcurrently(
                 checkerOneId,
                 () -> creditRequestService.approveCreditRequest(requestId),
@@ -367,37 +376,35 @@ public class CreditRequestConcurrencyIntegrationTest {
                 () -> creditRequestService.approveCreditRequest(requestId)
         );
 
-        // Assert:
-        // Only one officer should successfully approve.
+        // STEP 3: Only one Risk Officer should succeed.
         assertEquals(
                 1,
                 successCount(results),
                 describeResults(results)
         );
 
-        // The request must be RESERVED.
+        // STEP 4: Check that the request is RESERVED.
         assertEquals(
                 CreditRequestStatus.RESERVED,
                 getRequest(requestId).getStatus()
         );
 
-        // BHD 600,000 must be reserved only once.
+        // STEP 5: Check that BHD 600,000 was reserved only once.
         assertMoneyEquals("600000", getLimit().getReservedAmount());
     }
 
     // =========================================================
-    // SCENARIO 2: TWO USERS COMPETE FOR AVAILABLE CREDIT
+    // SCENARIO 2: TWO USERS COMPETE FOR THE SAME INDIVIDUAL CREDIT LIMIT
     // =========================================================
 
     @Test
     void shouldPreventOverReservation() throws Exception {
 
-        // Arrange:
-        // Only BHD 500,000 of credit is available.
+        // STEP 1: Set the individual credit limit to BHD 500,000.
         setLimitAmount("500000");
 
-        // Each thread requests BHD 400,000.
-        // Both requests cannot fit inside the credit limit.
+        // STEP 2: Prepare two requests for BHD 400,000 each.
+        // Both cannot fit inside the individual credit limit.
         CreditRequestRequest firstRequest = new CreditRequestRequest();
         firstRequest.setCreditLimitId(creditLimitId);
         firstRequest.setAmount(new BigDecimal("400000"));
@@ -406,8 +413,7 @@ public class CreditRequestConcurrencyIntegrationTest {
         secondRequest.setCreditLimitId(creditLimitId);
         secondRequest.setAmount(new BigDecimal("400000"));
 
-        // Act:
-        // Two users submit their requests at the same time.
+        // STEP 3: Submit both requests at approximately the same time.
         List<Result> results = runConcurrently(
                 requesterId,
                 () -> creditRequestService.createCreditRequest(firstRequest),
@@ -415,18 +421,17 @@ public class CreditRequestConcurrencyIntegrationTest {
                 () -> creditRequestService.createCreditRequest(secondRequest)
         );
 
-        // Assert:
-        // One request succeeds, and the other must fail.
+        // STEP 4: Check that only one request succeeded.
         assertEquals(
                 1,
                 successCount(results),
                 describeResults(results)
         );
 
-        // The bank must reserve only BHD 400,000.
+        // STEP 5: Check that only BHD 400,000 was reserved.
         assertMoneyEquals("400000", getLimit().getReservedAmount());
 
-        // Exposure must never exceed the credit limit.
+        // STEP 6: Make sure the individual credit limit was not exceeded.
         CreditLimit limit = getLimit();
 
         BigDecimal exposure = limit.getUsedAmount()
@@ -442,16 +447,14 @@ public class CreditRequestConcurrencyIntegrationTest {
     @Test
     void shouldPreventConflictingApprovalAndRejection() throws Exception {
 
-        // Arrange:
-        // The request is waiting for a Risk Officer's decision.
+        // STEP 1: Create a request waiting for a Risk Officer decision.
         Long requestId = createStoredRequest(
                 "600000",
                 CreditRequestStatus.PENDING_APPROVAL,
                 null
         );
 
-        // Act:
-        // One officer approves while another rejects.
+        // STEP 2: One officer approves while another rejects.
         List<Result> results = runConcurrently(
                 checkerOneId,
                 () -> creditRequestService.approveCreditRequest(requestId),
@@ -462,8 +465,7 @@ public class CreditRequestConcurrencyIntegrationTest {
                 )
         );
 
-        // Assert:
-        // Only one final decision should succeed.
+        // STEP 3: Only one decision should succeed.
         assertEquals(
                 1,
                 successCount(results),
@@ -473,14 +475,14 @@ public class CreditRequestConcurrencyIntegrationTest {
         CreditRequestStatus finalStatus =
                 getRequest(requestId).getStatus();
 
-        // The request must have one valid final state.
+        // STEP 4: Check that the request has one valid final status.
         assertTrue(
                 finalStatus == CreditRequestStatus.RESERVED
                         || finalStatus == CreditRequestStatus.REJECTED
         );
 
-        // If approved, BHD 600,000 must be reserved.
-        // If rejected, nothing must be reserved.
+        // STEP 5: Check the reserved amount matches the final decision.
+        // Approved means BHD 600,000; rejected means zero.
         if (finalStatus == CreditRequestStatus.RESERVED) {
 
             assertMoneyEquals(
@@ -504,8 +506,7 @@ public class CreditRequestConcurrencyIntegrationTest {
     @Test
     void shouldPreventDoubleCancellation() throws Exception {
 
-        // Arrange:
-        // A request already reserves BHD 100,000.
+        // STEP 1: Create a request with BHD 100,000 already reserved.
         Long requestId = createStoredRequest(
                 "100000",
                 CreditRequestStatus.RESERVED,
@@ -514,8 +515,7 @@ public class CreditRequestConcurrencyIntegrationTest {
 
         setReservedAmount("100000");
 
-        // Act:
-        // Two cancellation attempts happen at the same time.
+        // STEP 2: Try to cancel the same request from two threads.
         List<Result> results = runConcurrently(
                 requesterId,
                 () -> creditRequestService.cancelCreditRequest(requestId),
@@ -523,22 +523,20 @@ public class CreditRequestConcurrencyIntegrationTest {
                 () -> creditRequestService.cancelCreditRequest(requestId)
         );
 
-        // Assert:
-        // Only one cancellation should succeed.
+        // STEP 3: Only one cancellation should succeed.
         assertEquals(
                 1,
                 successCount(results),
                 describeResults(results)
         );
 
-        // The request must be CANCELLED.
+        // STEP 4: Check that the request is CANCELLED.
         assertEquals(
                 CreditRequestStatus.CANCELLED,
                 getRequest(requestId).getStatus()
         );
 
-        // The reserved amount must decrease to zero.
-        // It must not be released twice or become negative.
+        // STEP 5: Check that the reserved amount is zero, not negative.
         assertMoneyEquals("0", getLimit().getReservedAmount());
     }
 
@@ -549,8 +547,7 @@ public class CreditRequestConcurrencyIntegrationTest {
     @Test
     void shouldPreventDoubleUsage() throws Exception {
 
-        // Arrange:
-        // BHD 100,000 is already reserved.
+        // STEP 1: Create a request with BHD 100,000 already reserved.
         Long requestId = createStoredRequest(
                 "100000",
                 CreditRequestStatus.RESERVED,
@@ -559,8 +556,7 @@ public class CreditRequestConcurrencyIntegrationTest {
 
         setReservedAmount("100000");
 
-        // Act:
-        // Two threads try to mark the same request as USED.
+        // STEP 2: Two threads try to mark the same request as USED.
         List<Result> results = runConcurrently(
                 requesterId,
                 () -> creditRequestService.markCreditRequestAsUsed(requestId),
@@ -568,24 +564,23 @@ public class CreditRequestConcurrencyIntegrationTest {
                 () -> creditRequestService.markCreditRequestAsUsed(requestId)
         );
 
-        // Assert:
-        // Only one operation should succeed.
+        // STEP 4: Check that only one operation succeeded.
         assertEquals(
                 1,
                 successCount(results),
                 describeResults(results)
         );
 
-        // The request must become USED.
+        // STEP 4: Check that the request is USED.
         assertEquals(
                 CreditRequestStatus.USED,
                 getRequest(requestId).getStatus()
         );
 
-        // Reserved exposure decreases by BHD 100,000.
+        // STEP 5: Check that reserved credit decreased to zero.
         assertMoneyEquals("0", getLimit().getReservedAmount());
 
-        // Used exposure increases by BHD 100,000 only once.
+        // STEP 6: Check that used credit increased only once.
         assertMoneyEquals("100000", getLimit().getUsedAmount());
     }
 
@@ -596,8 +591,7 @@ public class CreditRequestConcurrencyIntegrationTest {
     @Test
     void shouldPreventUsingAnExpiredReservation() throws Exception {
 
-        // Arrange:
-        // The reservation expired one minute ago.
+        // STEP 1: Create a reservation that expired one minute ago.
         Long requestId = createStoredRequest(
                 "100000",
                 CreditRequestStatus.RESERVED,
@@ -606,9 +600,7 @@ public class CreditRequestConcurrencyIntegrationTest {
 
         setReservedAmount("100000");
 
-        // Act:
-        // The scheduler tries to expire the request.
-        // At the same time, a user tries to mark it as USED.
+        // STEP 2: Expire the request and mark it USED at the same time.
         List<Result> results = runConcurrently(
                 null,
                 () -> creditRequestService.expireCreditRequest(requestId),
@@ -616,21 +608,20 @@ public class CreditRequestConcurrencyIntegrationTest {
                 () -> creditRequestService.markCreditRequestAsUsed(requestId)
         );
 
-        // Assert:
-        // The expired reservation must not become USED.
+        // STEP 3: Check that the request ends as EXPIRED.
         assertEquals(
                 CreditRequestStatus.EXPIRED,
                 getRequest(requestId).getStatus(),
                 describeResults(results)
         );
 
-        // Reserved exposure must be released.
+        // STEP 4: Check that the reserved credit was released.
         assertMoneyEquals("0", getLimit().getReservedAmount());
 
-        // No money should be moved to used exposure.
+        // STEP 5: Check that no credit was marked as used.
         assertMoneyEquals("0", getLimit().getUsedAmount());
 
-        // Exactly one operation should succeed: expiration.
+        // STEP 6: Only the expiration should succeed.
         assertEquals(
                 1,
                 successCount(results),
@@ -646,11 +637,10 @@ public class CreditRequestConcurrencyIntegrationTest {
     void shouldPreventLimitReductionBelowConcurrentExposure()
             throws Exception {
 
-        // Arrange:
-        // The original credit limit is BHD 1,000,000.
+        // STEP 1: Start with a credit limit of BHD 1,000,000.
         //
-        // Thread 1 tries to reserve BHD 400,000.
-        // Thread 2 tries to reduce the limit to BHD 300,000.
+        // STEP 2: Prepare a BHD 400,000 reservation and a limit reduction.
+        // The proposed new limit is BHD 300,000.
         //
         // Both actions cannot succeed together.
 
@@ -663,8 +653,7 @@ public class CreditRequestConcurrencyIntegrationTest {
 
         updateRequest.setLimitAmount(new BigDecimal("300000"));
 
-        // Act:
-        // Reservation and limit reduction happen concurrently.
+        // STEP 3: Run the reservation and limit reduction together.
         List<Result> results = runConcurrently(
                 requesterId,
                 () -> creditRequestService.createCreditRequest(request),
@@ -675,8 +664,7 @@ public class CreditRequestConcurrencyIntegrationTest {
                 )
         );
 
-        // Assert:
-        // Only one operation should succeed.
+        // STEP 4: Check that only one operation succeeded.
         assertEquals(
                 1,
                 successCount(results),
@@ -688,14 +676,14 @@ public class CreditRequestConcurrencyIntegrationTest {
         BigDecimal exposure = limit.getUsedAmount()
                 .add(limit.getReservedAmount());
 
-        // The final exposure must never exceed the final limit.
+        // STEP 5: Check that exposure does not exceed the final limit.
         assertTrue(
                 exposure.compareTo(limit.getLimitAmount()) <= 0,
                 "Exposure must not exceed the credit limit. "
                         + describeResults(results)
         );
 
-        // The final state must match one of the two valid outcomes.
+        // STEP 6: Check that the final balances match a valid outcome.
         boolean reservationWon =
                 limit.getReservedAmount().compareTo(
                         new BigDecimal("400000")
@@ -715,6 +703,104 @@ public class CreditRequestConcurrencyIntegrationTest {
         assertTrue(
                 reservationWon || reductionWon,
                 "Unexpected final credit limit state"
+        );
+    }
+
+    // =========================================================
+    // SCENARIO 8: TWO COMPANIES SHARE ONE CORPORATE GROUP LIMIT
+    // =========================================================
+
+    @Test
+    void shouldPreventCorporateGroupOverReservation() throws Exception {
+
+        // STEP 1: Get the test bank and first company.
+        FinancialInstitution bank = financialInstitutionRepository.findAll().get(0);
+        Counterparty companyA = counterpartyRepository.findAll().get(0);
+
+        // STEP 2: Create a second company.
+        Counterparty companyB = new Counterparty();
+        companyB.setName("Corporate Group Company B");
+        companyB.setStatus(CounterpartyStatus.ACTIVE);
+        companyB = counterpartyRepository.saveAndFlush(companyB);
+
+        // STEP 3: Give Company A an individual limit of BHD 200,000.
+        CreditLimit limitA = getLimit();
+        limitA.setLimitAmount(new BigDecimal("200000"));
+        creditLimitRepository.saveAndFlush(limitA);
+
+        // STEP 4: Give Company B an individual limit of BHD 200,000.
+        CreditLimit limitB = new CreditLimit();
+        limitB.setFinancialInstitution(bank);
+        limitB.setCounterparty(companyB);
+        limitB.setLimitAmount(new BigDecimal("200000"));
+        limitB.setUsedAmount(BigDecimal.ZERO);
+        limitB.setReservedAmount(BigDecimal.ZERO);
+        limitB = creditLimitRepository.saveAndFlush(limitB);
+
+        // STEP 5: Create one corporate group for both companies.
+        CorporateGroup group = new CorporateGroup();
+        group.setName("Concurrency Test Corporate Group");
+        group = corporateGroupRepository.saveAndFlush(group);
+
+        // STEP 6: Add Company A to the corporate group.
+        CorporateGroupMembership membershipA = new CorporateGroupMembership();
+        membershipA.setCorporateGroup(group);
+        membershipA.setCounterparty(companyA);
+        corporateGroupMembershipRepository.saveAndFlush(membershipA);
+
+        // STEP 7: Add Company B to the same corporate group.
+        CorporateGroupMembership membershipB = new CorporateGroupMembership();
+        membershipB.setCorporateGroup(group);
+        membershipB.setCounterparty(companyB);
+        corporateGroupMembershipRepository.saveAndFlush(membershipB);
+
+        // STEP 8: Set the shared group limit to BHD 100,000.
+        GroupCreditLimit groupLimit = new GroupCreditLimit();
+        groupLimit.setCorporateGroup(group);
+        groupLimit.setFinancialInstitution(bank);
+        groupLimit.setAmount(new BigDecimal("100000"));
+        groupLimit = groupCreditLimitRepository.saveAndFlush(groupLimit);
+
+        // STEP 9: Prepare a BHD 80,000 request for Company A.
+        CreditRequestRequest firstRequest = new CreditRequestRequest();
+        firstRequest.setCreditLimitId(limitA.getId());
+        firstRequest.setAmount(new BigDecimal("80000"));
+
+        // STEP 10: Prepare a BHD 80,000 request for Company B.
+        CreditRequestRequest secondRequest = new CreditRequestRequest();
+        secondRequest.setCreditLimitId(limitB.getId());
+        secondRequest.setAmount(new BigDecimal("80000"));
+
+        // STEP 11: Submit both requests at approximately the same time.
+        // Each company has enough credit, but the group cannot cover both.
+        List<Result> results = runConcurrently(
+                requesterId,
+                () -> creditRequestService.createCreditRequest(firstRequest),
+                requesterId,
+                () -> creditRequestService.createCreditRequest(secondRequest)
+        );
+
+        // STEP 12: Only one reservation should succeed.
+        assertEquals(1, successCount(results), describeResults(results));
+
+        // STEP 13: Read the latest balances from PostgreSQL.
+        CreditLimit updatedLimitA = creditLimitRepository.findById(limitA.getId())
+                .orElseThrow();
+        CreditLimit updatedLimitB = creditLimitRepository.findById(limitB.getId())
+                .orElseThrow();
+
+        // STEP 14: Add both companies' reserved amounts.
+        BigDecimal totalReserved = updatedLimitA.getReservedAmount()
+                .add(updatedLimitB.getReservedAmount());
+
+        // STEP 15: Only BHD 80,000 should be reserved across the group.
+        assertMoneyEquals("80000", totalReserved);
+
+        // STEP 16: The shared corporate group limit must not be exceeded.
+        assertTrue(
+                totalReserved.compareTo(groupLimit.getAmount()) <= 0,
+                "Corporate group exposure must not exceed the shared limit. "
+                        + describeResults(results)
         );
     }
 }
