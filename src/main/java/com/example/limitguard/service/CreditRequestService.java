@@ -435,6 +435,15 @@ public class CreditRequestService {
                 Thread.currentThread().getName(),
                 creditRequestId);
 
+        try {
+            // DEMO ONLY: Hold the database lock for 5 seconds
+            // to allow another Risk Officer to attempt approval
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Approval interrupted", e);
+        }
+
         institutionAccessService.requireInstitution(creditRequest.getCreditLimit().getFinancialInstitution().getId());
 
         // makes sure only a PENDING_APPROVAL request can be approved
