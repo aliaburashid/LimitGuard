@@ -192,7 +192,7 @@ public class CreditLimitServiceTest {
 
         request.setLimitAmount(new BigDecimal("400000"));
 
-        when(creditLimitRepository.findById(3L))
+        when(creditLimitRepository.findWithLockById(3L))
                 .thenReturn(Optional.of(creditLimit));
 
         // act and assert: check that the reduction is rejected
@@ -218,7 +218,6 @@ public class CreditLimitServiceTest {
 
         // arrange: prepare a request for an existing credit limit
         CreditLimitRequest request = new CreditLimitRequest();
-        request.setFinancialInstitutionId(1L);
         request.setCounterpartyId(2L);
         request.setLimitAmount(new BigDecimal("1000000"));
 
@@ -248,7 +247,6 @@ public class CreditLimitServiceTest {
 
         // arrange: prepare a new credit limit request
         CreditLimitRequest request = new CreditLimitRequest();
-        request.setFinancialInstitutionId(1L);
         request.setCounterpartyId(2L);
         request.setLimitAmount(new BigDecimal("1000000"));
 
