@@ -27,6 +27,9 @@ import com.example.limitguard.exception.InvalidCreditLimitReductionException;
 
 import java.math.BigDecimal;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Service
 public class CreditLimitService {
 
@@ -44,6 +47,9 @@ public class CreditLimitService {
 
     @Autowired
     private InstitutionAccessService institutionAccessService;
+
+    private static final Logger logger =
+            LoggerFactory.getLogger(CreditLimitService.class);
 
     //-------------------------------------------------------------------------------
 
@@ -177,11 +183,23 @@ public class CreditLimitService {
     @Transactional
     public CreditLimitResponse updateCreditLimit(Long creditLimitId, UpdateCreditLimitRequest updateCreditLimitRequest) {
 
-        // checks that the credit limit exists
+        logger.info("[{}] UPDATE_LIMIT | START | Limit ID={}",
+                Thread.currentThread().getName(),
+                creditLimitId);
+
+        logger.info("[{}] UPDATE_LIMIT | WAITING FOR LOCK | Limit ID={}",
+                Thread.currentThread().getName(),
+                creditLimitId);
+
+        // locks the credit limit so it cannot be changed during another transaction
         CreditLimit creditLimit = creditLimitRepository
-                .findById(creditLimitId)
+                .findWithLockById(creditLimitId)
                 .orElseThrow(() ->
                         new CreditLimitNotFoundException("Credit limit not found"));
+
+        logger.warn("[{}] UPDATE_LIMIT | FAILED | Limit ID={} | New limit below current exposure",
+                Thread.currentThread().getName(),
+                creditLimitId);
 
         // deny access if the credit limit belongs to another bank
         institutionAccessService.requireInstitution(creditLimit.getFinancialInstitution().getId());
@@ -215,6 +233,11 @@ public class CreditLimitService {
                 "CREDIT_LIMIT_UPDATED", updatedCreditLimit,
                 "Credit limit changed from " + oldLimitAmount + " to " + updatedCreditLimit.getLimitAmount(), currentUser
         );
+
+        logger.info("[{}] UPDATE_LIMIT | SUCCESS | Limit ID={} | New Amount={}",
+                Thread.currentThread().getName(),
+                updatedCreditLimit.getId(),
+                updatedCreditLimit.getLimitAmount());
 
         return toResponse(updatedCreditLimit);
     }

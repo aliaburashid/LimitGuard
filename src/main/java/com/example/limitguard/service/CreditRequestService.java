@@ -32,8 +32,10 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 
 @Service
 public class CreditRequestService {
@@ -69,6 +71,9 @@ public class CreditRequestService {
     // reuses the existing group headroom calculation
     @Autowired
     private GroupCreditLimitService groupCreditLimitService;
+
+    @Autowired
+    private EntityManager entityManager;
 
 
     //---------------------------------------------------------------------------
@@ -177,6 +182,12 @@ public class CreditRequestService {
     private void validateApprovalAction(CreditRequest creditRequest) {
 
         if (creditRequest.getStatus() != CreditRequestStatus.PENDING_APPROVAL) {
+            // logs why a competing approval or rejection cannot proceed
+            logger.warn("[{}] APPROVAL VALIDATION | FAILED | Request ID={} | Current Status={}",
+                    Thread.currentThread().getName(),
+                    creditRequest.getId(),
+                    creditRequest.getStatus());
+
             throw new InvalidCreditRequestStateException(
                     "Only pending approval requests can be approved or rejected"
             );
@@ -187,17 +198,42 @@ public class CreditRequestService {
     @Transactional
     public CreditRequestResponse createCreditRequest(CreditRequestRequest creditRequestRequest) {
 
-        // checks that the credit limit exists
+        // logs when a user submits a new credit request
+        logger.info("[{}] CREATE | START | Limit ID={} | Amount={}",
+                Thread.currentThread().getName(),
+                creditRequestRequest.getCreditLimitId(),
+                creditRequestRequest.getAmount());
+
+        // logs when the thread attempts to acquire the database lock
+        logger.info("[{}] CREATE | WAITING FOR LOCK | Limit ID={}",
+                Thread.currentThread().getName(),
+                creditRequestRequest.getCreditLimitId());
+
+        // locks the credit limit so two requests cannot reserve the same balance at once
         CreditLimit creditLimit = creditLimitRepository
-                .findById(creditRequestRequest.getCreditLimitId())
+                .findWithLockById(creditRequestRequest.getCreditLimitId())
                 .orElseThrow(() ->
                         new CreditLimitNotFoundException("Credit limit not found"));
+
+        // logs when the database lock has been acquired
+        logger.info("[{}] CREATE | LOCK ACQUIRED | Limit ID={}",
+                Thread.currentThread().getName(),
+                creditLimit.getId());
+
+        // gets the latest balance from the database before checking available credit
+        entityManager.refresh(creditLimit, LockModeType.PESSIMISTIC_WRITE);
 
         institutionAccessService.requireInstitution(creditLimit.getFinancialInstitution().getId());
 
         // prevents new credit requests for frozen or closed counterparties
         if (creditLimit.getCounterparty().getStatus() == CounterpartyStatus.FROZEN
                 || creditLimit.getCounterparty().getStatus() == CounterpartyStatus.CLOSED) {
+
+            // logs why a request cannot be created for this counterparty
+            logger.warn("[{}] CREATE | FAILED | Limit ID={} | Counterparty status={}",
+                    Thread.currentThread().getName(),
+                    creditLimit.getId(),
+                    creditLimit.getCounterparty().getStatus());
 
             throw new InvalidCreditRequestOperationException(
                     "Credit requests cannot be created for a frozen or closed counterparty");
@@ -211,12 +247,11 @@ public class CreditRequestService {
         if (creditRequestRequest.getAmount()
                 .compareTo(availableHeadroom) > 0) {
 
-            logger.warn(
-                    "Credit request rejected because amount {} exceeds available headroom {} for credit limit ID {}",
+            logger.warn("[{}] CREATE | FAILED | Limit ID={} | Insufficient headroom | Requested={} | Available={}",
+                    Thread.currentThread().getName(),
+                    creditLimit.getId(),
                     creditRequestRequest.getAmount(),
-                    availableHeadroom,
-                    creditLimit.getId()
-            );
+                    availableHeadroom);
 
             throw new InsufficientHeadroomException("Requested amount exceeds available headroom");
         }
@@ -235,6 +270,7 @@ public class CreditRequestService {
         if (creditRequestRequest.getAmount()
                 .compareTo(new BigDecimal("500000")) > 0) {
             creditRequest.setStatus(CreditRequestStatus.PENDING_APPROVAL);
+
         } else {
             // requests of 500,000 or less can reserve capacity directly
             reserveCreditCapacity(creditRequest, creditLimit);
@@ -256,11 +292,10 @@ public class CreditRequestService {
         );
 
         // Log the successful credit request creation
-        logger.info(
-                "Credit request ID {} created with status {}",
+        logger.info("[{}] CREATE | SUCCESS | Request ID={} | Status={}",
+                Thread.currentThread().getName(),
                 savedCreditRequest.getId(),
-                savedCreditRequest.getStatus()
-        );
+                savedCreditRequest.getStatus());
 
         // records when credit capacity is reserved
         if (savedCreditRequest.getStatus() == CreditRequestStatus.RESERVED) {
@@ -348,6 +383,12 @@ public class CreditRequestService {
             // LimitGuard won't allow a reservation that would push its entire corporate group over
             // the approved group limit.
             if (creditRequest.getAmount().compareTo(groupHeadroom) > 0) {
+                // logs the shared corporate group headroom rejection
+                logger.warn("[{}] RESERVE | FAILED | Limit ID={} | Group ID={} | Insufficient group headroom",
+                        Thread.currentThread().getName(),
+                        creditLimit.getId(),
+                        corporateGroupId);
+
                 throw new InsufficientHeadroomException(
                         "Requested amount exceeds corporate group available headroom");
             }
@@ -370,16 +411,29 @@ public class CreditRequestService {
 
 
     // approves a credit request that is waiting for Risk Officer approval
+    // Transactional: all database changes succeed together, or are rolled back
     @Transactional
     public CreditRequestResponse approveCreditRequest(Long creditRequestId) {
 
+        logger.info("[{}] APPROVE | START | Request ID={}",
+                Thread.currentThread().getName(),
+                creditRequestId);
+
+        logger.info("[{}] APPROVE | WAITING FOR LOCK | Request ID={}",
+                Thread.currentThread().getName(),
+                creditRequestId);
+
         // finds the credit request
-        CreditRequest creditRequest = creditRequestRepository.findById(creditRequestId)
+        CreditRequest creditRequest = creditRequestRepository.findWithLockById(creditRequestId)
                 .orElseThrow(() ->
                         new CreditRequestNotFoundException(
                                 "Credit request with id " + creditRequestId + " was not found"
                         )
                 );
+
+        logger.info("[{}] APPROVE | LOCK ACQUIRED | Request ID={}",
+                Thread.currentThread().getName(),
+                creditRequestId);
 
         institutionAccessService.requireInstitution(creditRequest.getCreditLimit().getFinancialInstitution().getId());
 
@@ -393,8 +447,25 @@ public class CreditRequestService {
         // only PENDING_APPROVAL can move to RESERVED
         validateStatusTransition(creditRequest, CreditRequestStatus.RESERVED);
 
-        // gets the credit limit connected to this credit request
-        CreditLimit creditLimit = creditRequest.getCreditLimit();
+        logger.info("[{}] APPROVE | WAITING FOR LOCK | Limit ID={}",
+                Thread.currentThread().getName(),
+                creditRequest.getCreditLimit().getId());
+
+        // finds the credit limit and locks it before checking the available balance
+        // prevents different requests from reserving the same available credit at the same time
+        CreditLimit creditLimit = creditLimitRepository
+                .findWithLockById(creditRequest.getCreditLimit().getId())
+                .orElseThrow(() ->
+                        new CreditLimitNotFoundException("Credit limit not found")
+                );
+
+        logger.info("[{}] APPROVE | LOCK ACQUIRED | Limit ID={}",
+                Thread.currentThread().getName(),
+                creditLimit.getId());
+
+        // refreshes the locked credit limit to get the latest balance from PostgreSQL
+        // so we don't use an old balance when approving a request
+        entityManager.refresh(creditLimit, LockModeType.PESSIMISTIC_WRITE);
 
         // approval reserves the requested capacity using the same
         // reservation rules used by other credit requests
@@ -415,8 +486,7 @@ public class CreditRequestService {
         // records the successful approval in the audit trail
         // save which bank approved the credit request
         recordAuditLog(
-                "CREDIT_REQUEST_APPROVED",
-                savedCreditRequest,
+                "CREDIT_REQUEST_APPROVED", savedCreditRequest,
                 "Approved credit request of " + savedCreditRequest.getAmount() + " and reserved the credit capacity",
                 getCurrentLoggedInUser()
         );
@@ -436,11 +506,10 @@ public class CreditRequestService {
         );
 
         // Log the successful approval
-        logger.info("Credit request ID {} approved and moved to {}",
+        logger.info("[{}] APPROVE | SUCCESS | Request ID={} | Status={}",
+                Thread.currentThread().getName(),
                 savedCreditRequest.getId(),
-                savedCreditRequest.getStatus()
-        );
-
+                savedCreditRequest.getStatus());
         return toResponse(savedCreditRequest);
     }
 
@@ -448,10 +517,24 @@ public class CreditRequestService {
     @Transactional
     public CreditRequestResponse rejectCreditRequest(Long creditRequestId, String reason) {
 
-        // find the credit request
-        CreditRequest creditRequest = creditRequestRepository.findById(creditRequestId)
-                .orElseThrow(() -> new CreditRequestNotFoundException(
-                        "Credit request with id " + creditRequestId + " was not found"));
+        logger.info("[{}] REJECT | START | Request ID={}",
+                Thread.currentThread().getName(),
+                creditRequestId);
+
+        logger.info("[{}] REJECT | WAITING FOR LOCK | Request ID={}",
+                Thread.currentThread().getName(),
+                creditRequestId);
+
+        // locks the credit request so it cannot be approved and rejected at the same time
+        CreditRequest creditRequest = creditRequestRepository
+                .findWithLockById(creditRequestId)
+                .orElseThrow(() ->
+                        new CreditRequestNotFoundException(
+                                "Credit request with id " + creditRequestId + " was not found"));
+
+        logger.info("[{}] REJECT | LOCK ACQUIRED | Request ID={}",
+                Thread.currentThread().getName(),
+                creditRequestId);
 
         institutionAccessService.requireInstitution(creditRequest.getCreditLimit().getFinancialInstitution().getId());
 
@@ -506,7 +589,10 @@ public class CreditRequestService {
         );
 
         // Log the successful rejection
-        logger.info("Credit request ID {} was rejected", savedCreditRequest.getId());
+        logger.info("[{}] REJECT | SUCCESS | Request ID={} | Status={}",
+                Thread.currentThread().getName(),
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus());
 
         return toResponse(savedCreditRequest);
     }
@@ -515,11 +601,23 @@ public class CreditRequestService {
     @Transactional
     public CreditRequestResponse markCreditRequestAsUsed(Long creditRequestId) {
 
-        // checks that the credit request exists
+        logger.info("[{}] MARK_USED | START | Request ID={}",
+                Thread.currentThread().getName(),
+                creditRequestId);
+
+        logger.info("[{}] MARK_USED | WAITING FOR LOCK | Request ID={}",
+                Thread.currentThread().getName(),
+                creditRequestId);
+
+        // locks the credit request so it cannot be used twice at the same time
         CreditRequest creditRequest = creditRequestRepository
-                .findById(creditRequestId)
+                .findWithLockById(creditRequestId)
                 .orElseThrow(() ->
                         new CreditRequestNotFoundException("Credit request not found"));
+
+        logger.info("[{}] MARK_USED | LOCK ACQUIRED | Request ID={}",
+                Thread.currentThread().getName(),
+                creditRequestId);
 
         institutionAccessService.requireInstitution(creditRequest.getCreditLimit().getFinancialInstitution().getId());
 
@@ -539,7 +637,36 @@ public class CreditRequestService {
         // or EXPIRED -> USED before any exposure amounts are changed
         validateStatusTransition(creditRequest, CreditRequestStatus.USED);
 
-        CreditLimit creditLimit = creditRequest.getCreditLimit();
+        // checks that the reservation has not passed its expiry time
+        // even if the scheduler has not yet changed the status to EXPIRED
+        if (creditRequest.getExpiresAt() == null
+                || !LocalDateTime.now().isBefore(creditRequest.getExpiresAt())) {
+
+            // logs why the request cannot be marked as USED
+            logger.warn("[{}] MARK_USED | FAILED | Request ID={} | Reservation expired or missing expiry time",
+                    Thread.currentThread().getName(),
+                    creditRequestId);
+
+            throw new InvalidCreditRequestStateException(
+                    "Credit reservation has expired or has no expiry time");
+        }
+
+        logger.info("[{}] MARK_USED | WAITING FOR LOCK | Limit ID={}",
+                Thread.currentThread().getName(),
+                creditRequest.getCreditLimit().getId());
+
+        // locks the credit limit before updating the reserved and used amounts
+        CreditLimit creditLimit = creditLimitRepository
+                .findWithLockById(creditRequest.getCreditLimit().getId())
+                .orElseThrow(() ->
+                        new CreditLimitNotFoundException("Credit limit not found"));
+
+        logger.info("[{}] MARK_USED | LOCK ACQUIRED | Limit ID={}",
+                Thread.currentThread().getName(),
+                creditLimit.getId());
+
+        // gets the latest balance from the database
+        entityManager.refresh(creditLimit, LockModeType.PESSIMISTIC_WRITE);
 
         // removes the request amount from reserved exposure
         creditLimit.setReservedAmount(
@@ -580,7 +707,10 @@ public class CreditRequestService {
         );
 
         // Log the successful use of reserved capacity
-        logger.info("Credit request ID {} moved to USED", savedCreditRequest.getId());
+        logger.info("[{}] MARK_USED | SUCCESS | Request ID={} | Status={}",
+                Thread.currentThread().getName(),
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus());
 
         // returns the updated credit request
         return toResponse(savedCreditRequest);
@@ -590,11 +720,23 @@ public class CreditRequestService {
     @Transactional
     public CreditRequestResponse cancelCreditRequest(Long creditRequestId) {
 
-        // checks that the credit request exists
+        // logs the start of a cancellation attempt
+        logger.info("[{}] CANCEL | START | Request ID={}",
+                Thread.currentThread().getName(), creditRequestId);
+
+        // logs the attempt to acquire the request row lock
+        logger.info("[{}] CANCEL | WAITING FOR LOCK | Request ID={}",
+                Thread.currentThread().getName(), creditRequestId);
+
+        // locks the credit request so it cannot be canceled or changed twice at the same time
         CreditRequest creditRequest = creditRequestRepository
-                .findById(creditRequestId)
+                .findWithLockById(creditRequestId)
                 .orElseThrow(() ->
                         new CreditRequestNotFoundException("Credit request not found"));
+
+        // confirms the request row lock has been acquired
+        logger.info("[{}] CANCEL | LOCK ACQUIRED | Request ID={}",
+                Thread.currentThread().getName(), creditRequestId);
 
         institutionAccessService.requireInstitution(creditRequest.getCreditLimit().getFinancialInstitution().getId());
 
@@ -614,13 +756,31 @@ public class CreditRequestService {
         // or EXPIRED -> CANCELLED before reserved capacity is released
         validateStatusTransition(creditRequest, CreditRequestStatus.CANCELLED);
 
+        // logs the attempt to acquire the credit limit row lock
+        logger.info("[{}] CANCEL | WAITING FOR LOCK | Limit ID={}",
+                Thread.currentThread().getName(), creditRequest.getCreditLimit().getId());
 
-        CreditLimit creditLimit = creditRequest.getCreditLimit();
+        // locks the credit limit before releasing the reserved amount
+        CreditLimit creditLimit = creditLimitRepository
+                .findWithLockById(creditRequest.getCreditLimit().getId())
+                .orElseThrow(() ->
+                        new CreditLimitNotFoundException("Credit limit not found"));
+
+        // confirms the credit limit row lock has been acquired
+        logger.info("[{}] CANCEL | LOCK ACQUIRED | Limit ID={}",
+                Thread.currentThread().getName(), creditLimit.getId());
+
+        // gets the latest balance from the database
+        entityManager.refresh(creditLimit, LockModeType.PESSIMISTIC_WRITE);
 
         // makes sure reserved capacity cannot become negative
         // Do we have enough reservedAmount to remove this request amount?
         if (creditLimit.getReservedAmount()
                 .compareTo(creditRequest.getAmount()) < 0) {
+
+            // logs a cancellation that cannot release the requested amount
+            logger.warn("[{}] CANCEL | FAILED | Request ID={} | Insufficient reserved capacity",
+                    Thread.currentThread().getName(), creditRequestId);
 
             throw new InvalidCreditRequestOperationException(
                     "Reserved amount cannot become negative");
@@ -659,7 +819,10 @@ public class CreditRequestService {
         );
 
         // Log the successful cancellation
-        logger.info("Credit request ID {} moved to CANCELLED", savedCreditRequest.getId());
+        logger.info("[{}] CANCEL | SUCCESS | Request ID={} | Status={}",
+                Thread.currentThread().getName(),
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus());
 
         // returns the updated credit request
         return toResponse(savedCreditRequest);
@@ -669,11 +832,23 @@ public class CreditRequestService {
     @Transactional
     public CreditRequestResponse expireCreditRequest(Long creditRequestId) {
 
-        // checks that the credit request exists
+        // logs the start of an automatic expiry attempt
+        logger.info("[{}] EXPIRE | START | Request ID={}",
+                Thread.currentThread().getName(), creditRequestId);
+
+        // logs the attempt to acquire the request row lock
+        logger.info("[{}] EXPIRE | WAITING FOR LOCK | Request ID={}",
+                Thread.currentThread().getName(), creditRequestId);
+
+        // locks the credit request so it cannot be expired or changed twice
         CreditRequest creditRequest = creditRequestRepository
-                .findById(creditRequestId)
+                .findWithLockById(creditRequestId)
                 .orElseThrow(() ->
                         new CreditRequestNotFoundException("Credit request not found"));
+
+        // confirms the request row lock has been acquired
+        logger.info("[{}] EXPIRE | LOCK ACQUIRED | Request ID={}",
+                Thread.currentThread().getName(), creditRequestId);
 
         // checks that the current request status is allowed to move to EXPIRED
         // this prevents terminal requests such as USED or CANCELLED
@@ -682,16 +857,36 @@ public class CreditRequestService {
 
         // makes sure the reservation has an expiry time
         if (creditRequest.getExpiresAt() == null) {
+            // logs a missing expiry timestamp
+            logger.warn("[{}] EXPIRE | FAILED | Request ID={} | Missing expiry time",
+                    Thread.currentThread().getName(), creditRequestId);
             throw new InvalidCreditRequestStateException("Credit request does not have an expiry time");
         }
 
         // prevents the reservation from expiring before its expiry time
         if (LocalDateTime.now().isBefore(creditRequest.getExpiresAt())) {
+            // logs an expiry attempt made before the deadline
+            logger.warn("[{}] EXPIRE | FAILED | Request ID={} | Reservation has not expired yet",
+                    Thread.currentThread().getName(), creditRequestId);
             throw new InvalidCreditRequestStateException("Credit request cannot expire before its expiry time");
         }
 
-        // gets the credit limit connected to this reservation
-        CreditLimit creditLimit = creditRequest.getCreditLimit();
+        // logs the attempt to acquire the credit limit row lock
+        logger.info("[{}] EXPIRE | WAITING FOR LOCK | Limit ID={}",
+                Thread.currentThread().getName(), creditRequest.getCreditLimit().getId());
+
+        // locks the credit limit before releasing the expired reservation
+        CreditLimit creditLimit = creditLimitRepository
+                .findWithLockById(creditRequest.getCreditLimit().getId())
+                .orElseThrow(() ->
+                        new CreditLimitNotFoundException("Credit limit not found"));
+
+        // confirms the credit limit row lock has been acquired
+        logger.info("[{}] EXPIRE | LOCK ACQUIRED | Limit ID={}",
+                Thread.currentThread().getName(), creditLimit.getId());
+
+        // gets the latest balance from the database
+        entityManager.refresh(creditLimit, LockModeType.PESSIMISTIC_WRITE);
 
         // makes sure reserved capacity cannot become negative
         // Do we have enough reservedAmount to remove this request amount?
@@ -699,6 +894,9 @@ public class CreditRequestService {
         // that would make the reserved amount negative
         if (creditLimit.getReservedAmount()
                 .compareTo(creditRequest.getAmount()) < 0) {
+            // logs an expiry that cannot release the requested amount
+            logger.warn("[{}] EXPIRE | FAILED | Request ID={} | Insufficient reserved capacity",
+                    Thread.currentThread().getName(), creditRequestId);
             throw new InvalidCreditRequestOperationException("Reserved amount cannot become negative");
         }
 
@@ -751,10 +949,10 @@ public class CreditRequestService {
         );
 
         // logs the successful automatic expiry
-        logger.info(
-                "Credit request ID {} expired and reserved capacity was released",
-                savedCreditRequest.getId()
-        );
+        logger.info("[{}] EXPIRE | SUCCESS | Request ID={} | Status={} | Reserved capacity released",
+                Thread.currentThread().getName(),
+                savedCreditRequest.getId(),
+                savedCreditRequest.getStatus());
 
         // returns the updated credit request
         return toResponse(savedCreditRequest);

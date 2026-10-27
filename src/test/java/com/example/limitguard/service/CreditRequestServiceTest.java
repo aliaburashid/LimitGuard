@@ -18,6 +18,7 @@ import com.example.limitguard.repository.ApprovalDecisionRepository;
 import com.example.limitguard.repository.AuditLogRepository;
 import com.example.limitguard.repository.CreditLimitRepository;
 import com.example.limitguard.repository.CreditRequestRepository;
+import com.example.limitguard.repository.CorporateGroupMembershipRepository;
 import com.example.limitguard.security.MyUserDetails;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +38,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+
 // tells JUnit to use Mockito when running this test class
 // Mockito helps us create fake dependencies without using a real database
 @ExtendWith(MockitoExtension.class)
@@ -49,6 +53,11 @@ public class CreditRequestServiceTest {
     // creates a fake credit limit repository
     @Mock
     private CreditLimitRepository creditLimitRepository;
+
+    // creates a fake EntityManager for refreshing locked entities
+    // prevents the test from accessing a real database
+    @Mock
+    private EntityManager entityManager;
 
     // creates a fake audit log repository
     @Mock
@@ -66,9 +75,16 @@ public class CreditRequestServiceTest {
     @Mock
     private CreditRequestEventService creditRequestEventService;
 
+    // creates a fake corporate group membership repository
+    // allows credit reservation tests to check group membership
+    // without connecting to a real database
+    @Mock
+    private CorporateGroupMembershipRepository corporateGroupMembershipRepository;
+
     // creates the real service and injects the fake dependencies
     @Spy
-    private InstitutionAccessService institutionAccessService = new InstitutionAccessService();
+    private InstitutionAccessService institutionAccessService =
+            new InstitutionAccessService();
 
     @InjectMocks
     private CreditRequestService creditRequestService;
@@ -89,9 +105,11 @@ public class CreditRequestServiceTest {
         counterparty.setStatus(CounterpartyStatus.ACTIVE);
 
         creditLimit = new CreditLimit();
+
         FinancialInstitution institution = new FinancialInstitution();
         institution.setId(1L);
         institution.setName("Test Bank");
+
         creditLimit.setFinancialInstitution(institution);
         creditLimit.setId(3L);
         creditLimit.setCounterparty(counterparty);
@@ -105,6 +123,7 @@ public class CreditRequestServiceTest {
         requester.setLastName("Requester");
         requester.setRole(UserRole.RELATIONSHIP_MANAGER);
         requester.setFinancialInstitution(institution);
+
         loginAs(requester);
 
         creditRequest = new CreditRequest();
@@ -135,11 +154,10 @@ public class CreditRequestServiceTest {
         );
     }
 
-
     // It divides each test into three simple steps:
-    //Arrange — Prepare everything needed for the test.
-    //Act — Call the method you want to test.
-    //Assert — Check whether the result is what you expected.
+    // Arrange — Prepare everything needed for the test.
+    // Act — Call the method you want to test.
+    // Assert — Check whether the result is what you expected.
 
 
     // test that a request within available headroom reserves credit capacity
@@ -152,7 +170,8 @@ public class CreditRequestServiceTest {
         request.setCreditLimitId(3L);
         request.setAmount(new BigDecimal("100000"));
 
-        when(creditLimitRepository.findById(3L))
+        // simulate finding the credit limit with a pessimistic lock
+        when(creditLimitRepository.findWithLockById(3L))
                 .thenReturn(Optional.of(creditLimit));
 
         when(creditRequestRepository.save(any(CreditRequest.class)))
@@ -182,6 +201,7 @@ public class CreditRequestServiceTest {
         verify(creditLimitRepository).save(creditLimit);
     }
 
+
     // test that a request exceeding available headroom is rejected
     // expect InsufficientHeadroomException and no credit reservation
     @Test
@@ -192,7 +212,8 @@ public class CreditRequestServiceTest {
         request.setCreditLimitId(3L);
         request.setAmount(new BigDecimal("800000"));
 
-        when(creditLimitRepository.findById(3L))
+        // simulate finding the credit limit with a pessimistic lock
+        when(creditLimitRepository.findWithLockById(3L))
                 .thenReturn(Optional.of(creditLimit));
 
         // act and assert: check that the request is rejected
@@ -212,6 +233,7 @@ public class CreditRequestServiceTest {
         verify(creditLimitRepository, never()).save(any());
     }
 
+
     // test that requests above 500000 require Risk Officer approval
     // expect PENDING_APPROVAL without reserving credit capacity
     @Test
@@ -222,7 +244,8 @@ public class CreditRequestServiceTest {
         request.setCreditLimitId(3L);
         request.setAmount(new BigDecimal("600000"));
 
-        when(creditLimitRepository.findById(3L))
+        // simulate finding the credit limit with a pessimistic lock
+        when(creditLimitRepository.findWithLockById(3L))
                 .thenReturn(Optional.of(creditLimit));
 
         when(creditRequestRepository.save(any(CreditRequest.class)))
@@ -254,6 +277,7 @@ public class CreditRequestServiceTest {
         verify(creditRequestRepository).save(any(CreditRequest.class));
     }
 
+
     // test that cancelling a reserved request releases its credit capacity
     // expect CANCELLED and reserved exposure to decrease by 100000
     @Test
@@ -262,8 +286,13 @@ public class CreditRequestServiceTest {
         // arrange: the existing request belongs to the logged-in user
         loginAs(requester);
 
-        when(creditRequestRepository.findById(5L))
+        // simulate locking the credit request before cancellation
+        when(creditRequestRepository.findWithLockById(5L))
                 .thenReturn(Optional.of(creditRequest));
+
+        // simulate locking the credit limit before releasing exposure
+        lenient().when(creditLimitRepository.findWithLockById(3L))
+                .thenReturn(Optional.of(creditLimit));
 
         when(creditRequestRepository.save(any(CreditRequest.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -284,8 +313,9 @@ public class CreditRequestServiceTest {
         verify(creditLimitRepository).save(creditLimit);
     }
 
+
     // test that a used credit request cannot be cancelled
-    // expect IllegalArgumentException and no exposure changes
+    // expect InvalidCreditRequestStateException and no exposure changes
     @Test
     void shouldRejectCancellationOfUsedRequest() {
 
@@ -294,12 +324,14 @@ public class CreditRequestServiceTest {
 
         loginAs(requester);
 
-        when(creditRequestRepository.findById(5L))
+        // simulate finding the request with a pessimistic lock
+        when(creditRequestRepository.findWithLockById(5L))
                 .thenReturn(Optional.of(creditRequest));
 
         // act and assert: check that cancellation is rejected
-        assertThrows(InvalidCreditRequestStateException.class, () ->
-                creditRequestService.cancelCreditRequest(5L)
+        assertThrows(
+                InvalidCreditRequestStateException.class,
+                () -> creditRequestService.cancelCreditRequest(5L)
         );
 
         // assert: the request and exposure remain unchanged
@@ -315,6 +347,7 @@ public class CreditRequestServiceTest {
         verify(creditLimitRepository, never()).save(any());
     }
 
+
     // test that a user cannot cancel another user's credit request
     // expect AccessDeniedException without changing the request
     @Test
@@ -328,7 +361,8 @@ public class CreditRequestServiceTest {
 
         loginAs(otherUser);
 
-        when(creditRequestRepository.findById(5L))
+        // simulate finding the request with a pessimistic lock
+        when(creditRequestRepository.findWithLockById(5L))
                 .thenReturn(Optional.of(creditRequest));
 
         // act and assert: check that access is denied
@@ -359,8 +393,8 @@ public class CreditRequestServiceTest {
         // set the request status to pending approval
         creditRequest.setStatus(CreditRequestStatus.PENDING_APPROVAL);
 
-        // simulate finding the request in the database
-        when(creditRequestRepository.findById(5L))
+        // simulate finding the request with a pessimistic lock
+        when(creditRequestRepository.findWithLockById(5L))
                 .thenReturn(Optional.of(creditRequest));
 
         // act and assert: the requester cannot approve their own request
@@ -387,7 +421,6 @@ public class CreditRequestServiceTest {
     }
 
 
-
     // test that a different Risk Officer can approve a pending credit request
     // expect the request to become RESERVED and exposure to increase correctly
     @Test
@@ -406,9 +439,13 @@ public class CreditRequestServiceTest {
         creditRequest.setStatus(CreditRequestStatus.PENDING_APPROVAL);
         creditRequest.setAmount(new BigDecimal("600000.25"));
 
-        // simulate finding the pending request
-        when(creditRequestRepository.findById(5L))
+        // simulate finding the pending request with a pessimistic lock
+        when(creditRequestRepository.findWithLockById(5L))
                 .thenReturn(Optional.of(creditRequest));
+
+        // simulate locking the credit limit before reserving exposure
+        lenient().when(creditLimitRepository.findWithLockById(3L))
+                .thenReturn(Optional.of(creditLimit));
 
         // simulate saving the updated request
         when(creditRequestRepository.save(any()))
@@ -455,7 +492,6 @@ public class CreditRequestServiceTest {
     }
 
 
-
     // test that a scheduled task can expire a credit request automatically
     // expect EXPIRED and reserved exposure to be released without a logged-in user
     @Test
@@ -470,9 +506,13 @@ public class CreditRequestServiceTest {
                 java.time.LocalDateTime.now().minusMinutes(1)
         );
 
-        // simulate finding the expired request
-        when(creditRequestRepository.findById(5L))
+        // simulate finding the expired request with a pessimistic lock
+        when(creditRequestRepository.findWithLockById(5L))
                 .thenReturn(Optional.of(creditRequest));
+
+        // simulate locking the credit limit before releasing exposure
+        lenient().when(creditLimitRepository.findWithLockById(3L))
+                .thenReturn(Optional.of(creditLimit));
 
         // simulate saving the updated request
         when(creditRequestRepository.save(any()))
@@ -502,7 +542,6 @@ public class CreditRequestServiceTest {
     }
 
 
-
     // test that a Relationship Manager cannot use another bank's credit limit
     // expect AccessDeniedException and no credit request to be saved
     @Test
@@ -530,8 +569,8 @@ public class CreditRequestServiceTest {
         request.setCreditLimitId(4L);
         request.setAmount(new BigDecimal("100000"));
 
-        // simulate finding the foreign credit limit
-        when(creditLimitRepository.findById(4L))
+        // simulate finding the foreign credit limit with a pessimistic lock
+        when(creditLimitRepository.findWithLockById(4L))
                 .thenReturn(Optional.of(foreignCreditLimit));
 
         // act and assert: the request should be rejected
@@ -551,5 +590,4 @@ public class CreditRequestServiceTest {
                         .compareTo(foreignCreditLimit.getReservedAmount())
         );
     }
-
 }
