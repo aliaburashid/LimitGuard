@@ -29,6 +29,8 @@ import java.math.BigDecimal;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class CreditLimitService {
@@ -47,6 +49,10 @@ public class CreditLimitService {
 
     @Autowired
     private InstitutionAccessService institutionAccessService;
+
+    // Sends real-time notifications when credit limits are updated
+    @Autowired
+    private CreditRequestEventService creditRequestEventService;
 
     private static final Logger logger =
             LoggerFactory.getLogger(CreditLimitService.class);
@@ -179,9 +185,12 @@ public class CreditLimitService {
         );
     }
 
+
     // updates an existing credit limit
     @Transactional
-    public CreditLimitResponse updateCreditLimit(Long creditLimitId, UpdateCreditLimitRequest updateCreditLimitRequest) {
+    public CreditLimitResponse updateCreditLimit(
+            Long creditLimitId,
+            UpdateCreditLimitRequest updateCreditLimitRequest) {
 
         logger.info("[{}] UPDATE_LIMIT | START | Limit ID={}",
                 Thread.currentThread().getName(),
@@ -197,27 +206,36 @@ public class CreditLimitService {
                 .orElseThrow(() ->
                         new CreditLimitNotFoundException("Credit limit not found"));
 
-        logger.warn("[{}] UPDATE_LIMIT | FAILED | Limit ID={} | New limit below current exposure",
+        logger.info("[{}] UPDATE_LIMIT | LOCK ACQUIRED | Limit ID={}",
                 Thread.currentThread().getName(),
                 creditLimitId);
 
         // deny access if the credit limit belongs to another bank
-        institutionAccessService.requireInstitution(creditLimit.getFinancialInstitution().getId());
+        institutionAccessService.requireInstitution(
+                creditLimit.getFinancialInstitution().getId()
+        );
 
         // keeps the old limit amount for the audit log
         BigDecimal oldLimitAmount = creditLimit.getLimitAmount();
 
         // calculates the counterparty current exposure
-        BigDecimal currentExposure = creditLimit.getUsedAmount().add(creditLimit.getReservedAmount());
+        BigDecimal currentExposure = creditLimit.getUsedAmount()
+                .add(creditLimit.getReservedAmount());
 
         // prevents the new limit from being lower than the current exposure
         // compareTo() because its BigDecimal
         if (updateCreditLimitRequest.getLimitAmount()
                 .compareTo(currentExposure) < 0) {
 
+            // logs the failed credit limit reduction
+            logger.warn("[{}] UPDATE_LIMIT | FAILED | Limit ID={} | New limit below current exposure",
+                    Thread.currentThread().getName(),
+                    creditLimitId);
+
             throw new InvalidCreditLimitReductionException(
                     "Credit limit cannot be lower than current exposure");
         }
+
         // updates only the approved limit amount
         creditLimit.setLimitAmount(updateCreditLimitRequest.getLimitAmount());
 
@@ -230,8 +248,48 @@ public class CreditLimitService {
         // records the change in the audit log
         // save which bank owns this credit limit
         recordAuditLog(
-                "CREDIT_LIMIT_UPDATED", updatedCreditLimit,
-                "Credit limit changed from " + oldLimitAmount + " to " + updatedCreditLimit.getLimitAmount(), currentUser
+                "CREDIT_LIMIT_UPDATED",
+                updatedCreditLimit,
+                "Credit limit changed from " + oldLimitAmount
+                        + " to " + updatedCreditLimit.getLimitAmount(),
+                currentUser
+        );
+
+        // save the information needed for the SSE notification
+        // these values are collected while the transaction is still active
+        Long institutionId = updatedCreditLimit.getFinancialInstitution().getId();
+        Long updatedCreditLimitId = updatedCreditLimit.getId();
+        BigDecimal newLimitAmount = updatedCreditLimit.getLimitAmount();
+
+        // register the SSE notification to run after a successful commit
+        // if the database transaction rolls back, no notification is sent
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+
+                        // notify connected users about the credit limit update
+                        // only users belonging to the same bank receive this event
+                        try {
+                            creditRequestEventService.publishCreditLimitUpdate(
+                                    institutionId,
+                                    updatedCreditLimitId,
+                                    oldLimitAmount,
+                                    newLimitAmount
+                            );
+
+                        } catch (Exception exception) {
+
+                            // logs an SSE failure without undoing the saved credit limit
+                            logger.error(
+                                    "Failed to publish credit limit SSE for limit ID {}",
+                                    updatedCreditLimitId,
+                                    exception
+                            );
+                        }
+                    }
+                }
         );
 
         logger.info("[{}] UPDATE_LIMIT | SUCCESS | Limit ID={} | New Amount={}",
@@ -241,4 +299,5 @@ public class CreditLimitService {
 
         return toResponse(updatedCreditLimit);
     }
+
 }

@@ -27,6 +27,9 @@ import com.example.limitguard.model.CreditLimit;
 import com.example.limitguard.repository.CorporateGroupMembershipRepository;
 import com.example.limitguard.repository.CreditLimitRepository;
 
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,6 +70,10 @@ public class GroupCreditLimitService {
     // handles database operations for individual credit limits
     @Autowired
     private CreditLimitRepository creditLimitRepository;
+
+    // Sends real-time notifications when corporate group credit limits change
+    @Autowired
+    private CreditRequestEventService creditRequestEventService;
 
     //-----------------------------------------------------------------
 
@@ -244,6 +251,7 @@ public class GroupCreditLimitService {
     }
 
 
+
     // updates an existing group credit limit
     @Transactional
     public GroupCreditLimitResponse updateGroupCreditLimit(
@@ -266,7 +274,7 @@ public class GroupCreditLimitService {
         logger.info("[{}] GROUP LIMIT UPDATE | LOCK ACQUIRED | Group Limit ID={}",
                 Thread.currentThread().getName(), id);
 
-       // security check to make sure the group credit limit belongs to the bank of the currently logged-in user
+        // security check to make sure the group credit limit belongs to the bank of the currently logged-in user
         institutionAccessService.requireInstitution(
                 groupCreditLimit.getFinancialInstitution().getId()
         );
@@ -279,7 +287,6 @@ public class GroupCreditLimitService {
                     "Credit limit amount must be greater than zero"
             );
         }
-
 
         // gets the total money used and reserved by the group
         BigDecimal currentExposure = calculateGroupExposure(
@@ -318,6 +325,44 @@ public class GroupCreditLimitService {
                         + " for corporate group "
                         + updatedLimit.getCorporateGroup().getName(),
                 currentUser
+        );
+
+        // save the information needed for the SSE notification
+        // collect these values while the database transaction is active
+        Long groupCreditLimitId = updatedLimit.getId();
+        Long corporateGroupId = updatedLimit.getCorporateGroup().getId();
+        BigDecimal newLimitAmount = updatedLimit.getAmount();
+
+        // register the SSE notification to run after a successful commit
+        // if the database transaction rolls back, no notification is sent
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+
+                        // notify connected users when the group credit limit changes
+                        // only clients belonging to the same financial institution receive the event
+                        try {
+                            creditRequestEventService.publishGroupCreditLimitUpdate(
+                                    institutionId,
+                                    groupCreditLimitId,
+                                    corporateGroupId,
+                                    oldLimitAmount,
+                                    newLimitAmount
+                            );
+
+                        } catch (Exception exception) {
+
+                            // logs an SSE failure without affecting the saved group credit limit
+                            logger.error(
+                                    "Failed to publish group credit limit SSE for ID {}",
+                                    groupCreditLimitId,
+                                    exception
+                            );
+                        }
+                    }
+                }
         );
 
         // returns the updated group credit limit details

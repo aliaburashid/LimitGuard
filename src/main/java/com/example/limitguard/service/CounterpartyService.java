@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.example.limitguard.exception.CounterpartyNotFoundException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class CounterpartyService {
@@ -27,6 +29,10 @@ public class CounterpartyService {
 
     @Autowired
     private AuditLogRepository auditLogRepository;
+
+    // Sends real-time notifications when a counterparty status changes
+    @Autowired
+    private CreditRequestEventService creditRequestEventService;
 
     //---------------------------------------------------------------------------------
 
@@ -219,9 +225,12 @@ public class CounterpartyService {
         );
     }
 
+
     // updates counterparty status
     @Transactional
-    public CounterpartyResponse updateCounterpartyStatus(Long counterpartyId, CounterpartyStatusRequest statusRequest) {
+    public CounterpartyResponse updateCounterpartyStatus(
+            Long counterpartyId,
+            CounterpartyStatusRequest statusRequest) {
 
         // finds the counterparty by id
         Counterparty counterparty = counterpartyRepository.findById(counterpartyId)
@@ -244,8 +253,49 @@ public class CounterpartyService {
         // records the status change
         // save which bank changed the counterparty status
         recordAuditLog(
-                "COUNTERPARTY_STATUS_UPDATED", updatedCounterparty,
-                "Counterparty status changed from " + oldStatus + " to " + updatedCounterparty.getStatus(), currentUser
+                "COUNTERPARTY_STATUS_UPDATED",
+                updatedCounterparty,
+                "Counterparty status changed from " + oldStatus
+                        + " to " + updatedCounterparty.getStatus(),
+                currentUser
+        );
+
+        // save the information needed for the SSE notification
+        // The institution ID identifies which bank should receive the update
+        Long institutionId = currentUser.getFinancialInstitution().getId();
+
+        // Save the counterparty ID and new status before the transaction commits
+        Long updatedCounterpartyId = updatedCounterparty.getId();
+        CounterpartyStatus newStatus = updatedCounterparty.getStatus();
+
+        // register the SSE notification to run after a successful commit
+        // if the database transaction rolls back, no notification will be sent
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+
+                        // notify connected users when the counterparty status changes
+                        // only users belonging to the same bank receive the notification
+                        try {
+                            creditRequestEventService.publishCounterpartyStatusUpdate(
+                                    institutionId,
+                                    updatedCounterpartyId,
+                                    newStatus
+                            );
+
+                        } catch (Exception exception) {
+
+                            // Log the SSE failure without affecting the saved status change
+                            System.err.println(
+                                    "Failed to publish counterparty SSE for counterparty ID "
+                                            + updatedCounterpartyId
+                                            + ": " + exception.getMessage()
+                            );
+                        }
+                    }
+                }
         );
 
         // converts the Counterparty entity into the response DTO
