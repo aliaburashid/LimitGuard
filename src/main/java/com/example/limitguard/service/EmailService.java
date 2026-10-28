@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Async;
 
 // Handles emails sent by LimitGuard
 @Service
@@ -194,7 +195,15 @@ public class EmailService {
 
 
     // Sends an email when a credit request is approved
+    @Async("notificationExecutor")
     public void SendCreditRequestApprovedEmail(String email, Long creditRequestId) {
+
+        // Shows which background thread is sending this approval email
+        System.out.println(
+                "APPROVAL EMAIL | Thread: " + Thread.currentThread().getName()
+                        + " | Request ID: " + creditRequestId
+        );
+
         try {
             // create a new email
             MimeMessage message = mailSender.createMimeMessage();
@@ -208,45 +217,60 @@ public class EmailService {
             helper.setSubject("Your LimitGuard credit request was approved");
 
             // set the email message
+
             String emailMessage = """
                 <html>
                 <body style="margin: 0; padding: 0; background-color: #f4f6f8;
                              font-family: Arial, sans-serif;">
-
+            
                     <div style="max-width: 600px; margin: 40px auto;
                                 background-color: white; padding: 40px;
                                 border-radius: 10px;">
-
+            
                         <h1 style="color: #1f2937;">
                             LimitGuard
                         </h1>
-
+            
+                        <hr style="border: none; border-top: 1px solid #e5e7eb;
+                                   margin: 24px 0;">
+            
+                        <p style="color: #15803d; font-weight: bold;">
+                            &#10003; Request approved
+                        </p>
+            
                         <h2 style="color: #1f2937;">
                             Credit request approved
                         </h2>
-
+            
                         <p style="color: #4b5563; line-height: 1.6;">
-                            Your credit request #%s has been approved
-                            by a Risk Officer.
+                            Your credit request <strong>#%s</strong> has been
+                            approved by a Risk Officer.
                         </p>
-
-                        <p style="color: #4b5563; line-height: 1.6;">
-                            The requested credit capacity has now been reserved.
-                        </p>
-
-                        <hr style="border: none;
-                                   border-top: 1px solid #e5e7eb;
+            
+                        <div style="background-color: #f0fdf4; padding: 20px;
+                                    border-radius: 6px; margin: 24px 0;">
+            
+                            <p style="color: #166534; font-weight: bold; margin-top: 0;">
+                                Credit capacity reserved
+                            </p>
+            
+                            <p style="color: #166534; line-height: 1.6; margin-bottom: 0;">
+                                The requested credit capacity has now been reserved.
+                            </p>
+                        </div>
+            
+                        <hr style="border: none; border-top: 1px solid #e5e7eb;
                                    margin: 30px 0;">
-
+            
                         <p style="color: #9ca3af; font-size: 12px;">
-                            LimitGuard - Credit Limit & Exposure Management
+                            LimitGuard - Credit Limit &amp; Exposure Management
                         </p>
-
+            
                     </div>
-
                 </body>
                 </html>
                 """.formatted(creditRequestId);
+
 
             // true means the email message contains HTML
             helper.setText(emailMessage, true);
@@ -263,7 +287,15 @@ public class EmailService {
 
 
     // Sends an email when a credit request is rejected
+    @Async("notificationExecutor")
     public void SendCreditRequestRejectedEmail(String email, Long creditRequestId, String reason) {
+
+        // Shows which background thread is sending this rejection email.
+        System.out.println(
+                "REJECTION EMAIL | Thread: " + Thread.currentThread().getName()
+                        + " | Request ID: " + creditRequestId
+        );
+
         try {
 
             // create a new email
@@ -278,42 +310,56 @@ public class EmailService {
             helper.setSubject("Your LimitGuard credit request was rejected");
 
             // set the email message
+
             String emailMessage = """
                 <html>
                 <body style="margin: 0; padding: 0; background-color: #f4f6f8;
                              font-family: Arial, sans-serif;">
-
+            
                     <div style="max-width: 600px; margin: 40px auto;
                                 background-color: white; padding: 40px;
                                 border-radius: 10px;">
-
+            
                         <h1 style="color: #1f2937;">
                             LimitGuard
                         </h1>
-
+            
+                        <hr style="border: none; border-top: 1px solid #e5e7eb;
+                                   margin: 24px 0;">
+            
+                        <p style="color: #b91c1c; font-weight: bold;">
+                            &#10005; Request rejected
+                        </p>
+            
                         <h2 style="color: #1f2937;">
                             Credit request rejected
                         </h2>
-
+            
                         <p style="color: #4b5563; line-height: 1.6;">
-                            Your credit request #%s has been rejected
-                            by a Risk Officer.
+                            Your credit request <strong>#%s</strong> has been
+                            rejected by a Risk Officer.
                         </p>
-
-                        <p style="color: #4b5563; line-height: 1.6;">
-                            <strong>Reason:</strong> %s
-                        </p>
-
-                        <hr style="border: none;
-                                   border-top: 1px solid #e5e7eb;
+            
+                        <div style="background-color: #fef2f2; padding: 20px;
+                                    border-radius: 6px; margin: 24px 0;">
+            
+                            <p style="color: #991b1b; font-weight: bold; margin-top: 0;">
+                                Reason for rejection
+                            </p>
+            
+                            <p style="color: #991b1b; line-height: 1.6; margin-bottom: 0;">
+                                %s
+                            </p>
+                        </div>
+            
+                        <hr style="border: none; border-top: 1px solid #e5e7eb;
                                    margin: 30px 0;">
-
+            
                         <p style="color: #9ca3af; font-size: 12px;">
-                            LimitGuard - Credit Limit & Exposure Management
+                            LimitGuard - Credit Limit &amp; Exposure Management
                         </p>
-
+            
                     </div>
-
                 </body>
                 </html>
                 """.formatted(creditRequestId, reason);
@@ -332,7 +378,17 @@ public class EmailService {
     }
 
     // Sends an email when a reserved credit request expires
+    // @Async runs the email task on a background thread
+    // so the expiry scheduler does not wait for the email to be sent
+    @Async("notificationExecutor")
     public void SendCreditRequestExpiredEmail(String email, Long creditRequestId) {
+
+        // Shows which background thread is sending the expiry email
+        System.out.println(
+                "EXPIRY EMAIL | Thread: " + Thread.currentThread().getName()
+                        + " | Request ID: " + creditRequestId
+        );
+
         try {
 
             // create a new email
