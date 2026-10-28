@@ -33,3 +33,10 @@ build/
 .vscode/
 src/main/resources/application.properties
 uploads/
+
+# python environment
+ml-service/.venv/
+
+# python cache
+__pycache__/
+*.pyc
