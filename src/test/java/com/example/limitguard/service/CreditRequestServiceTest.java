@@ -30,6 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -132,12 +133,32 @@ public class CreditRequestServiceTest {
         creditRequest.setCreditLimit(creditLimit);
         creditRequest.setRequester(requester);
         creditRequest.setStatus(CreditRequestStatus.RESERVED);
+
+        // Mockito calls the service directly without Spring's transactional proxy.
+        // Enable synchronization so the service can register afterCommit callbacks.
+        TransactionSynchronizationManager.initSynchronization();
+
+        // The create workflow first looks up the limit before locking it.
+        // Use lenient mocks because not every test creates a credit request.
+        lenient().when(creditLimitRepository.findById(3L))
+                .thenReturn(Optional.of(creditLimit));
+
+        // The sample counterparty is not a member of a corporate group.
+        lenient().when(corporateGroupMembershipRepository.findByCounterpartyId(2L))
+                .thenReturn(Optional.empty());
     }
 
-    // clears the logged-in user after each test
+    // clears the logged-in user and simulated transaction synchronization after each test
     @AfterEach
     void tearDown() {
-        SecurityContextHolder.clearContext();
+        try {
+            // Discard callbacks registered by the test; no real database commit occurs.
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.clearSynchronization();
+            }
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 
     // sets up a fake logged-in user for methods that check authentication
@@ -569,8 +590,8 @@ public class CreditRequestServiceTest {
         request.setCreditLimitId(4L);
         request.setAmount(new BigDecimal("100000"));
 
-        // simulate finding the foreign credit limit with a pessimistic lock
-        when(creditLimitRepository.findWithLockById(4L))
+        // The first lookup checks bank ownership before acquiring a lock.
+        when(creditLimitRepository.findById(4L))
                 .thenReturn(Optional.of(foreignCreditLimit));
 
         // act and assert: the request should be rejected
