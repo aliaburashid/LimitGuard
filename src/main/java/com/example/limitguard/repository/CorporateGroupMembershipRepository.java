@@ -18,4 +18,6 @@ public interface CorporateGroupMembershipRepository extends JpaRepository<Corpor
 
     // checks whether a counterparty is already assigned to a group
     boolean existsByCounterpartyId(Long counterpartyId);
+
+
 }
