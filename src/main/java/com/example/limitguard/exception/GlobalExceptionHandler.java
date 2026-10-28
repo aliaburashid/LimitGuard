@@ -197,7 +197,8 @@ public class GlobalExceptionHandler {
             CreditRequestNotFoundException.class,
             CorporateGroupNotFoundException.class,
             MembershipNotFoundException.class,
-            GroupCreditLimitNotFoundException.class
+            GroupCreditLimitNotFoundException.class,
+            FinancialProfileNotFoundException.class
     })
     public ResponseEntity<ErrorResponse> handleNotFound(
             RuntimeException exception,
@@ -239,6 +240,32 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Unable to send email",
+                request
+        );
+    }
+
+    // handles failures when calling the python ml service
+    @ExceptionHandler(MlPredictionException.class)
+    public ResponseEntity<ErrorResponse> handleMlPredictionException(
+            MlPredictionException exception,
+            HttpServletRequest request) {
+
+        return buildErrorResponse(
+                HttpStatus.BAD_GATEWAY,
+                "Unable to obtain ML risk prediction",
+                request
+        );
+    }
+
+    // handles failures when running parallel risk assessments
+    @ExceptionHandler(ParallelRiskAssessmentException.class)
+    public ResponseEntity<ErrorResponse> handleParallelRiskAssessmentException(
+            ParallelRiskAssessmentException exception,
+            HttpServletRequest request) {
+
+        return buildErrorResponse(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Unable to complete parallel risk assessment",
                 request
         );
     }
