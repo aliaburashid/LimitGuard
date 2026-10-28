@@ -220,12 +220,22 @@ public class GlobalExceptionHandler {
             IOException exception,
             HttpServletRequest request) {
 
+        // Check whether the error came from our SSE endpoint.
+        if (request.getRequestURI().equals("/api/credit-requests/events")) {
+
+            // An SSE connection may have closed or failed.
+            // Do not try to send our normal JSON ErrorResponse.
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+        }
+
+        // For other IOExceptions, keep the existing error response.
         return buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Unable to save profile picture",
                 request
         );
     }
+
 
     /**
      * Handles email delivery failures.

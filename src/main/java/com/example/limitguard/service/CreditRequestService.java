@@ -38,6 +38,8 @@ import java.util.Optional;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class CreditRequestService {
@@ -197,6 +199,7 @@ public class CreditRequestService {
             );
         }
     }
+
 
     // Creates a new credit request for a counterparty
     @Transactional
@@ -360,7 +363,7 @@ public class CreditRequestService {
                 savedCreditRequest.getId(),
                 savedCreditRequest.getStatus());
 
-        // STEP 9: If credit was reserved immediately, record and notify
+        // STEP 9: If credit was reserved immediately, record the reservation
         if (savedCreditRequest.getStatus() == CreditRequestStatus.RESERVED) {
 
             // Record the reservation in the audit log
@@ -370,18 +373,49 @@ public class CreditRequestService {
                     "Reserved credit capacity of " + savedCreditRequest.getAmount(),
                     requester
             );
-
-            // Notify connected users through SSE
-            creditRequestEventService.publishStatusUpdate(
-                    creditLimit.getFinancialInstitution().getId(),
-                    savedCreditRequest.getId(),
-                    savedCreditRequest.getStatus()
-            );
         }
+
+        // STEP 10: Save the information needed for the SSE notification
+        // This applies to both RESERVED and PENDING_APPROVAL requests
+        Long institutionId = creditLimit.getFinancialInstitution().getId();
+        Long requestId = savedCreditRequest.getId();
+        CreditRequestStatus status = savedCreditRequest.getStatus();
+
+        // STEP 11: Register the SSE notification to run after a successful commit
+        // This prevents notifying users about requests that were rolled back
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+
+                        // STEP 12: Notify connected users when a new request is created
+                        // RESERVED means the credit was reserved immediately
+                        // PENDING_APPROVAL means a Risk Officer must review the request
+                        // Only connected users from the same bank receive this event
+                        try {
+                            creditRequestEventService.publishStatusUpdate(
+                                    institutionId,
+                                    requestId,
+                                    status
+                            );
+                        } catch (Exception exception) {
+
+                            // Log an SSE failure without affecting the saved request
+                            logger.error(
+                                    "Failed to publish creation SSE for credit request ID {}",
+                                    requestId,
+                                    exception
+                            );
+                        }
+                    }
+                }
+        );
 
         // Return the created request to the frontend
         return toResponse(savedCreditRequest);
     }
+
 
     // calculates how much headroom is available right now
     // headroom = total limit - used exposure - reserved exposure
@@ -644,18 +678,33 @@ public class CreditRequestService {
                 getCurrentLoggedInUser()
         );
 
-        // STEP 10: Send an approval email to the person who created the request
-        emailService.SendCreditRequestApprovedEmail(
-                savedCreditRequest.getRequester().getEmail(),
-                savedCreditRequest.getId()
-        );
+        // STEP 10: Get the information needed for notifications.
+        String email = savedCreditRequest.getRequester().getEmail();
+        Long requestId = savedCreditRequest.getId();
+        Long institutionId = creditLimit.getFinancialInstitution().getId();
+        CreditRequestStatus status = savedCreditRequest.getStatus();
 
-        // STEP 11: Notify connected clients about the new RESERVED status
-        // Only clients from the same bank receive the update
-        creditRequestEventService.publishStatusUpdate(
-                creditLimit.getFinancialInstitution().getId(),
-                savedCreditRequest.getId(),
-                savedCreditRequest.getStatus()
+        // STEP 11: Wait until the database transaction successfully commits.
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+
+                        // Send the approval email using a background thread.
+                        emailService.SendCreditRequestApprovedEmail(
+                                email,
+                                requestId
+                        );
+
+                        // Send the new status to connected SSE clients.
+                        creditRequestEventService.publishStatusUpdate(
+                                institutionId,
+                                requestId,
+                                status
+                        );
+                    }
+                }
         );
 
         logger.info("[{}] APPROVE | SUCCESS | Request ID={} | Status={}",
@@ -727,19 +776,37 @@ public class CreditRequestService {
                 getCurrentLoggedInUser()
         );
 
-        // sends the rejection notification to the user who created the request
-        emailService.SendCreditRequestRejectedEmail(
-                savedCreditRequest.getRequester().getEmail(),
-                savedCreditRequest.getId(),
-                reason
-        );
+        // save the information needed for the notifications
+        String email = savedCreditRequest.getRequester().getEmail();
+        Long requestId = savedCreditRequest.getId();
+        Long institutionId = creditRequest.getCreditLimit().getFinancialInstitution().getId();
+        CreditRequestStatus status = savedCreditRequest.getStatus();
+        String rejectionReason = reason;
 
-        // sends the new REJECTED status to clients listening to the SSE stream
-        // only clients from the same bank receive the update
-        creditRequestEventService.publishStatusUpdate(
-                creditRequest.getCreditLimit().getFinancialInstitution().getId(),
-                savedCreditRequest.getId(),
-                savedCreditRequest.getStatus()
+        // register a task that runs after the database transaction commits
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+
+                        // Send the rejection email using a background worker thread
+                        // @Async("notificationExecutor") is already on this email method
+                        emailService.SendCreditRequestRejectedEmail(
+                                email,
+                                requestId,
+                                rejectionReason
+                        );
+
+                        // Notify connected users that the request was rejected
+                        // SSE sends the update to users from the same bank
+                        creditRequestEventService.publishStatusUpdate(
+                                institutionId,
+                                requestId,
+                                status
+                        );
+                    }
+                }
         );
 
         // Log the successful rejection
@@ -870,6 +937,7 @@ public class CreditRequestService {
         return toResponse(savedCreditRequest);
     }
 
+
     // cancels a reserved credit request
     @Transactional
     public CreditRequestResponse cancelCreditRequest(Long creditRequestId) {
@@ -892,7 +960,9 @@ public class CreditRequestService {
         logger.info("[{}] CANCEL | LOCK ACQUIRED | Request ID={}",
                 Thread.currentThread().getName(), creditRequestId);
 
-        institutionAccessService.requireInstitution(creditRequest.getCreditLimit().getFinancialInstitution().getId());
+        institutionAccessService.requireInstitution(
+                creditRequest.getCreditLimit().getFinancialInstitution().getId()
+        );
 
         // gets the currently logged-in user
         User currentUser = getCurrentLoggedInUser();
@@ -964,12 +1034,39 @@ public class CreditRequestService {
                 currentUser
         );
 
-        // sends the new CANCELLED status to clients listening to the SSE stream
-        // only clients from the same bank receive the update
-        creditRequestEventService.publishStatusUpdate(
-                savedCreditRequest.getCreditLimit().getFinancialInstitution().getId(),
-                savedCreditRequest.getId(),
-                savedCreditRequest.getStatus()
+        // save the information needed for the SSE notification
+        // we collect these values while the database transaction is active
+        Long institutionId = creditLimit.getFinancialInstitution().getId();
+        Long requestId = savedCreditRequest.getId();
+        CreditRequestStatus status = savedCreditRequest.getStatus();
+
+        // register the SSE notification to run after a successful commit
+        // if the database transaction rolls back, no notification is sent
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+
+                        // send the new CANCELLED status to clients listening to the SSE stream
+                        // only clients from the same bank receive the update
+                        try {
+                            creditRequestEventService.publishStatusUpdate(
+                                    institutionId,
+                                    requestId,
+                                    status
+                            );
+                        } catch (Exception exception) {
+
+                            // logs the SSE failure without changing the completed cancellation
+                            logger.error(
+                                    "Failed to publish cancellation SSE for credit request ID {}",
+                                    requestId,
+                                    exception
+                            );
+                        }
+                    }
+                }
         );
 
         // Log the successful cancellation
@@ -981,6 +1078,7 @@ public class CreditRequestService {
         // returns the updated credit request
         return toResponse(savedCreditRequest);
     }
+
 
     // expires an unused credit reservation
     @Transactional
@@ -1078,28 +1176,55 @@ public class CreditRequestService {
                 null
         );
 
-        // tries to notify the requester after the reservation expires
-        // an email failure should not undo the expiry or restore reserved capacity
-        try {
-            emailService.SendCreditRequestExpiredEmail(
-                    savedCreditRequest.getRequester().getEmail(),
-                    savedCreditRequest.getId()
-            );
-        } catch (Exception exception) {
-            // logs the email failure but still allows the expiry to complete
-            logger.error(
-                    "Failed to send expiry email for credit request ID {}",
-                    savedCreditRequest.getId(),
-                    exception
-            );
-        }
+        // save the information needed for notifications
+        // qe collect these values while the database transaction is still active
+        String email = savedCreditRequest.getRequester().getEmail();
+        Long requestId = savedCreditRequest.getId();
+        Long institutionId = creditLimit.getFinancialInstitution().getId();
+        CreditRequestStatus status = savedCreditRequest.getStatus();
 
-        // sends the new EXPIRED status to clients listening to the SSE stream
-        // only clients from the same bank receive the update
-        creditRequestEventService.publishStatusUpdate(
-                savedCreditRequest.getCreditLimit().getFinancialInstitution().getId(),
-                savedCreditRequest.getId(),
-                savedCreditRequest.getStatus()
+        // register notifications to run after a successful database commit
+        // this prevents sending notifications if the transaction rolls back
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+
+                        // try to notify the requester after the reservation expires.
+                        // an email failure should not undo the expiry or restore reserved capacity.
+                        try {
+                            emailService.SendCreditRequestExpiredEmail(
+                                    email,
+                                    requestId
+                            );
+                        } catch (Exception exception) {
+                            // logs the email failure but still allows the expiry to complete
+                            logger.error(
+                                    "Failed to send expiry email for credit request ID {}",
+                                    requestId,
+                                    exception
+                            );
+                        }
+
+                        // send the new EXPIRED status to clients listening to the SSE stream.
+                        // only clients from the same bank receive the update.
+                        try {
+                            creditRequestEventService.publishStatusUpdate(
+                                    institutionId,
+                                    requestId,
+                                    status
+                            );
+                        } catch (Exception exception) {
+                            // logs the SSE failure without affecting the completed expiry
+                            logger.error(
+                                    "Failed to publish expiry SSE for credit request ID {}",
+                                    requestId,
+                                    exception
+                            );
+                        }
+                    }
+                }
         );
 
         // logs the successful automatic expiry
@@ -1111,6 +1236,8 @@ public class CreditRequestService {
         // returns the updated credit request
         return toResponse(savedCreditRequest);
     }
+
+
 
     // gets the information a Risk Officer needs to review a pending credit request
     public CreditRequestReviewResponse reviewCreditRequest(Long creditRequestId) {
