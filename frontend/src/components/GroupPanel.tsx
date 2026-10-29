@@ -31,7 +31,7 @@ export function GroupPanel({ group }: { group: GroupExposure }) {
           Committed exposure<strong>{money(group.exposure)}</strong>
         </span>
         <span>
-          Headroom<strong>{money(group.headroom)}</strong>
+          Shared headroom<strong>{money(group.headroom)}</strong>
         </span>
       </div>
     </article>

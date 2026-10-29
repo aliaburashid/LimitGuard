@@ -2327,3 +2327,46 @@ dialog:has(.form-grid) {
     inset: auto 16px 16px auto;
   }
 }
+
+.corporate-management .group-management-actions,
+.corporate-management .group-row-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.group-management-selector {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.group-management-selector > .field {
+  flex: 1;
+  min-width: 220px;
+  margin-bottom: 0;
+}
+.group-members-heading {
+  margin-top: 24px;
+}
+.corporate-management td:first-child strong,
+.corporate-management td:first-child small {
+  display: block;
+}
+.corporate-management td:first-child .badge {
+  margin: 7px 0;
+}
+.corporate-management .group-row-actions button {
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .corporate-management > .section-head,
+  .group-management-selector {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .group-management-selector > .field {
+    min-width: 0;
+  }
+}

@@ -351,3 +351,87 @@ test("SSE status changes refresh overview counts and the exposure chart", async 
   ).toHaveText("2");
   await expect(page.locator(".overview-kpi").nth(1)).toContainText("12.15M");
 });
+
+test("Group assessment uses one selected-group POST and displays independent successes and failures", async ({
+  page,
+}) => {
+  const { data, selected } = await setup(page);
+  let calls = 0;
+  let requestedPath = "";
+  await page.route(
+    "**/api/corporate-groups/*/risk-assessment",
+    async (route) => {
+      calls++;
+      requestedPath = new URL(route.request().url()).pathname;
+      expect(route.request().method()).toBe("POST");
+      await route.fulfill({
+        json: data.counterparties.slice(0, 4).map((c, i) => ({
+          counterpartyId: c.id,
+          counterpartyName: c.name,
+          successful: i !== 3,
+          probability: i === 3 ? null : 0.02,
+          riskLevel: i === 3 ? null : "LOW_RISK",
+          errorMessage: i === 3 ? "Risk assessment failed" : null,
+        })),
+      });
+    },
+  );
+  await assess(page, selected.id);
+  const requestGroup = data.memberships.find(
+    (m) => m.counterpartyId === selected.counterpartyId,
+  )?.corporateGroupId;
+  const group = data.groups.find((g) => g.corporateGroupId !== requestGroup)!;
+  await page
+    .getByLabel("Corporate group to assess")
+    .selectOption(String(group.corporateGroupId));
+  await page
+    .getByRole("button", { name: "Run group assessment", exact: true })
+    .click();
+  const section = page.getByRole("region", {
+    name: "Parallel group risk assessment",
+  });
+  await expect(section.getByRole("status")).toContainText(
+    "3 of 4 companies assessed successfully",
+  );
+  await expect(section.getByRole("table").getByRole("row")).toHaveCount(5);
+  await expect(
+    section.getByText("Assessment failed", { exact: true }),
+  ).toBeVisible();
+  await expect(section.getByText("Unavailable", { exact: true })).toBeVisible();
+  expect(calls).toBe(1);
+  expect(requestedPath).toBe(
+    `/api/corporate-groups/${group.corporateGroupId}/risk-assessment`,
+  );
+  await expect(
+    page.getByLabel("Select credit request for assessment"),
+  ).toHaveValue(String(selected.id));
+  await expect(
+    page.getByRole("button", { name: "Run risk prediction", exact: true }),
+  ).toBeEnabled();
+});
+
+test("A group assessment API failure offers retry without inventing results", async ({
+  page,
+}) => {
+  const { selected } = await setup(page);
+  await page.route("**/api/corporate-groups/*/risk-assessment", (route) =>
+    route.fulfill({
+      status: 502,
+      json: { message: "Inference unavailable" },
+    }),
+  );
+  await assess(page, selected.id);
+  await page
+    .getByRole("button", { name: "Run group assessment", exact: true })
+    .click();
+  const section = page.getByRole("region", {
+    name: "Parallel group risk assessment",
+  });
+  await expect(section.getByRole("alert")).toContainText(
+    "The service could not complete this operation",
+  );
+  await expect(section.getByRole("table")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Run group assessment", exact: true }),
+  ).toBeEnabled();
+});

@@ -9,24 +9,42 @@ import type { Exposure, GroupExposure, Membership, Request } from "../types";
 import { Modal, ErrorBox, ExposurePanel, Loading } from "./ui";
 import { GroupPanel } from "./GroupPanel";
 import { money } from "../utils/format";
+export interface RequestCompany {
+  creditLimitId: number;
+  counterpartyId: number;
+  name: string;
+}
 export function CreateRequest({
   close,
   done,
+  initialCompany,
 }: {
   close: () => void;
   done: (message: string) => void;
+  initialCompany?: RequestCompany;
 }) {
   const [known, setKnown] = useState<Request[]>([]);
-  const [id, setId] = useState("");
+  const [id, setId] = useState(
+    initialCompany ? String(initialCompany.creditLimitId) : "",
+  );
   const [amount, setAmount] = useState("250000");
   const [exposure, setExposure] = useState<Exposure | null>(null);
   const [groups, setGroups] = useState<GroupExposure[]>([]);
   const [members, setMembers] = useState<Membership[]>([]);
   const [error, setError] = useState("");
+  const [lookupError, setLookupError] = useState("");
+  const [capacityVersion, setCapacityVersion] = useState(0);
+  useEffect(() => {
+    const refresh = () => setCapacityVersion((v) => v + 1);
+    window.addEventListener("workspace-refresh", refresh);
+    return () => window.removeEventListener("workspace-refresh", refresh);
+  }, []);
+  useEffect(() => setError(""), [id]);
   const [capacityError, setCapacityError] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const c = new AbortController();
+    setCapacityError("");
     void requestDirectory(false, c.signal)
       .then(setKnown)
       .catch(() => {});
@@ -39,11 +57,11 @@ export function CreateRequest({
         if (!c.signal.aborted) setCapacityError(e.message);
       });
     return () => c.abort();
-  }, []);
+  }, [capacityVersion]);
   useEffect(() => {
     const c = new AbortController();
     setExposure(null);
-    setError("");
+    setLookupError("");
     if (/^[1-9]\d*$/.test(id))
       void api<Exposure>(
         `/credit-limits/${id}/exposure`,
@@ -55,11 +73,22 @@ export function CreateRequest({
           if (!c.signal.aborted) setExposure(value);
         })
         .catch((e) => {
-          if (!c.signal.aborted) setError(e.message);
+          if (!c.signal.aborted) setLookupError(e.message);
         });
     return () => c.abort();
-  }, [id]);
-  const choices = [...new Map(known.map((r) => [r.creditLimitId, r])).values()];
+  }, [id, capacityVersion]);
+  const choices = [
+    ...new Map(
+      [
+        ...known.map((r) => ({
+          creditLimitId: r.creditLimitId,
+          counterpartyId: r.counterpartyId,
+          name: r.counterpartyName,
+        })),
+        ...(initialCompany ? [initialCompany] : []),
+      ].map((r) => [r.creditLimitId, r]),
+    ).values(),
+  ];
   const member = members.find(
     (m) => m.counterpartyId === exposure?.counterpartyId,
   );
@@ -90,6 +119,7 @@ export function CreateRequest({
             close();
           } catch (e) {
             setError((e as Error).message);
+            window.dispatchEvent(new Event("workspace-refresh"));
           } finally {
             setBusy(false);
           }
@@ -113,7 +143,7 @@ export function CreateRequest({
               <option value="">Select a company, or use an ID below</option>
               {choices.map((c) => (
                 <option key={c.creditLimitId} value={c.creditLimitId}>
-                  {c.counterpartyName} · Limit #{c.creditLimitId}
+                  {c.name} · Limit #{c.creditLimitId}
                 </option>
               ))}
             </select>
@@ -177,7 +207,8 @@ export function CreateRequest({
             </div>
           </>
         )}
-        {id && !exposure && !error && <Loading />}
+        {id && !exposure && !lookupError && <Loading />}
+        {lookupError && <ErrorBox message={lookupError} />}
         {error && <ErrorBox message={error} />}
         <div className="modal-actions">
           <button type="button" disabled={busy} onClick={close}>

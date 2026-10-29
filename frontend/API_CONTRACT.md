@@ -73,3 +73,14 @@ The fetch-based stream uses a captured session bearer token in the Authorization
 There is no individual credit-limit listing endpoint. Facility choices use the authenticated RM's request records; facilities without request history can be accessed by credit-limit ID. Current exposure is always fetched from the API. Group totals are labelled as group totals and exclude ungrouped limits. The company directory is shared by the existing schema. Industry and rejection/decision reasons are not present in the existing response DTOs; detailed audit access remains ADMIN-only.
 
 The request directory follows all pages before calculating status counts; it never treats the first page as an institution total. All authorized records appear in the normal application without dataset filters or imported files.
+
+
+## Corporate group management
+
+- `GET /corporate-groups`: paginated shared group directory. `POST /corporate-groups` with `{name}` creates a group; ADMIN or RISK_OFFICER.
+- `GET /counterparties`: existing paginated company directory. The UI selects existing unassigned counterparties.
+- `POST /corporate-group-memberships` with `{corporateGroupId, counterpartyId}` adds membership; ADMIN or RISK_OFFICER. Existing membership conflicts remain backend errors.
+- `POST /group-credit-limits` with `{corporateGroupId, limitAmount}` sets a shared limit for the authenticated user's institution; ADMIN or RISK_OFFICER. `PUT /group-credit-limits/{id}` sends `{limitAmount}` for updates.
+- RM company-row actions use the existing `POST /credit-requests` with `{creditLimitId, amount}`. Exposure and shared headroom are reloaded after success or rejection and on SSE events. No automatic POST retry occurs.
+
+No new backend endpoints or authorization rules were added. Admin never calls the RO-only request search. Individual facility discovery uses permitted request history and explicit in-app ID lookups because no complete directory endpoint exists; group totals remain backend-authoritative. Missing individual values are not synthesized as zero. The lookup verifies the returned counterparty before attaching the facility to a group row. No groups, memberships, limits, requests or seed data are created on mount.

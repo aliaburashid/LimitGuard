@@ -103,3 +103,17 @@ export interface Prediction {
   riskLevel: string;
   modelVersion: string;
 }
+export interface CompanyRiskAssessment {
+  counterpartyId: number;
+  counterpartyName: string;
+  probability: number | null;
+  riskLevel: string | null;
+  successful: boolean;
+  errorMessage: string | null;
+}
+export interface CorporateGroup {
+  id: number;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}

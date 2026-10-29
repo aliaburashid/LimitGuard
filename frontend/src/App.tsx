@@ -143,17 +143,22 @@ function WorkspaceApp() {
         clearTimeout(refreshTimer);
         // USED is published before commit by the existing backend. Wait briefly
         // before reading, then reconcile again to cover transaction visibility.
-        refreshTimer = setTimeout(() => setVersion((v) => v + 1), 250);
+        refreshTimer = setTimeout(
+          () => window.dispatchEvent(new Event("workspace-refresh")),
+          250,
+        );
       },
       (state) => {
         if (!controller.signal.aborted) {
           setLive(state);
-          if (state === "Live") setVersion((v) => v + 1);
+          if (state === "Live")
+            window.dispatchEvent(new Event("workspace-refresh"));
         }
       },
     );
     const reconcile = setInterval(() => {
-      if (!document.hidden) setVersion((v) => v + 1);
+      if (!document.hidden)
+        window.dispatchEvent(new Event("workspace-refresh"));
     }, 30000);
     return () => {
       controller.abort();

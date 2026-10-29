@@ -1,16 +1,9 @@
 import { ArrowRight, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
-import {
-  Empty,
-  ErrorBox,
-  ExposurePanel,
-  Field,
-  Loading,
-} from "../components/ui";
-import { GroupPanel } from "../components/GroupPanel";
-import { groupPortfolio } from "../api/portfolio";
-import type { GroupExposure } from "../types";
+import { Empty, ErrorBox, ExposurePanel, Loading } from "../components/ui";
+import { CorporateGroupManagement } from "../components/CorporateGroupManagement";
+import type { Counterparty } from "../types";
 import { useAuth } from "../context/Auth";
 import type { Exposure } from "../types";
 import type { Mutation } from "./MutationDialog";
@@ -22,37 +15,44 @@ export function ExposurePage({
   version: number;
 }) {
   const { user } = useAuth();
-  const [groups, setGroups] = useState<GroupExposure[] | null>(null);
-  const [groupError, setGroupError] = useState("");
-  useEffect(() => {
-    const c = new AbortController();
-    setGroupError("");
-    void groupPortfolio(c.signal)
-      .then(setGroups)
-      .catch((e) => {
-        if (!c.signal.aborted) setGroupError(e.message);
-      });
-    return () => c.abort();
-  }, [version]);
+  const lookupInput = useRef<HTMLInputElement>(null);
+  const lookupController = useRef<AbortController | null>(null);
+  const [expectedCompany, setExpectedCompany] = useState<Counterparty | null>(
+    null,
+  );
   const [id, setId] = useState("");
   const [data, setData] = useState<Exposure | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function load(value: string) {
+    lookupController.current?.abort();
+    const controller = new AbortController();
+    lookupController.current = controller;
     setBusy(true);
     setError("");
     setData(null);
     try {
-      setData(await api<Exposure>(`/credit-limits/${value}/exposure`));
+      const result = await api<Exposure>(
+        `/credit-limits/${value}/exposure`,
+        "GET",
+        undefined,
+        controller.signal,
+      );
+      if (expectedCompany && result.counterpartyId !== expectedCompany.id)
+        throw new Error(
+          "This facility belongs to a different company. Enter the selected company’s facility ID.",
+        );
+      if (!controller.signal.aborted) setData(result);
     } catch (e) {
-      setError((e as Error).message);
+      if (!controller.signal.aborted) setError((e as Error).message);
     } finally {
-      setBusy(false);
+      if (!controller.signal.aborted) setBusy(false);
     }
   }
   useEffect(() => {
     if (id && data) void load(id);
   }, [version]);
+  useEffect(() => () => lookupController.current?.abort(), []);
   return (
     <>
       <div className="page-heading">
@@ -94,58 +94,25 @@ export function ExposurePage({
           </button>
         )}
       </div>
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <span className="eyebrow">CORPORATE CAPACITY</span>
-            <h2>Group limits & utilization</h2>
-          </div>
-        </div>
-        {groupError && <ErrorBox message={groupError} />}
-        {!groups ? (
-          <Loading />
-        ) : !groups.length ? (
-          <Empty title="No corporate group limits" />
-        ) : (
-          <div className="group-grid">
-            {groups.map((g) => (
-              <div key={g.id}>
-                <GroupPanel group={g} />
-                {["RISK_OFFICER", "ADMIN"].includes(user!.role) && (
-                  <button
-                    className="text-button"
-                    onClick={() =>
-                      mutate({
-                        title: "Update group credit limit",
-                        path: `/group-credit-limits/${g.id}`,
-                        method: "PUT",
-                        fields: [
-                          {
-                            name: "limitAmount",
-                            label: "Group limit amount (BHD)",
-                            type: "number",
-                            defaultValue: g.amount,
-                          },
-                        ],
-                        description: `Update ${g.corporateGroupName}. The backend validates this limit against current group exposure.`,
-                      })
-                    }
-                  >
-                    Update group limit
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <CorporateGroupManagement
+        version={version}
+        resolvedFacility={data}
+        findFacility={(company) => {
+          setExpectedCompany(company);
+          setId("");
+          setData(null);
+          setError("");
+          lookupInput.current?.focus();
+        }}
+      />
       <section className="panel">
         <div className="section-head">
           <div>
             <h2>Find a credit limit</h2>
             <p className="muted">
-              The API supports lookup by ID. A credit-limit directory is not
-              available.
+              {expectedCompany
+                ? `Enter the credit-limit ID for ${expectedCompany.name}.`
+                : "Retrieve an individual facility by its credit-limit ID."}
             </p>
           </div>
         </div>
@@ -160,7 +127,20 @@ export function ExposurePage({
             void load(value);
           }}
         >
-          <Field name="id" label="Credit-limit ID" type="number" />
+          <label className="field">
+            <span>Credit-limit ID</span>
+            <input
+              ref={lookupInput}
+              name="id"
+              aria-label="Credit-limit ID"
+              type="number"
+              min="1"
+              step="1"
+              required
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+            />
+          </label>
           <button className="primary" disabled={busy}>
             {busy ? "Loading…" : "View exposure"}
             <ArrowRight size={16} />

@@ -23,6 +23,7 @@ import {
   RatioChart,
 } from "../components/AnalyticsCharts";
 import { Badge, Empty, ErrorBox, Loading, Modal } from "../components/ui";
+import { GroupRiskAssessment } from "../components/GroupRiskAssessment";
 import type { Exposure, FinancialProfile, Prediction, Request } from "../types";
 import { date, label, requestReference } from "../utils/format";
 const profileKey = (p: FinancialProfile) =>
@@ -261,6 +262,7 @@ export function RiskAnalytics({
           </select>
         </label>
       </div>
+      <GroupRiskAssessment groups={portfolio.groups} />
       {loadError && <ErrorBox message={loadError} />}
       {requestId === null ? (
         <ChartCard title="Choose a credit request">

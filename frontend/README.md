@@ -21,7 +21,7 @@ For production, serve `dist/` through a TLS reverse proxy and route `/api` to th
 
 ## Security and data
 
-JWTs remain in memory and are lost on refresh or sign-out. Profile responses determine displayed permissions; the backend remains authoritative. All requests use the central API client. Financial amounts are submitted as decimal strings rather than converted to floating-point numbers. Display calculations use JavaScript numeric arithmetic and are informational; the backend validates all credit decisions. Currency display is GBP as in the product brief; DTOs have no currency field.
+JWTs remain in memory and are lost on refresh or sign-out. Profile responses determine displayed permissions; the backend remains authoritative. All requests use the central API client. Financial amounts are submitted as decimal strings rather than converted to floating-point numbers. Display calculations use JavaScript numeric arithmetic and are informational; the backend validates all credit decisions. Currency is displayed in BHD; DTOs have no currency field.
 
 SSE uses a streaming fetch with the Bearer header, reconnect backoff, and abort on sign-out. No tokens are put in URLs. Status events invalidate and refetch authorized views. The UI does not display event IDs or unrelated event payloads. The current backend stream broadcasts status events to authenticated subscribers; frontend filtering is not a confidentiality boundary.
 
@@ -50,3 +50,14 @@ See [API_CONTRACT.md](API_CONTRACT.md) for the exact integration map.
 With the frontend dev server running, run `npm run test:browser`. The checked-in Playwright configuration uses macOS Chrome; set `PLAYWRIGHT_CHROME_PATH` to another compatible Chromium executable when needed. Browser tests use API fixtures confined to `tests/` and verify role visibility, exact mutation payloads, review/confirmation, backend errors, corporate group headroom messages, SSE notifications, keyboard submission, dialog focus restoration, responsive layout and ML analytics. Production screens contain no fixture data or demo login.
 
 Validation completed: production TypeScript/Vite build, eight API/SSE/crop tests, nine browser workflow tests, and visual review of desktop login, desktop exposure, 1920-pixel dashboard, and mobile register. Dependency installation reports zero known vulnerabilities. No live backend was reachable at localhost:8080 during verification; live authentication, persistence, business transitions and SSE delivery must be checked with the running backend and authorized test accounts.
+
+
+## Corporate groups and parallel risk assessment
+
+Open **Limits & exposure** for Corporate Group Management. Admin and Risk Officer users can create groups, attach existing unassigned companies, and set/update their institution's shared credit limit. Company rows show verified individual limits, used/reserved exposure and headroom; group figures come from the existing backend. Unidentified facilities can be loaded with the in-app ID lookup. Admin does not use the RO-only request search endpoint.
+
+Relationship Managers can select **Request credit** on an available company row and submit a decimal amount through the existing credit-request endpoint. Capacity refreshes after successful and rejected operations and through the existing SSE stream. Requests are never automatically retried, and no data is created on mount.
+
+Risk Analytics also offers **Run group assessment**, independent of the selected credit request. It calls the existing server batch endpoint once and displays each returned success/failure while preserving single-company prediction. Worker and batch timing appear in standard Spring Boot INFO logs.
+
+See [the presentation guide](../docs/CONCURRENCY.md) for the two-RM walkthrough. Automated browser tests exercise forms, role permissions, errors, missing-facility lookup and two separate RM contexts against mocked API state; they do not modify the real banking database.

@@ -1522,3 +1522,35 @@ main#main {
   margin-top: 14px;
   padding: 10px 0;
 }
+
+.group-assessment-panel {
+  margin-bottom: 20px;
+}
+.group-assessment-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.group-assessment-controls .field {
+  flex: 1;
+  min-width: 180px;
+}
+.group-assessment-controls button {
+  margin-bottom: 1px;
+}
+.group-assessment-summary {
+  margin-top: 18px;
+}
+.group-assessment-failed {
+  color: #b03c45;
+}
+@media (max-width: 640px) {
+  .group-assessment-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .group-assessment-controls .field {
+    min-width: 0;
+  }
+}
