@@ -1,5 +1,141 @@
 # Normal development database and proposed seed changes
 
+## Approved minimal seed — completed 2026-10-29
+
+The user's explicit approval was executed successfully at approximately 10:28:58 (+03:00). Only **two Citi facilities and four requests** were added. All **599 pre-existing rows across all twelve tables remained byte-equivalent by row-hash comparison**. No existing users, passwords, companies, groups, financial profiles, limits, request statuses or balances were changed by seeding. Exactly six rows were added; no approval decisions or audit rows were fabricated.
+
+Verified backup immediately before insertion: `backups/limitguard-before-minimal-unit3-20261029-102857.dump`, **49,880 bytes**, permissions **0600**, excluded from Git. SHA-256: `9547e3ceb2367ba0f379c52fa2078c13ecb95cc50b8fefd1abd65e1f165e872f`. `pg_restore --list` successfully read its archive index (101 listing lines); a full restore was not attempted.
+
+Final inserted IDs:
+
+- **Facility 79**, Falcon Freight Services, company **5**, Citi **5**: limit **1,000,000**, used **300,000**, reserved **0**, individual headroom **700,000**. Backed by historical USED request **403**, amount **300,000**, RM **15**.
+- **Facility 80**, Bahrain Gateway Warehousing, company **6**, Citi **5**: limit **1,000,000**, used **225,000**, reserved **0**, individual headroom **775,000**. Backed by historical USED request **404**, amount **225,000**, RM **58**.
+- **Pending request 405**, **600,000**, existing Bahrain Trading Company facility **1**, RM **15**: intended for two Risk Officers approving the same request.
+- **Pending request 406**, **600,000**, existing facility **1**, RM **15**: intended for approval versus rejection.
+
+The historical facilities precede their historical request timestamps; the USED records have ordered creation/use timestamps and their original 24-hour reservation lifetime. Both pending records have no expiry or decision and reserve no exposure. Existing facility 1 remains limit **2,000,000**, used **0**, reserved **680,000**, headroom **1,320,000**.
+
+**Gulf Investment Group 3**, existing shared limit **2**, Citi **5**, remains approved for **2,000,000**. Final starting used exposure is **525,000**, reserved exposure **675,000**, total exposure **1,200,000**, and shared headroom **800,000**. No 450,000 competing request was pre-created. The RM presentations must create those live against facilities **79** and **80**.
+
+The operation used a single explicitly invoked Spring transaction, locked/rechecked the approved prerequisites, and verified all original rows and ledgers before commit. A second explicit invocation was confirmed to be an idempotent no-op: no rows, balances, statuses or expiry times changed. Neither seeder implements a startup runner or subscribes to an application event. The `limitguard.seed.enabled` gate remains unset in normal configuration; no persistent enabled flag or application seed endpoint was introduced. The temporary invocation harness is removed after verification.
+
+Post-insertion verification through the normal Citi RO API confirmed pending requests 405/406 remain reviewable, individual and group balances match the figures above, and all four existing group companies return successful parallel ML results. Fingerprints of all twelve tables remained unchanged during API/ML checks. Request **165** remained RESERVED, amount **15,000**, owned by RM **15**, facility **33**; it was not cancelled. Requests 405/406 were not approved/rejected. The five-second approval delay, banking locks, transactions and credit-allocation services are unchanged.
+
+The group's exact 800,000 headroom depends on existing request **402** remaining RESERVED. Its stored expiry is **2026-10-30 09:37:07.643964**. After expiry, shared headroom increases; re-audit rather than altering existing requests or claiming the 450,000 race still has an 800,000 start. Current group exposure should be refreshed immediately before presenting.
+
+The later Corporate Group Management frontend work is separate from this seed. Its tests use mocked API state and do not create live groups, memberships, limits or reservations. The frontend does not run seeders or populate data on page load.
+
+---
+
+The following sections retain the pre-execution audit and earlier proposals for context; the completed execution and IDs above are authoritative.
+
+
+## Current Unit 3 read-only audit and minimal proposal — approval required
+
+Audit date: 2026-10-29. This section supersedes the older 3-group/9-company/35-request proposal for the four currently requested Unit 3 demonstrations. The previous proposal and execution records remain below as history. **Nothing in this audit authorizes execution.**
+
+### Current database and why the previous seed stopped
+
+A PostgreSQL session confirmed `jdbc:postgresql://localhost:5432/limitguard`, role `postgres`, and `transaction_read_only=on`. Current totals are 70 users, 9 institutions, 32 companies, 3 groups, 5 memberships, 78 individual limits, 2 group limits, 5 profiles, 238 requests and 95 approval decisions. Individual used/reserved balances reconcile to the request ledger, with no negative or over-limit individual exposure.
+
+The original approved seed stopped before its first INSERT because **Bahrain Trading Company's existing limit #1 was 2,000,000 instead of the audited 1,000,000**. Its unchanged reserved balance is 680,000 and used balance is 0, so current individual headroom is 1,320,000. Reverting the approved limit would violate the preservation requirement and is not proposed.
+
+The existing Java seeder is also stale in three other respects: it expects 237 requests rather than the current 238; it expects one group limit rather than the current two; and it expects Gulf Meridian limit #37 reserved exposure of 75,000 rather than 675,000. Its expected Citi RESERVED count is consequently also stale. Do not merely update one number and enable this old 35-request path.
+
+None of the nine proposed companies exist: Gulf Aviation Services, Gulf Cargo Logistics, Gulf Aircraft Maintenance, Gulf Airport Technology, Pearl Construction, Pearl Engineering, Arabian Renewable Energy, Arabian Industrial Utilities, or Bahrain Digital Services. Their individual limits, profiles, memberships and request histories therefore do not exist. None of Gulf Aviation Holdings, Pearl Infrastructure Group or Arabian Energy Group exists. There are zero requests with the planned `development-citi-` keys. No partial approved seed needs repair or deletion.
+
+Existing groups and Citi capacities:
+
+- Bahrain Holding Group, group **2**, shared limit **1**: limit 6,000,000; used 0; reserved 680,000; exposure 680,000; headroom **5,320,000**. Member: Bahrain Trading Company, company **1**, facility **1**.
+- Gulf Investment Group, group **3**, shared limit **2**: limit 2,000,000; used 0; reserved 675,000; exposure 675,000; headroom **1,325,000**. Four members already exist; only two currently have Citi facilities.
+- Al Noor Holdings, group **4**: no members and no Citi group limit. Leave it unchanged.
+
+Gulf Meridian Logistics W.L.L., company **3**, facility **37**, has limit 750,000; used 0; reserved 675,000; headroom **75,000**. Its new request **#402 for 600,000 is already RESERVED with one decision**. The IntelliJ console records two attempts on #402: one approval succeeded and the waiting attempt failed after observing RESERVED. Do not reset #402 or attempt to create another 600,000 request against the remaining 75,000 headroom.
+
+Legacy request **#183 for 80,000** remains pending and is not a suitable current-threshold presentation fixture. Preserve it. Existing 600,000 request #401 at Bahrain Trading Company is also RESERVED, not an available pending race request.
+
+### Existing accounts to use
+
+All four are ACTIVE, email-verified and members of active Citi institution **5**:
+
+- Main RM: **15**, `aliaburashid@hotmail.com`.
+- Second RM: **58**, `sara.alhaddad@example.com`.
+- Main RO: **23**, `burashid993@gmail.com`.
+- Second RO: **59**, `fatima.alzayani@example.com`.
+
+Keep existing passwords, roles and institution links. Use separate browser profiles for simultaneous sessions. Both new pending requests will be owned by RM 15, so neither RO is the maker.
+
+### Smallest additive data proposal
+
+Reuse the existing groups, companies and saved profiles. Add **zero companies, zero groups, zero memberships, zero profiles and zero group limits**. Preserve all existing rows and balances during seeding. Only add these **two Citi facilities and four requests**:
+
+1. **Falcon Freight Services**, existing company **5**, existing Gulf Investment Group membership and profile **4**. Add a Citi facility with limit **1,000,000**, used **300,000**, reserved **0**, headroom **700,000**. Its used balance is backed by one new historical USED request for **300,000**, requester RM **15**, with valid creation/use times and an original 24-hour reservation lifetime. The amount qualifies for immediate reservation followed by use; no invented RO decision is needed.
+2. **Bahrain Gateway Warehousing**, existing company **6**, existing Gulf Investment Group membership and profile **5**. Add a Citi facility with limit **1,000,000**, used **225,000**, reserved **0**, headroom **775,000**. Back it with one new historical USED request for **225,000**, requester RM **58**, using the same valid lifecycle rules.
+3. At **Bahrain Trading Company, existing facility 1**, add one **PENDING_APPROVAL 600,000** request, requester RM **15**, for dual approval.
+4. At **Bahrain Trading Company, existing facility 1**, add a different **PENDING_APPROVAL 600,000** request, requester RM **15**, for approval versus rejection.
+
+The new pending requests have no expiry, no decision and no reserved exposure. They do not change existing facility 1's balances during seeding. Their actual IDs and the two new facility IDs must be obtained after an approved insert, not guessed.
+
+After this proposed seed, global counts would be **80 individual limits and 242 requests**; users, companies, groups, memberships, profiles, group limits and decisions would retain the audited counts. No completed request is reset and no existing limit amount or balance is overwritten. The two historical USED requests add 525,000 of genuine ledger-backed exposure on the two new facilities, intentionally changing the existing group's aggregate exposure without changing any existing facility row.
+
+Expected starting Gulf Investment Group figures become:
+
+- Approved limit remains **2,000,000**.
+- Existing reserved exposure remains **675,000** (Gulf Meridian).
+- Added used exposure is **525,000** (300,000 + 225,000).
+- Combined exposure is **1,200,000** and shared headroom is exactly **800,000**.
+- Pearl Coast Shipping Co., company **4**, existing facility **39**, remains FROZEN with zero exposure. Its profile **3** can still be assessed under the existing ML rules; this does not authorize new credit requests for a frozen company.
+
+The new histories make Falcon visible in the main RM's own request-derived facility choices and Bahrain Gateway visible in the second RM's choices. Both ROs can see Citi's new pending requests. No imported inventory or dataset filter is needed.
+
+### Demonstration actions and exact expected results
+
+**1. Dual approval:** Both ROs open the first new pending 600,000 request. At the start, facility 1 is limit 2,000,000 / used 0 / reserved 680,000 / headroom 1,320,000. Keep the existing five-second sleep unchanged. Expected result: exactly one APPROVED decision, request RESERVED, facility reserved **1,280,000**, headroom **720,000**; the other response is the existing changed-state error. Group 2 exposure becomes 1,280,000 and headroom 4,720,000. Verify one decision and one 600,000 reservation increment, not two. Observe RM SSE; distinguish application email dispatch from confirmed mailbox receipt.
+
+**2. Competing RMs:** RM 15 requests **450,000 live for Falcon**; RM 58 requests **450,000 live for Bahrain Gateway**. Neither competing request is pre-created. Starting group headroom is 800,000; individual headrooms are 700,000 and 775,000. At most one request becomes RESERVED. Group used remains **525,000**, reserved becomes **1,125,000**, exposure **1,650,000**, headroom **350,000**. The loser gets the group-headroom error and no request/reservation from that rolled-back attempt. If Falcon wins its individual headroom becomes 250,000; if Bahrain Gateway wins its individual headroom becomes 325,000. The winner's owner can cancel that reservation through the normal UI to restore group exposure 1,200,000/headroom 800,000 for a repeat. This existing safe behavior must be observed live, not asserted as already tested by this audit.
+
+**3. Approval versus rejection:** Use the second new pending 600,000 request in the same two RO sessions. Require a nonempty rejection reason. If scenario 1 already ran, facility 1 starts this step at reserved 1,280,000/headroom 720,000. An approval winner results in reserved **1,880,000**, headroom **120,000**, and one APPROVED decision. A rejection winner leaves reserved **1,280,000**, headroom **720,000**, and records one REJECTED decision with reason. The loser produces no second decision, reservation or winning-decision email. If this step is presented before scenario 1, apply the same 600,000 increment to its actual starting balances; both possible approvals fit within the audited 1,320,000 headroom.
+
+**Separate cancellation:** Reuse existing **request #165, RESERVED 15,000**, owned by RM **15**, at Al Dana Petrochemicals, facility **33**. It is a separate company outside these groups. At audit its facility limit is 2,500,000, used 0, reserved 15,000, headroom 2,485,000, and the reservation expires on 2026-11-22. RM 15 cancels it live: expected status CANCELLED, reserved **0**, headroom **2,500,000**, used unchanged. Verify its status, one release and SSE. This is a real terminal transition, not a reset; recheck the request is still RESERVED before the presentation. No cancellation has been performed by this audit. This avoids adding another request solely for cancellation.
+
+These exercises operate on separate capacity where needed: the RO decisions affect group 2, the RM race affects group 3, and cancellation affects ungrouped facility 33. Do not cancel #402 or legacy #171 as part of these steps, because doing so would change the required group-3 opening headroom.
+
+**Timing dependency of this smallest plan:** request #402 currently has stored expiry `2026-10-30 09:37:07.643964`. Its automatic expiry would release 600,000, raising the proposed group headroom from 800,000 to 1,400,000; then both 450,000 requests could fit. Recheck group exposure immediately before the RM race and present this exact setup while the audited reservation is still RESERVED. Do not extend its expiry or suppress the scheduler. If presenting after expiry, perform a new audit and approve a revised additive opening-history amount instead. The same pre-presentation check applies to any unrelated credit action affecting the group. This dependency is the tradeoff for reusing existing data and avoiding another corporate group.
+
+### Parallel ML endpoint and visible console audit
+
+The existing RO-only endpoint is `POST /api/corporate-groups/{groupId}/risk-assessment`, with no request body. It uses a four-thread fixed executor and authorizes group members by the logged-in institution's facilities before starting workers. The ML Python service is running locally on port 8000; Spring Boot is running in IntelliJ on port 8080.
+
+A real call as Citi RO **59** to group **3** returned **two successful assessments**, for Gulf Meridian and Pearl Coast, on `pool-3-thread-1` and `pool-3-thread-2`. The IntelliJ console visibly logged both starting and completed messages. All twelve PostgreSQL table fingerprints were identical before and after this inference-only check; it did not create predictions, requests, decisions or audit rows in PostgreSQL. Client-observed request duration was approximately **25.37 ms**; this is not server execution time or a speedup benchmark. Older four-worker lines were already in the console, but those lines omit group/institution identity and cannot establish that Citi currently has four authorized members.
+
+After the two proposed facilities are added, group 3 will have four authorized Citi companies with existing profiles: Gulf Meridian (**3**, profile 2), Pearl Coast (**4**, profile 3), Falcon (**5**, profile 4) and Bahrain Gateway (**6**, profile 5). All four can then be included without changing ML authorization, frozen-status rules or the model.
+
+**Two code gaps remain and are proposed for approval:**
+
+- `RiskAnalytics.tsx` currently calls only the individual `/counterparties/{id}/risk-prediction` endpoint. It has no parallel group assessment action. Add a normal authenticated group selector and a **Run group assessment** button that sends one POST to the existing group endpoint and displays each returned result/failure. Keep the selector independent of the selected request so the presenter can review group-2 requests and assess group 3. Do not simulate server concurrency with four browser prediction calls.
+- `ParallelRiskAssessmentService` currently prints lowercase `starting risk assessment` / `completed risk assessment` with worker thread names. Its `startTime = System.nanoTime()` is never used, no total duration is printed, failures have no worker completion message, and the messages omit group/institution IDs. Add INFO-level batch START/COMPLETE and per-company START/COMPLETE/FAILED logs containing group/institution/company IDs, thread names and elapsed milliseconds; print a final total elapsed time for the batch. Measure elapsed time using a monotonic clock and identify what the duration includes. Preserve the executor size, task submission, failure isolation, authorization, shutdown behavior, inference calls and returned DTOs.
+
+The notification executor named `notification-*` is for email, not this ML pool. The existing ML pool normally produces `pool-N-thread-1` through `pool-N-thread-4`. Do not confuse those with Tomcat `http-nio-8080-exec-*` caller threads.
+
+A four-company result and overlapping START/COMPLETE messages demonstrate concurrent task execution, but do not establish a fourfold speedup. Failed predictions must be visibly reported as failures. No server-timing result is fabricated in the UI. The existing prediction category/positive-class score must retain its current meaning; the supplied model metadata does not establish a probability of default.
+
+### Approval boundary and safe execution proposal
+
+This turn performed a read-only database audit and inference-only endpoint check. It did not run seeders, issue any banking mutation, change statuses/limits/profiles, restart the app, or change Java/TypeScript concurrency code. Only these planning documents are being updated. The two seed components remain gated by `dev` plus explicit `limitguard.seed.enabled=true`; the property is unset in the normal configuration and IntelliJ environment. The old 35-request definitions are not yet rewritten to this new smaller proposal.
+
+After explicit approval only: replace the old seed contents with this reviewed 2-facility/4-request variant, use stable new seed keys, recheck the entire current prerequisite snapshot, take a fresh private backup immediately before writing, and execute one transaction. Validate that the two target companies still lack Citi facilities and that group-3 exposure is still 675,000; if it has changed, stop rather than adjust existing rows or silently choose different amounts. Snapshot/hash-check every pre-existing row across all twelve tables before/after the seed, derive only the two new facilities' balances from their USED history, and verify the exact additions and group totals before committing. On failure roll back; on rerun skip a complete seed without restoring consumed data and reject partial/conflicting records. Do not run scheduling or banking demonstrations as part of verification. Disable seed execution again immediately afterward.
+
+Once the separately approved frontend/logging additions are implemented, run appropriate frontend and backend checks with isolated test storage. Verify the normal API returns both new pending 600,000 requests to both ROs, the RM facility choices resolve naturally, the batch endpoint returns four correctly identified outcomes, and INFO console output contains batch and worker START/COMPLETE/FAILED messages plus total elapsed time. Do not consume the pending requests to test this wiring. Actual races and cancellation are reserved for the presentation.
+
+The numeric baseline is point-in-time. Any intervening banking activity requires a fresh read-only audit before approved seeding. New facility and request IDs will only be reported after the explicitly approved execution.
+
+---
+
+## Historical larger plan and execution records
+
+The sections below record earlier proposals and observations. Their figures are not the current execution prerequisites; use the current minimal proposal above for review.
+
+
 Status: additive plan approved, both legacy seeder bodies replaced, but execution stopped before the first INSERT because existing credit limit #1 changed from BHD 1,000,000 to BHD 2,000,000. No new seed data was written. See the execution note at the end. The original approved figures below are retained as the audit baseline.
 
 Latest update: the user separately approved adding Citi's missing shared limit for the existing Gulf Investment Group. That narrow repair is now complete; it did not run the broader seed or create/consume any credit requests. Details follow at the end.

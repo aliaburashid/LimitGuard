@@ -348,16 +348,20 @@ Approval and rejection trigger notification work after successful banking state 
 
 ### Demonstration data and current verification status
 
-The separate demo tooling and practice/final UI controls were removed. The existing development seeders are guarded by the explicit `limitguard.seed.enabled=true` opt-in; **do not enable the old seed contents**. The additive data in `SEED_PLAN.md` was proposed, but the supplied plan says it **had not yet been written** to PostgreSQL. Treat the group names and request quantities below as **planned fixtures, not confirmed existing records**, until seeding and post-seed verification finish.
+The separate demo tooling and practice/final UI controls remain removed. The approved minimal seed was executed once against the existing `limitguard` database, after a verified backup. Exactly two facilities and four requests were added, and all 599 pre-existing rows were preserved. Automatic seeding stays disabled; the seed components have no startup runner or application event hook.
 
-| Proposed presentation fixture | Purpose |
-| --- | --- |
-| Gulf Aviation Holdings: 4 subsidiaries and 16 pending BD 600,000 requests | Normal approval, rejection, double approval, approval-versus-rejection |
-| Pearl Infrastructure Group: BD 400,000 group headroom | Show individual headroom sufficient but group headroom insufficient for BD 450,000 |
-| Arabian Energy Group: BD 800,000 group headroom | Two RMs compete with BD 450,000 requests on different subsidiaries |
-| Bahrain Digital Services | Cancellation, usage, expiry and ordinary request lifecycle |
+Prepared presentation records:
 
-**Test evidence at the time of the supplied seed plan:** frontend build/lint, 27 frontend unit tests, 19 mocked browser checks, 46 existing backend tests, and two mocked email-sender tests passed. The plan explicitly says the live PostgreSQL concurrency tests and inbox delivery had **not** been verified in that run. Do not label those as passed until tested.
+- Pending request **405**, BD 600,000 on facility **1**: two Risk Officers approving the same request.
+- Pending request **406**, BD 600,000 on facility **1**: approval versus rejection.
+- Falcon Freight facility **79** (USED history **403**) and Bahrain Gateway facility **80** (USED history **404**): different subsidiaries sharing **BD 800,000** headroom in Gulf Investment Group **3**, shared limit **2**.
+- Existing RESERVED request **165**, BD 15,000: a separate cancellation by its owner, main RM 15, after rechecking its status.
+
+The older Gulf Aviation/Pearl/Arabian/Digital Services proposal was not executed. See [the seed record](SEED_PLAN.md) for actual IDs and balances. Request #402 expires at the stored time **2026-10-30 09:37:07.643964**; its expiry changes group headroom, so refresh and check the starting capacity immediately before the live RM race.
+
+The **Limits & exposure** page now provides Corporate Group Management: Admin/RO group creation, existing-company membership and shared-limit forms, with individual and group capacities. RMs can submit requests from company rows. Success, rejection and SSE notifications trigger capacity refresh. All mutations require explicit form submission and existing backend authorization. Facility details without permitted request history can be loaded by ID inside the page.
+
+Validation: **54 backend tests**, **31 frontend unit tests**, production build/lint and **27 mocked browser tests** passed. The browser suite includes two separate RM sessions and group management without Postman. Read-only live API checks confirmed the seeded balances, untouched pending requests and four successful ML results. PostgreSQL concurrency integration tests and inbox email delivery were not newly verified; the prepared requests were not consumed during verification.
 
 ### Unit 3 API, testing and documentation
 
