@@ -1,407 +1,282 @@
 package com.example.limitguard.config;
 
-import com.example.limitguard.enums.CounterpartyStatus;
-import com.example.limitguard.enums.UserRole;
-import com.example.limitguard.model.Counterparty;
-import com.example.limitguard.model.CreditLimit;
-import com.example.limitguard.model.FinancialInstitution;
-import com.example.limitguard.model.User;
-import com.example.limitguard.repository.CounterpartyRepository;
-import com.example.limitguard.repository.CreditLimitRepository;
-import com.example.limitguard.repository.FinancialInstitutionRepository;
-import com.example.limitguard.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.sql.ResultSetMetaData;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
-@Configuration
+/** Additive SEED_PLAN.md data. Disabled unless explicitly enabled for an approved seed. */
+@Component
 @Profile("dev")
-public class DemoDataSeeder {
+@ConditionalOnProperty(name = "limitguard.seed.enabled", havingValue = "true")
+public class DemoDataSeeder implements CommandLineRunner {
+    private static final Logger log = LoggerFactory.getLogger(DemoDataSeeder.class);
+    private static final List<String> TABLES = List.of("approval_decisions", "audit_logs",
+            "corporate_group_memberships", "corporate_groups", "counterparties", "counterparty_financial_profiles",
+            "credit_limits", "credit_requests", "financial_institutions", "group_credit_limits", "user_tokens", "users");
+    private static final Map<String, Integer> ADDITIONS = Map.of("corporate_group_memberships", 8,
+            "corporate_groups", 3, "counterparties", 9, "counterparty_financial_profiles", 9,
+            "credit_limits", 9, "credit_requests", 35, "group_credit_limits", 3, "approval_decisions", 1);
 
-    // adds demo data when the application starts
-    @Bean
-    public CommandLineRunner seedDemoData(
-            FinancialInstitutionRepository institutionRepository,
-            CounterpartyRepository counterpartyRepository,
-            CreditLimitRepository creditLimitRepository,
-            UserRepository userRepository,
-            PasswordEncoder passwordEncoder) {
+    record Company(String name, String group, String limit, String used, String reserved, String[] ratios) { }
+    static final List<Company> COMPANIES = List.of(
+            new Company("Gulf Aviation Services", "Gulf Aviation Holdings", "4000000", "200000", "0",
+                    new String[]{"7.2", "12.4", "1.6", "38", "6.2", "2.1"}),
+            new Company("Gulf Cargo Logistics", "Gulf Aviation Holdings", "4000000", "200000", "0",
+                    new String[]{"6.4", "10.8", "1.9", "42", "5.4", "2.5"}),
+            new Company("Gulf Aircraft Maintenance", "Gulf Aviation Holdings", "4000000", "200000", "0",
+                    new String[]{"8.1", "15.2", "1.4", "32", "7.6", "1.8"}),
+            new Company("Gulf Airport Technology", "Gulf Aviation Holdings", "4000000", "200000", "0",
+                    new String[]{"9.3", "18.1", "2.2", "27", "9.1", "1.4"}),
+            new Company("Pearl Construction", "Pearl Infrastructure Group", "1500000", "800000", "0",
+                    new String[]{"4.7", "8.2", "1.1", "54", "3.4", "3.8"}),
+            new Company("Pearl Engineering", "Pearl Infrastructure Group", "1600000", "800000", "0",
+                    new String[]{"6.8", "11.6", "1.7", "45", "4.8", "2.9"}),
+            new Company("Arabian Renewable Energy", "Arabian Energy Group", "1600000", "600000", "0",
+                    new String[]{"5.8", "14.3", "0.9", "48", "4.2", "3.1"}),
+            new Company("Arabian Industrial Utilities", "Arabian Energy Group", "1600000", "600000", "0",
+                    new String[]{"6.1", "13.2", "1.2", "46", "4.7", "2.8"}),
+            new Company("Bahrain Digital Services", null, "3000000", "250000", "750000",
+                    new String[]{"10.4", "19.6", "2.6", "24", "10.2", "1.2"}));
 
-        return args -> {
+    private final JdbcTemplate jdbc;
+    private final DemoCreditRequestSeeder requests;
 
-            // stores the banks for our demo
-            String[] institutionNames = {
-                    "Citi Bank",
-                    "Pearl Gulf Commercial Bank",
-                    "Al Noor Investment Bank",
-                    "Bahrain Meridian Bank",
-                    "Khaleej Capital Bank",
-                    "Gulf Horizon Financial Group",
-                    "Crescent International Bank"
-            };
+    public DemoDataSeeder(JdbcTemplate jdbc, DemoCreditRequestSeeder requests) {
+        this.jdbc = jdbc;
+        this.requests = requests;
+    }
 
-            // creates each bank if it does not exist
-            for (String name : institutionNames) {
-                if (!institutionRepository.existsByName(name)) {
-                    FinancialInstitution institution = new FinancialInstitution();
-                    institution.setName(name);
-                    institutionRepository.save(institution);
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void run(String... args) {
+        require("limitguard".equals(jdbc.queryForObject("SELECT current_catalog", String.class)),
+                "Expected the existing limitguard database");
+        jdbc.execute("SET LOCAL lock_timeout = '5s'");
+        // Prevent data changes between prerequisite checks and preservation verification.
+        // These locks belong only to this one-off seed, never to the business services.
+        jdbc.execute("LOCK TABLE " + String.join(", ", TABLES) + " IN SHARE ROW EXCLUSIVE MODE");
+        List<String> expectedKeys = DemoCreditRequestSeeder.approvedRequests(LocalDateTime.now()).stream()
+                .map(DemoCreditRequestSeeder.RequestSeed::key).toList();
+        List<String> existingKeys = jdbc.queryForList(
+                "SELECT seed_key FROM credit_requests WHERE seed_key LIKE 'development-citi-%'", String.class);
+        if (!existingKeys.isEmpty()) {
+            require(existingKeys.size() == 35 && existingKeys.containsAll(expectedKeys),
+                    "Partial seed or conflicting seed keys; no changes made");
+            require(COMPANIES.stream().allMatch(c -> count("SELECT COUNT(*) FROM counterparties WHERE name = ?", c.name()) == 1),
+                    "Previously seeded companies are missing; no automatic repair is allowed");
+            log.info("Approved seed already exists; no records, balances, statuses or expiries changed");
+            return;
+        }
+        validatePrerequisites();
+        Map<String, Map<Long, String>> before = snapshot();
+        LocalDateTime now = LocalDateTime.now().withNano(0);
+        Map<String, Long> groups = new LinkedHashMap<>();
+        for (String name : List.of("Gulf Aviation Holdings", "Pearl Infrastructure Group", "Arabian Energy Group")) {
+            Long id = jdbc.queryForObject("INSERT INTO corporate_groups (name, created_at, updated_at) VALUES (?, ?, ?) RETURNING id",
+                    Long.class, name, now, now);
+            groups.put(name, id);
+            jdbc.update("""
+                    INSERT INTO group_credit_limits (corporate_group_id, financial_institution_id, amount, created_at, updated_at)
+                    VALUES (?, 5, ?, ?, ?)
+                    """, id, new BigDecimal(name.equals("Gulf Aviation Holdings") ? "12000000" : "2000000"), now, now);
+        }
+        Map<String, Long> limits = new LinkedHashMap<>();
+        for (Company company : COMPANIES) {
+            Long companyId = jdbc.queryForObject("""
+                    INSERT INTO counterparties (name, status, created_at, updated_at)
+                    VALUES (?, 'ACTIVE', ?, ?) RETURNING id
+                    """, Long.class, company.name(), now, now);
+            if (company.group() != null) {
+                jdbc.update("INSERT INTO corporate_group_memberships (corporate_group_id, counterparty_id) VALUES (?, ?)",
+                        groups.get(company.group()), companyId);
+            }
+            Long limitId = jdbc.queryForObject("""
+                    INSERT INTO credit_limits (counterparty_id, financial_institution_id, limit_amount,
+                                               used_amount, reserved_amount, created_at, updated_at)
+                    VALUES (?, 5, ?, 0, 0, ?, ?) RETURNING id
+                    """, Long.class, companyId, new BigDecimal(company.limit()), now, now);
+            limits.put(company.name(), limitId);
+            String[] ratios = company.ratios();
+            jdbc.update("""
+                    INSERT INTO counterparty_financial_profiles (counterparty_id, return_on_assets, profit_margin,
+                        fixed_asset_turnover, debt_to_total_capital_percent, interest_coverage, total_debt_to_ebitda,
+                        financial_year_end, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, companyId, new BigDecimal(ratios[0]), new BigDecimal(ratios[1]), new BigDecimal(ratios[2]),
+                    new BigDecimal(ratios[3]), new BigDecimal(ratios[4]), new BigDecimal(ratios[5]),
+                    LocalDate.of(now.getYear() - 1, 12, 31), now, now);
+        }
+        requests.seedCreditRequests(limits, now);
+        validateNewData(limits, groups, now);
+        Map<String, Map<Long, String>> after = snapshot();
+        for (String table : TABLES) {
+            Map<Long, String> oldRows = before.get(table);
+            Map<Long, String> newRows = after.get(table);
+            require(newRows.size() == oldRows.size() + ADDITIONS.getOrDefault(table, 0), "Unexpected row count: " + table);
+            oldRows.forEach((id, hash) -> require(hash.equals(newRows.get(id)), "Existing row changed: " + table + "/" + id));
+        }
+        log.info("Validated approved seed: 3 groups, 9 companies, 35 requests including 16 untouched pending requests; all existing rows preserved");
+    }
+
+    private void validatePrerequisites() {
+        require(count("SELECT COUNT(*) FROM financial_institutions WHERE id = 5 AND name = 'Citi' AND status = 'ACTIVE'") == 1,
+                "Citi institution prerequisite differs");
+        Object[][] employees = {{15L, "aliaburashid@hotmail.com", "RELATIONSHIP_MANAGER"},
+                {23L, "burashid993@gmail.com", "RISK_OFFICER"}, {58L, "sara.alhaddad@example.com", "RELATIONSHIP_MANAGER"},
+                {59L, "fatima.alzayani@example.com", "RISK_OFFICER"}};
+        for (Object[] employee : employees) {
+            require(count("""
+                    SELECT COUNT(*) FROM users WHERE id = ? AND email = ? AND role = ? AND status = 'ACTIVE'
+                        AND email_verified = true AND financial_institution_id = 5
+                    """, employee) == 1, "Employee prerequisite differs for ID " + employee[0]);
+        }
+        Map<String, Integer> expected = Map.of("users", 70, "counterparties", 32, "corporate_groups", 3,
+                "credit_limits", 78, "credit_requests", 237, "counterparty_financial_profiles", 5,
+                "financial_institutions", 9, "corporate_group_memberships", 5, "group_credit_limits", 1);
+        expected.forEach((table, number) -> require(count("SELECT COUNT(*) FROM " + table) == number,
+                "Audited prerequisite count differs: " + table));
+        for (Company company : COMPANIES) {
+            require(count("SELECT COUNT(*) FROM counterparties WHERE lower(name) = lower(?)", company.name()) == 0,
+                    "Company name collision: " + company.name());
+        }
+        for (String name : List.of("Gulf Aviation Holdings", "Pearl Infrastructure Group", "Arabian Energy Group")) {
+            require(count("SELECT COUNT(*) FROM corporate_groups WHERE lower(name) = lower(?)", name) == 0,
+                    "Group name collision: " + name);
+        }
+        require(count("SELECT COUNT(*) FROM credit_limits WHERE financial_institution_id = 5") == 12, "Citi limits differ");
+        Object[][] limits = {{1, "1000000", "0", "680000", "ACTIVE"}, {2, "2000000", "35000", "0", "ACTIVE"},
+                {33, "2500000", "0", "15000", "ACTIVE"}, {34, "400000", "25000", "0", "ACTIVE"},
+                {35, "2200000", "55000", "0", "ACTIVE"}, {36, "550000", "0", "0", "CLOSED"},
+                {37, "750000", "0", "75000", "ACTIVE"}, {38, "800000", "85000", "0", "ACTIVE"},
+                {39, "1250000", "0", "0", "FROZEN"}, {40, "3200000", "50000", "0", "ACTIVE"},
+                {77, "1600000", "0", "0", "FROZEN"}, {78, "900000", "0", "0", "CLOSED"}};
+        for (Object[] limit : limits) {
+            require(count("""
+                    SELECT COUNT(*) FROM credit_limits cl JOIN counterparties c ON c.id = cl.counterparty_id
+                    WHERE cl.id = ? AND cl.financial_institution_id = 5 AND cl.limit_amount = ?
+                        AND cl.used_amount = ? AND cl.reserved_amount = ? AND c.status = ?
+                    """, limit[0], new BigDecimal((String) limit[1]), new BigDecimal((String) limit[2]),
+                    new BigDecimal((String) limit[3]), limit[4]) == 1, "Audited Citi balance/status differs: " + limit[0]);
+        }
+        Map<String, Integer> statuses = Map.of("CANCELLED", 12, "EXPIRED", 7, "PENDING_APPROVAL", 1,
+                "REJECTED", 9, "RESERVED", 5, "USED", 5);
+        statuses.forEach((status, number) -> require(count("""
+                SELECT COUNT(*) FROM credit_requests r JOIN credit_limits cl ON cl.id = r.credit_limit_id
+                WHERE cl.financial_institution_id = 5 AND r.status = ?
+                """, status) == number, "Citi request status count differs: " + status));
+        require(count("""
+                SELECT COUNT(*) FROM credit_requests WHERE id = 183 AND seed_key = 'demo-5-37-1'
+                    AND credit_limit_id = 37 AND amount = 80000 AND status = 'PENDING_APPROVAL'
+                """) == 1, "Legacy request prerequisite differs");
+        require(count("""
+                SELECT COUNT(*) FROM corporate_groups WHERE (id = 2 AND name = 'Bahrain Holding Group')
+                    OR (id = 3 AND name = 'Gulf Investment Group') OR (id = 4 AND name = 'Al Noor Holdings')
+                """) == 3, "Existing group prerequisite differs");
+        require(count("SELECT COUNT(*) FROM group_credit_limits WHERE corporate_group_id = 2 AND financial_institution_id = 5 AND amount = 6000000") == 1,
+                "Existing shared limit differs");
+        require(count("""
+                SELECT COUNT(*) FROM corporate_group_memberships m JOIN counterparties c ON c.id = m.counterparty_id
+                WHERE (m.corporate_group_id = 2 AND c.name = 'Bahrain Trading Company')
+                    OR (m.corporate_group_id = 3 AND c.name IN ('Bahrain Gateway Warehousing', 'Falcon Freight Services',
+                        'Gulf Meridian Logistics W.L.L.', 'Pearl Coast Shipping Co.'))
+                """) == 5, "Existing group membership differs");
+        validateLedger();
+    }
+
+    private void validateNewData(Map<String, Long> limits, Map<String, Long> groups, LocalDateTime now) {
+        validateLedger();
+        for (Company company : COMPANIES) {
+            require(count("""
+                    SELECT COUNT(*) FROM credit_limits WHERE id = ? AND limit_amount = ? AND used_amount = ? AND reserved_amount = ?
+                    """, limits.get(company.name()), new BigDecimal(company.limit()), new BigDecimal(company.used()),
+                    new BigDecimal(company.reserved())) == 1, "New company balances do not match plan: " + company.name());
+        }
+        for (String name : groups.keySet()) {
+            BigDecimal expected = new BigDecimal(name.equals("Gulf Aviation Holdings") ? "800000"
+                    : name.equals("Pearl Infrastructure Group") ? "1600000" : "1200000");
+            BigDecimal actual = jdbc.queryForObject("""
+                    SELECT SUM(cl.used_amount + cl.reserved_amount) FROM credit_limits cl
+                    JOIN corporate_group_memberships m ON m.counterparty_id = cl.counterparty_id
+                    WHERE m.corporate_group_id = ? AND cl.financial_institution_id = 5
+                    """, BigDecimal.class, groups.get(name));
+            require(actual != null && expected.compareTo(actual) == 0, "New group exposure differs: " + name);
+        }
+        require(count("""
+                SELECT COUNT(*) FROM credit_requests r JOIN credit_limits cl ON cl.id = r.credit_limit_id
+                WHERE r.seed_key LIKE 'development-citi-%' AND r.status = 'PENDING_APPROVAL' AND r.amount = 600000
+                    AND r.requester_id = 15 AND cl.financial_institution_id = 5 AND r.expires_at IS NULL
+                    AND NOT EXISTS (SELECT 1 FROM approval_decisions d WHERE d.credit_request_id = r.id)
+                """) == 16, "Pending requests are not presentation-ready");
+        require(count("""
+                SELECT COUNT(*) FROM credit_requests WHERE seed_key LIKE 'development-citi-%'
+                    AND (updated_at < created_at OR updated_at > ?
+                        OR (expires_at IS NOT NULL AND expires_at <> created_at + INTERVAL '24 hours'))
+                """, now) == 0, "Seeded lifecycle dates are inconsistent");
+    }
+
+    private void validateLedger() {
+        require(count("""
+                SELECT COUNT(*) FROM credit_limits cl WHERE used_amount < 0 OR reserved_amount < 0
+                    OR used_amount + reserved_amount > limit_amount
+                    OR used_amount <> (SELECT COALESCE(SUM(r.amount), 0) FROM credit_requests r WHERE r.credit_limit_id = cl.id AND r.status = 'USED')
+                    OR reserved_amount <> (SELECT COALESCE(SUM(r.amount), 0) FROM credit_requests r WHERE r.credit_limit_id = cl.id AND r.status = 'RESERVED')
+                """) == 0, "Individual exposure ledger does not reconcile");
+        require(count("SELECT COUNT(*) FROM (SELECT credit_request_id FROM approval_decisions GROUP BY credit_request_id HAVING COUNT(*) > 1) d") == 0,
+                "Duplicate approval decisions found");
+        require(count("""
+                SELECT COUNT(*) FROM group_credit_limits gl WHERE gl.amount < (
+                    SELECT COALESCE(SUM(cl.used_amount + cl.reserved_amount), 0)
+                    FROM corporate_group_memberships m JOIN credit_limits cl ON cl.counterparty_id = m.counterparty_id
+                    WHERE m.corporate_group_id = gl.corporate_group_id AND cl.financial_institution_id = gl.financial_institution_id)
+                """) == 0, "Shared corporate group exposure exceeds its limit");
+    }
+
+    private Map<String, Map<Long, String>> snapshot() {
+        Map<String, Map<Long, String>> result = new LinkedHashMap<>();
+        for (String table : TABLES) {
+            Map<Long, String> rows = new LinkedHashMap<>();
+            jdbc.query("SELECT * FROM " + table + " ORDER BY id", rs -> {
+                try {
+                    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                    ResultSetMetaData metadata = rs.getMetaData();
+                    for (int i = 1; i <= metadata.getColumnCount(); i++) {
+                        String value = rs.getString(i);
+                        String encoded = value == null ? "null;" : value.length() + ":" + value + ";";
+                        digest.update(encoded.getBytes(StandardCharsets.UTF_8));
+                    }
+                    rows.put(rs.getLong("id"), HexFormat.of().formatHex(digest.digest()));
+                } catch (NoSuchAlgorithmException e) {
+                    throw new IllegalStateException(e);
                 }
-            }
+            });
+            result.put(table, rows);
+        }
+        return result;
+    }
 
-            // stores fictional company names
-            String[] counterpartyNames = {
+    private long count(String sql, Object... args) {
+        Long result = jdbc.queryForObject(sql, Long.class, args);
+        return result == null ? 0 : result;
+    }
 
-                    // logistics and transportation
-                    "Gulf Meridian Logistics W.L.L.",
-                    "Pearl Coast Shipping Co.",
-                    "Falcon Freight Services",
-                    "Bahrain Gateway Warehousing",
-                    "Crescent Maritime Holdings",
-
-                    // energy and industrial
-                    "Al Dana Petrochemicals",
-                    "Horizon Energy Services",
-                    "Gulf Alloy Industries",
-                    "Peninsula Industrial Equipment",
-                    "Blue Dune Engineering",
-
-                    // real estate and construction
-                    "Seef Landmark Properties",
-                    "Marina Crest Developments",
-                    "Bahrain Urban Construction",
-                    "Pearl Bay Real Estate",
-                    "Al Waha Infrastructure",
-
-                    // retail and hospitality
-                    "Souq Pearl Retail Group",
-                    "Palm Gate Hospitality",
-                    "Bahrain Fresh Foods",
-                    "Crescent Consumer Products",
-                    "Golden Dhow Trading",
-
-                    // technology and professional services
-                    "Gulf Nexus Technology",
-                    "Cloud Pearl Solutions",
-                    "Meridian Digital Services",
-                    "Bahrain Data Systems",
-                    "Falcon Business Consulting",
-
-                    // healthcare and manufacturing
-                    "Al Hayat Medical Supplies",
-                    "Pearl Pharma Distribution",
-                    "Gulf Precision Manufacturing",
-                    "Crescent Healthcare Group",
-                    "Bahrain Advanced Packaging"
-            };
-
-            // creates each company if it does not exist
-            for (String name : counterpartyNames) {
-                if (!counterpartyRepository.existsByName(name)) {
-                    Counterparty counterparty = new Counterparty();
-                    counterparty.setName(name);
-                    counterparty.setStatus(CounterpartyStatus.ACTIVE);
-                    counterpartyRepository.save(counterparty);
-                }
-            }
-
-            // stores companies that should be frozen
-            String[] frozenCounterparties = {
-                    "Pearl Coast Shipping Co.",
-                    "Horizon Energy Services",
-                    "Marina Crest Developments",
-                    "Palm Gate Hospitality",
-                    "Cloud Pearl Solutions",
-                    "Pearl Pharma Distribution"
-            };
-
-            // stores companies that should be closed
-            String[] closedCounterparties = {
-                    "Crescent Maritime Holdings",
-                    "Blue Dune Engineering",
-                    "Golden Dhow Trading",
-                    "Bahrain Advanced Packaging"
-            };
-
-            // freezes active demo companies
-            for (String name : frozenCounterparties) {
-                counterpartyRepository.findAll().stream()
-                        .filter(counterparty -> counterparty.getName().equals(name))
-                        .findFirst()
-                        .ifPresent(counterparty -> {
-                            if (counterparty.getStatus() == CounterpartyStatus.ACTIVE) {
-                                counterparty.setStatus(CounterpartyStatus.FROZEN);
-                                counterpartyRepository.save(counterparty);
-                            }
-                        });
-            }
-
-            // closes active demo companies
-            for (String name : closedCounterparties) {
-                counterpartyRepository.findAll().stream()
-                        .filter(counterparty -> counterparty.getName().equals(name))
-                        .findFirst()
-                        .ifPresent(counterparty -> {
-                            if (counterparty.getStatus() == CounterpartyStatus.ACTIVE) {
-                                counterparty.setStatus(CounterpartyStatus.CLOSED);
-                                counterpartyRepository.save(counterparty);
-                            }
-                        });
-            }
-
-            // stores the bank, company and credit limit amount
-            String[][] demoLimits = {
-
-                    // pearl gulf commercial bank
-                    {"Pearl Gulf Commercial Bank", "Gulf Meridian Logistics W.L.L.", "750000"},
-                    {"Pearl Gulf Commercial Bank", "Pearl Coast Shipping Co.", "1250000"},
-                    {"Pearl Gulf Commercial Bank", "Falcon Freight Services", "450000"},
-                    {"Pearl Gulf Commercial Bank", "Bahrain Gateway Warehousing", "1800000"},
-                    {"Pearl Gulf Commercial Bank", "Crescent Maritime Holdings", "900000"},
-
-                    // al noor investment bank
-                    {"Al Noor Investment Bank", "Al Dana Petrochemicals", "2500000"},
-                    {"Al Noor Investment Bank", "Horizon Energy Services", "1600000"},
-                    {"Al Noor Investment Bank", "Gulf Alloy Industries", "950000"},
-                    {"Al Noor Investment Bank", "Peninsula Industrial Equipment", "650000"},
-                    {"Al Noor Investment Bank", "Blue Dune Engineering", "1100000"},
-
-                    // bahrain meridian bank
-                    {"Bahrain Meridian Bank", "Seef Landmark Properties", "3200000"},
-                    {"Bahrain Meridian Bank", "Marina Crest Developments", "2400000"},
-                    {"Bahrain Meridian Bank", "Bahrain Urban Construction", "1300000"},
-                    {"Bahrain Meridian Bank", "Pearl Bay Real Estate", "1750000"},
-                    {"Bahrain Meridian Bank", "Al Waha Infrastructure", "850000"},
-
-                    // khaleej capital bank
-                    {"Khaleej Capital Bank", "Souq Pearl Retail Group", "650000"},
-                    {"Khaleej Capital Bank", "Palm Gate Hospitality", "900000"},
-                    {"Khaleej Capital Bank", "Bahrain Fresh Foods", "400000"},
-                    {"Khaleej Capital Bank", "Crescent Consumer Products", "1150000"},
-                    {"Khaleej Capital Bank", "Golden Dhow Trading", "550000"},
-
-                    // gulf horizon financial group
-                    {"Gulf Horizon Financial Group", "Gulf Nexus Technology", "800000"},
-                    {"Gulf Horizon Financial Group", "Cloud Pearl Solutions", "600000"},
-                    {"Gulf Horizon Financial Group", "Meridian Digital Services", "1200000"},
-                    {"Gulf Horizon Financial Group", "Bahrain Data Systems", "500000"},
-                    {"Gulf Horizon Financial Group", "Falcon Business Consulting", "350000"},
-
-                    // crescent international bank
-                    {"Crescent International Bank", "Al Hayat Medical Supplies", "700000"},
-                    {"Crescent International Bank", "Pearl Pharma Distribution", "1450000"},
-                    {"Crescent International Bank", "Gulf Precision Manufacturing", "1900000"},
-                    {"Crescent International Bank", "Crescent Healthcare Group", "2200000"},
-                    {"Crescent International Bank", "Bahrain Advanced Packaging", "750000"},
-
-                    // extra limits for sorting and filtering
-                    {"Pearl Gulf Commercial Bank", "Al Dana Petrochemicals", "2500000"},
-                    {"Pearl Gulf Commercial Bank", "Cloud Pearl Solutions", "600000"},
-                    {"Pearl Gulf Commercial Bank", "Blue Dune Engineering", "1100000"},
-                    {"Pearl Gulf Commercial Bank", "Bahrain Fresh Foods", "400000"},
-                    {"Pearl Gulf Commercial Bank", "Seef Landmark Properties", "3200000"},
-                    {"Pearl Gulf Commercial Bank", "Gulf Nexus Technology", "800000"},
-
-                    {"Al Noor Investment Bank", "Pearl Coast Shipping Co.", "1250000"},
-                    {"Al Noor Investment Bank", "Golden Dhow Trading", "550000"},
-                    {"Al Noor Investment Bank", "Bahrain Data Systems", "500000"},
-                    {"Al Noor Investment Bank", "Seef Landmark Properties", "3200000"},
-                    {"Al Noor Investment Bank", "Gulf Meridian Logistics W.L.L.", "750000"},
-                    {"Al Noor Investment Bank", "Gulf Nexus Technology", "800000"},
-
-                    {"Bahrain Meridian Bank", "Cloud Pearl Solutions", "600000"},
-                    {"Bahrain Meridian Bank", "Golden Dhow Trading", "550000"},
-                    {"Bahrain Meridian Bank", "Al Dana Petrochemicals", "2500000"},
-                    {"Bahrain Meridian Bank", "Bahrain Fresh Foods", "400000"},
-                    {"Bahrain Meridian Bank", "Gulf Nexus Technology", "800000"},
-                    {"Bahrain Meridian Bank", "Gulf Meridian Logistics W.L.L.", "750000"},
-
-                    {"Khaleej Capital Bank", "Horizon Energy Services", "1600000"},
-                    {"Khaleej Capital Bank", "Blue Dune Engineering", "1100000"},
-                    {"Khaleej Capital Bank", "Gulf Nexus Technology", "800000"},
-                    {"Khaleej Capital Bank", "Seef Landmark Properties", "3200000"},
-                    {"Khaleej Capital Bank", "Gulf Meridian Logistics W.L.L.", "750000"},
-                    {"Khaleej Capital Bank", "Al Dana Petrochemicals", "2500000"},
-
-                    {"Gulf Horizon Financial Group", "Pearl Coast Shipping Co.", "1250000"},
-                    {"Gulf Horizon Financial Group", "Crescent Maritime Holdings", "900000"},
-                    {"Gulf Horizon Financial Group", "Al Dana Petrochemicals", "2500000"},
-                    {"Gulf Horizon Financial Group", "Bahrain Fresh Foods", "400000"},
-                    {"Gulf Horizon Financial Group", "Seef Landmark Properties", "3200000"},
-                    {"Gulf Horizon Financial Group", "Gulf Meridian Logistics W.L.L.", "750000"},
-
-                    {"Crescent International Bank", "Marina Crest Developments", "2400000"},
-                    {"Crescent International Bank", "Golden Dhow Trading", "550000"},
-                    {"Crescent International Bank", "Gulf Nexus Technology", "800000"},
-                    {"Crescent International Bank", "Bahrain Fresh Foods", "400000"},
-                    {"Crescent International Bank", "Seef Landmark Properties", "3200000"},
-                    {"Crescent International Bank", "Gulf Meridian Logistics W.L.L.", "750000"},
-
-                    // citi credit limits
-                    {"Citi", "Al Dana Petrochemicals", "2500000"},
-                    {"Citi", "Bahrain Fresh Foods", "400000"},
-                    {"Citi", "Crescent Healthcare Group", "2200000"},
-                    {"Citi", "Golden Dhow Trading", "550000"},
-                    {"Citi", "Gulf Meridian Logistics W.L.L.", "750000"},
-                    {"Citi", "Gulf Nexus Technology", "800000"},
-                    {"Citi", "Pearl Coast Shipping Co.", "1250000"},
-                    {"Citi", "Seef Landmark Properties", "3200000"},
-                    {"Citi", "Horizon Energy Services", "1600000"},
-                    {"Citi", "Crescent Maritime Holdings", "900000"}
-            };
-
-            // gets all the saved banks and companies
-            var savedInstitutions = institutionRepository.findAll();
-            var savedCounterparties = counterpartyRepository.findAll();
-
-            // creates credit limits for each bank
-            for (String[] row : demoLimits) {
-                String institutionName = row[0];
-                String counterpartyName = row[1];
-                BigDecimal amount = new BigDecimal(row[2]);
-
-                // finds the bank
-                FinancialInstitution institution = savedInstitutions.stream()
-                        .filter(bank -> bank.getName().equals(institutionName))
-                        .findFirst()
-                        .orElseThrow(() -> new IllegalStateException(
-                                "Demo institution not found: " + institutionName));
-
-                // finds the company
-                Counterparty counterparty = savedCounterparties.stream()
-                        .filter(company -> company.getName().equals(counterpartyName))
-                        .findFirst()
-                        .orElseThrow(() -> new IllegalStateException(
-                                "Demo counterparty not found: " + counterpartyName));
-
-                // skips credit limits that already exist
-                if (creditLimitRepository.existsByFinancialInstitutionIdAndCounterpartyId(
-                        institution.getId(), counterparty.getId())) {
-                    continue;
-                }
-
-                // creates a credit limit with no exposure
-                CreditLimit creditLimit = new CreditLimit();
-                creditLimit.setFinancialInstitution(institution);
-                creditLimit.setCounterparty(counterparty);
-                creditLimit.setLimitAmount(amount);
-                creditLimit.setUsedAmount(BigDecimal.ZERO);
-                creditLimit.setReservedAmount(BigDecimal.ZERO);
-                creditLimitRepository.save(creditLimit);
-            }
-
-            // stores five employees for each bank
-            String[][] employees = {
-
-                    // citi
-                    {"Alia", "Burashid", "RELATIONSHIP_MANAGER", "Citi", "aliaburashid@hotmail.com"},
-                    {"Sara", "Al Haddad", "RELATIONSHIP_MANAGER", "Citi", "sara.alhaddad@example.com"},
-                    {"Ahmed", "Al Mansoor", "RISK_OFFICER", "Citi", "burashid993@gmail.com"},
-                    {"Fatima", "Al Zayani", "RISK_OFFICER", "Citi", "fatima.alzayani@example.com"},
-                    {"Khalid", "Al Mahmood", "ADMIN", "Citi", "admin@limitguard.com"},
-
-                    // pearl gulf commercial bank
-                    {"Ahmed", "Mansoor", "ADMIN", "Pearl Gulf Commercial Bank", "ahmed.mansoor.pearl@example.com"},
-                    {"Alia", "Hassan", "RELATIONSHIP_MANAGER", "Pearl Gulf Commercial Bank", "alia.hassan.pearl@example.com"},
-                    {"Omar", "Al Mahmood", "RELATIONSHIP_MANAGER", "Pearl Gulf Commercial Bank", "omar.almahmood.pearl@example.com"},
-                    {"Fatima", "Al Zayani", "RISK_OFFICER", "Pearl Gulf Commercial Bank", "fatima.alzayani.pearl@example.com"},
-                    {"Huda", "Al Ansari", "RISK_OFFICER", "Pearl Gulf Commercial Bank", "huda.alansari.pearl@example.com"},
-
-                    // al noor investment bank
-                    {"Rashid", "Al Mahmood", "ADMIN", "Al Noor Investment Bank", "rashid.almahmood.al@example.com"},
-                    {"Maryam", "Al Haddad", "RELATIONSHIP_MANAGER", "Al Noor Investment Bank", "maryam.alhaddad.al@example.com"},
-                    {"Dana", "Abdullah", "RELATIONSHIP_MANAGER", "Al Noor Investment Bank", "dana.abdullah.al@example.com"},
-                    {"Yusuf", "Rahman", "RISK_OFFICER", "Al Noor Investment Bank", "yusuf.rahman.al@example.com"},
-                    {"Hassan", "Al Sayed", "RISK_OFFICER", "Al Noor Investment Bank", "hassan.alsayed.al@example.com"},
-
-                    // bahrain meridian bank
-                    {"Nasser", "Al Farsi", "ADMIN", "Bahrain Meridian Bank", "nasser.alfarsi.bahrain@example.com"},
-                    {"Sara", "Mahmood", "RELATIONSHIP_MANAGER", "Bahrain Meridian Bank", "sara.mahmood.bahrain@example.com"},
-                    {"Jassim", "Hassan", "RELATIONSHIP_MANAGER", "Bahrain Meridian Bank", "jassim.hassan.bahrain@example.com"},
-                    {"Khalid", "Al Ansari", "RISK_OFFICER", "Bahrain Meridian Bank", "khalid.alansari.bahrain@example.com"},
-                    {"Mona", "Ibrahim", "RISK_OFFICER", "Bahrain Meridian Bank", "mona.ibrahim.bahrain@example.com"},
-
-                    // khaleej capital bank
-                    {"Salman", "Al Hashimi", "ADMIN", "Khaleej Capital Bank", "salman.alhashimi.khaleej@example.com"},
-                    {"Noor", "Al Sayed", "RELATIONSHIP_MANAGER", "Khaleej Capital Bank", "noor.alsayed.khaleej@example.com"},
-                    {"Abdulla", "Yusuf", "RELATIONSHIP_MANAGER", "Khaleej Capital Bank", "abdulla.yusuf.khaleej@example.com"},
-                    {"Faisal", "Karim", "RISK_OFFICER", "Khaleej Capital Bank", "faisal.karim.khaleej@example.com"},
-                    {"Reem", "Ahmed", "RISK_OFFICER", "Khaleej Capital Bank", "reem.ahmed.khaleej@example.com"},
-
-                    // gulf horizon financial group
-                    {"Mohammed", "Al Nasser", "ADMIN", "Gulf Horizon Financial Group", "mohammed.alnasser.gulf@example.com"},
-                    {"Layla", "Hassan", "RELATIONSHIP_MANAGER", "Gulf Horizon Financial Group", "layla.hassan.gulf@example.com"},
-                    {"Zainab", "Ali", "RELATIONSHIP_MANAGER", "Gulf Horizon Financial Group", "zainab.ali.gulf@example.com"},
-                    {"Zain", "Ali", "RISK_OFFICER", "Gulf Horizon Financial Group", "zain.ali.gulf@example.com"},
-                    {"Amal", "Saleh", "RISK_OFFICER", "Gulf Horizon Financial Group", "amal.saleh.gulf@example.com"},
-
-                    // crescent international bank
-                    {"Tariq", "Al Jaber", "ADMIN", "Crescent International Bank", "tariq.aljaber.crescent@example.com"},
-                    {"Aisha", "Mohammed", "RELATIONSHIP_MANAGER", "Crescent International Bank", "aisha.mohammed.crescent@example.com"},
-                    {"Hamad", "Yusuf", "RELATIONSHIP_MANAGER", "Crescent International Bank", "hamad.yusuf.crescent@example.com"},
-                    {"Lulwa", "Abdullah", "RISK_OFFICER", "Crescent International Bank", "lulwa.abdullah.crescent@example.com"},
-                    {"Ibrahim", "Saeed", "RISK_OFFICER", "Crescent International Bank", "ibrahim.saeed.crescent@example.com"}
-            };
-
-            // gets the demo password from the environment
-            String demoPassword = System.getenv("LIMITGUARD_DEMO_PASSWORD");
-
-            // checks if any demo users are missing
-            boolean usersNeedSeeding = false;
-
-            for (String[] employee : employees) {
-                String email = employee[4];
-
-                if (userRepository.findByEmail(email).isEmpty()) {
-                    usersNeedSeeding = true;
-                    break;
-                }
-            }
-
-            // requires a password only when creating new users
-            if (usersNeedSeeding && (demoPassword == null || demoPassword.isBlank())) {
-                throw new IllegalStateException(
-                        "Set LIMITGUARD_DEMO_PASSWORD before seeding demo users"
-                );
-            }
-
-            // creates the demo employees
-            for (String[] employee : employees) {
-                String firstName = employee[0];
-                String lastName = employee[1];
-                UserRole role = UserRole.valueOf(employee[2]);
-                String institutionName = employee[3];
-                String email = employee[4];
-
-                // skips users that already exist
-                if (userRepository.findByEmail(email).isPresent()) {
-                    continue;
-                }
-
-                // finds the employee's bank
-                FinancialInstitution institution = savedInstitutions.stream()
-                        .filter(bank -> bank.getName().equals(institutionName))
-                        .findFirst()
-                        .orElseThrow(() -> new IllegalStateException(
-                                "Demo institution not found: " + institutionName));
-
-                // creates the user
-                User user = new User();
-                user.setFirstName(firstName);
-                user.setLastName(lastName);
-                user.setEmail(email);
-                user.setPassword(passwordEncoder.encode(demoPassword));
-                user.setRole(role);
-                user.setFinancialInstitution(institution);
-                user.setEmailVerified(true);
-
-                // saves the user
-                userRepository.save(user);
-            }
-        };
+    private static void require(boolean condition, String message) {
+        if (!condition) throw new IllegalStateException(message + "; seed rolled back");
     }
 }

@@ -1,292 +1,105 @@
-
 package com.example.limitguard.config;
 
-import com.example.limitguard.enums.ApprovalDecisionType;
-import com.example.limitguard.enums.CounterpartyStatus;
-import com.example.limitguard.enums.CreditRequestStatus;
-import com.example.limitguard.enums.UserRole;
-import com.example.limitguard.model.ApprovalDecision;
-import com.example.limitguard.model.CreditLimit;
-import com.example.limitguard.model.CreditRequest;
-import com.example.limitguard.model.User;
-import com.example.limitguard.repository.ApprovalDecisionRepository;
-import com.example.limitguard.repository.CreditLimitRepository;
-import com.example.limitguard.repository.CreditRequestRepository;
-import com.example.limitguard.repository.UserRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
-import org.springframework.context.event.EventListener;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
+/** Approved development history; only called inside the data seeder's transaction. */
 @Component
 @Profile("dev")
+@ConditionalOnProperty(name = "limitguard.seed.enabled", havingValue = "true")
 public class DemoCreditRequestSeeder {
+    static final String PREFIX = "development-citi-";
+    static final List<String> AVIATION = List.of("Gulf Aviation Services", "Gulf Cargo Logistics",
+            "Gulf Aircraft Maintenance", "Gulf Airport Technology");
+    static final List<String> SCENARIOS = List.of("approval", "rejection", "dual-approval", "conflicting-decision");
 
-    private final CreditLimitRepository creditLimitRepository;
-    private final CreditRequestRepository creditRequestRepository;
-    private final ApprovalDecisionRepository approvalDecisionRepository;
-    private final UserRepository userRepository;
-    private final EntityManager entityManager;
+    private final JdbcTemplate jdbc;
 
-    public DemoCreditRequestSeeder(
-            CreditLimitRepository creditLimitRepository,
-            CreditRequestRepository creditRequestRepository,
-            ApprovalDecisionRepository approvalDecisionRepository,
-            UserRepository userRepository,
-            EntityManager entityManager) {
-
-        this.creditLimitRepository = creditLimitRepository;
-        this.creditRequestRepository = creditRequestRepository;
-        this.approvalDecisionRepository = approvalDecisionRepository;
-        this.userRepository = userRepository;
-        this.entityManager = entityManager;
+    public DemoCreditRequestSeeder(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
-    // runs after the application starts
-    @EventListener(ApplicationReadyEvent.class)
-    @Transactional
-    public void seedCreditRequests() {
+    record RequestSeed(String key, String company, long requester, BigDecimal amount, String status,
+                       LocalDateTime created, LocalDateTime updated, LocalDateTime expires) { }
 
-        // stores the banks used in the demo
-        String[] banks = {
-                "Citi",
-                "Pearl Gulf Commercial Bank",
-                "Al Noor Investment Bank",
-                "Bahrain Meridian Bank",
-                "Khaleej Capital Bank",
-                "Gulf Horizon Financial Group",
-                "Crescent International Bank"
-        };
-
-        // creates demo requests for every bank
-        for (String bank : banks) {
-            seedBankRequests(bank);
-        }
-    }
-
-    private void seedBankRequests(String bankName) {
-
-        // gets the credit limits belonging to this bank
-        List<CreditLimit> limits = creditLimitRepository.findAll().stream()
-                .filter(limit -> bankName.equals(
-                        limit.getFinancialInstitution().getName()))
-                .sorted(Comparator.comparing(
-                        limit -> limit.getCounterparty().getName()))
-                .toList();
-
-        // gets employees belonging to this bank
-        List<User> bankUsers = userRepository.findAll().stream()
-                .filter(user -> user.getFinancialInstitution() != null)
-                .filter(user -> bankName.equals(
-                        user.getFinancialInstitution().getName()))
-                .toList();
-
-        // gets relationship managers who can submit requests
-        List<User> managers = bankUsers.stream()
-                .filter(user -> user.getRole() == UserRole.RELATIONSHIP_MANAGER)
-                .sorted(Comparator.comparing(User::getEmail))
-                .toList();
-
-        // gets risk officers who can approve or reject requests
-        List<User> riskOfficers = bankUsers.stream()
-                .filter(user -> user.getRole() == UserRole.RISK_OFFICER)
-                .sorted(Comparator.comparing(User::getEmail))
-                .toList();
-
-        // skips banks without the required employees or limits
-        if (limits.isEmpty() || managers.isEmpty() || riskOfficers.isEmpty()) {
-            System.out.println("Demo requests skipped for: " + bankName);
-            return;
-        }
-
-        // chooses the employees for the demo
-        User manager = managers.get(0);
-        User riskOfficer = riskOfficers.get(0);
-
-        // uses the correct presentation accounts for citi
-        if (bankName.equals("Citi")) {
-            manager = userRepository.findByEmail(
-                    "aliaburashid@hotmail.com").orElse(null);
-
-            riskOfficer = userRepository.findByEmail(
-                    "burashid993@gmail.com").orElse(null);
-        }
-
-        // checks that both employees have the correct roles and bank
-        if (manager == null || riskOfficer == null
-                || manager.getFinancialInstitution() == null
-                || riskOfficer.getFinancialInstitution() == null
-                || !bankName.equals(manager.getFinancialInstitution().getName())
-                || !bankName.equals(riskOfficer.getFinancialInstitution().getName())
-                || manager.getRole() != UserRole.RELATIONSHIP_MANAGER
-                || riskOfficer.getRole() != UserRole.RISK_OFFICER
-                || manager.getId().equals(riskOfficer.getId())) {
-
-            System.out.println("Demo employees not valid for: " + bankName);
-            return;
-        }
-
-        // stores all the request statuses
-        CreditRequestStatus[] statuses = {
-                CreditRequestStatus.RESERVED,
-                CreditRequestStatus.USED,
-                CreditRequestStatus.PENDING_APPROVAL,
-                CreditRequestStatus.CANCELLED,
-                CreditRequestStatus.REJECTED,
-                CreditRequestStatus.EXPIRED
-        };
-
-        // uses different dates for the request history
-        LocalDateTime now = LocalDateTime.now();
-
-        int created = 0;
-
-        // creates three requests for each credit limit
-        for (int round = 0; round < 3; round++) {
-
-            for (int index = 0; index < limits.size(); index++) {
-
-                CreditLimit limit = limits.get(index);
-
-                // gives every demo request a unique key
-                String seedKey = "demo-" +
-                        limit.getFinancialInstitution().getId() + "-" +
-                        limit.getId() + "-" + round;
-
-                // skips requests already created on an earlier run
-                if (creditRequestRepository.existsBySeedKey(seedKey)) {
-                    continue;
-                }
-
-                // locks the limit before checking its balance
-                entityManager.refresh(limit, LockModeType.PESSIMISTIC_WRITE);
-
-                // checks again after locking to avoid duplicates
-                if (creditRequestRepository.existsBySeedKey(seedKey)) {
-                    continue;
-                }
-
-                // chooses a status based on the limit and round
-                CreditRequestStatus status =
-                        statuses[(index + round * 2) % statuses.length];
-
-                // checks the current company status
-                CounterpartyStatus counterpartyStatus =
-                        limit.getCounterparty().getStatus();
-
-                // frozen and closed companies only receive past requests
-                if (counterpartyStatus != CounterpartyStatus.ACTIVE) {
-                    status = (index + round) % 2 == 0
-                            ? CreditRequestStatus.CANCELLED
-                            : CreditRequestStatus.REJECTED;
-                }
-
-                // chooses a different amount for each request
-                BigDecimal amount = BigDecimal.valueOf(
-                        15000L + (index % 8) * 10000L + round * 5000L);
-
-                // checks how much credit is still available
-                BigDecimal headroom = limit.getLimitAmount()
-                        .subtract(limit.getUsedAmount())
-                        .subtract(limit.getReservedAmount());
-
-                // skips allocations that exceed available headroom
-                if ((status == CreditRequestStatus.RESERVED
-                        || status == CreditRequestStatus.USED
-                        || status == CreditRequestStatus.PENDING_APPROVAL)
-                        && headroom.compareTo(amount) < 0) {
-                    continue;
-                }
-
-                // creates dates spread across the past few months
-                LocalDateTime submittedAt = now.minusDays(
-                        5L + index * 3L + round * 12L);
-
-                // creates the request
-                CreditRequest request = new CreditRequest();
-                request.setSeedKey(seedKey);
-                request.setCreditLimit(limit);
-                request.setRequester(manager);
-                request.setAmount(amount);
-                request.setStatus(status);
-
-                // gives reserved requests a future expiry date
-                if (status == CreditRequestStatus.RESERVED) {
-                    request.setExpiresAt(now.plusDays(30));
-                }
-
-                // gives expired requests an old expiry date
-                if (status == CreditRequestStatus.EXPIRED) {
-                    request.setExpiresAt(submittedAt.plusHours(24));
-                }
-
-                // saves the request to the database
-                creditRequestRepository.saveAndFlush(request);
-
-                // sets historical creation and update dates
-                entityManager.createNativeQuery("""
-                        update credit_requests
-                        set created_at = :createdAt,
-                            updated_at = :updatedAt
-                        where id = :requestId
-                        """)
-                        .setParameter("createdAt", submittedAt)
-                        .setParameter("updatedAt", submittedAt.plusHours(3))
-                        .setParameter("requestId", request.getId())
-                        .executeUpdate();
-
-                // increases reserved exposure for reserved requests
-                if (status == CreditRequestStatus.RESERVED) {
-                    limit.setReservedAmount(
-                            limit.getReservedAmount().add(amount));
-                    creditLimitRepository.save(limit);
-                }
-
-                // increases used exposure for used requests
-                if (status == CreditRequestStatus.USED) {
-                    limit.setUsedAmount(
-                            limit.getUsedAmount().add(amount));
-                    creditLimitRepository.save(limit);
-                }
-
-                // records an approval for used requests
-                if (status == CreditRequestStatus.USED) {
-                    ApprovalDecision decision = new ApprovalDecision();
-                    decision.setCreditRequest(request);
-                    decision.setDecidedBy(riskOfficer);
-                    decision.setDecision(ApprovalDecisionType.APPROVED);
-                    decision.setReason(
-                            "Demo: approved after credit risk review");
-                    decision.setCreatedAt(submittedAt.plusHours(3));
-                    approvalDecisionRepository.save(decision);
-                }
-
-                // records a rejection for rejected requests
-                if (status == CreditRequestStatus.REJECTED) {
-                    ApprovalDecision decision = new ApprovalDecision();
-                    decision.setCreditRequest(request);
-                    decision.setDecidedBy(riskOfficer);
-                    decision.setDecision(ApprovalDecisionType.REJECTED);
-                    decision.setReason(
-                            "Demo: rejected after credit risk review");
-                    decision.setCreatedAt(submittedAt.plusHours(3));
-                    approvalDecisionRepository.save(decision);
-                }
-
-                created++;
+    static List<RequestSeed> approvedRequests(LocalDateTime now) {
+        List<RequestSeed> result = new ArrayList<>();
+        for (String scenario : SCENARIOS) {
+            for (int i = 0; i < AVIATION.size(); i++) {
+                result.add(new RequestSeed(PREFIX + scenario + "-" + (i + 1), AVIATION.get(i), 15,
+                        new BigDecimal("600000"), "PENDING_APPROVAL", now, now, null));
             }
         }
+        for (int i = 0; i < AVIATION.size(); i++) {
+            addHistory(result, "aviation-used-" + (i + 1), AVIATION.get(i), 15,
+                    "200000", "USED", now.minusDays(20 + i));
+        }
+        for (String company : List.of("Pearl Construction", "Pearl Engineering",
+                "Arabian Renewable Energy", "Arabian Industrial Utilities")) {
+            boolean pearl = company.startsWith("Pearl");
+            for (long rm : List.of(15L, 58L)) {
+                addHistory(result, company.toLowerCase().replace(' ', '-') + "-used-" + rm,
+                        company, rm, pearl ? "400000" : "300000", "USED", now.minusDays(10 + rm % 3));
+            }
+        }
+        String lifecycle = "Bahrain Digital Services";
+        for (String purpose : List.of("cancel", "use", "expiry")) {
+            LocalDateTime created = purpose.equals("expiry") ? now.minusHours(23).minusMinutes(55) : now;
+            result.add(new RequestSeed(PREFIX + "lifecycle-" + purpose, lifecycle, 15,
+                    new BigDecimal("250000"), "RESERVED", created, created, created.plusHours(24)));
+        }
+        addHistory(result, "lifecycle-used", lifecycle, 15, "250000", "USED", now.minusDays(7));
+        addHistory(result, "lifecycle-cancelled", lifecycle, 15, "200000", "CANCELLED", now.minusDays(6));
+        addHistory(result, "lifecycle-expired", lifecycle, 15, "200000", "EXPIRED", now.minusDays(5));
+        addHistory(result, "lifecycle-rejected", lifecycle, 15, "600000", "REJECTED", now.minusDays(4));
+        return List.copyOf(result);
+    }
 
-        System.out.println(
-                "Demo credit requests created for "
-                        + bankName + ": " + created);
+    private static void addHistory(List<RequestSeed> result, String key, String company, long requester,
+                                   String amount, String status, LocalDateTime created) {
+        result.add(new RequestSeed(PREFIX + key, company, requester, new BigDecimal(amount), status,
+                created, created.plusHours(status.equals("EXPIRED") ? 24 : 2),
+                status.equals("REJECTED") ? null : created.plusHours(24)));
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void seedCreditRequests(Map<String, Long> limits, LocalDateTime now) {
+        for (RequestSeed seed : approvedRequests(now)) {
+            Long requestId = jdbc.queryForObject("""
+                    INSERT INTO credit_requests
+                        (seed_key, credit_limit_id, requester_id, amount, status, created_at, updated_at, expires_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+                    """, Long.class, seed.key(), limits.get(seed.company()), seed.requester(), seed.amount(),
+                    seed.status(), seed.created(), seed.updated(), seed.expires());
+            if (seed.status().equals("REJECTED")) {
+                jdbc.update("""
+                        INSERT INTO approval_decisions
+                            (credit_request_id, decided_by_id, decision, reason, created_at)
+                        VALUES (?, 23, 'REJECTED', ?, ?)
+                        """, requestId, "Historical credit review: repayment evidence was insufficient", seed.updated());
+            }
+        }
+        // Only the nine limits just created by the caller are touched. Existing balances are never updated.
+        for (Long limitId : limits.values()) {
+            int updated = jdbc.update("""
+                    UPDATE credit_limits cl SET
+                        used_amount = (SELECT COALESCE(SUM(amount), 0) FROM credit_requests
+                                       WHERE credit_limit_id = cl.id AND status = 'USED'),
+                        reserved_amount = (SELECT COALESCE(SUM(amount), 0) FROM credit_requests
+                                           WHERE credit_limit_id = cl.id AND status = 'RESERVED')
+                    WHERE cl.id = ? AND cl.used_amount = 0 AND cl.reserved_amount = 0
+                    """, limitId);
+            if (updated != 1) throw new IllegalStateException("New limit balance prerequisite changed: " + limitId);
+        }
     }
 }
