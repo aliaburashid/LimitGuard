@@ -31,7 +31,7 @@ Base prefix `/api`. Authenticated requests use `Authorization: Bearer <JWT>`. Lo
 | /credit-requests/{id}/review | GET | Risk | CreditRequestReviewResponse |
 | /credit-requests/{id}/approve | PATCH | Risk | no body / CreditRequestResponse |
 | /credit-requests/{id}/reject | PATCH | Risk | reason / CreditRequestResponse |
-| /credit-requests/events | GET | Authenticated, institution-scoped | SSE event credit-request-status; creditRequestId, status. Only events belonging to the authenticated user's financial institution are delivered. |
+| /credit-requests/events | GET | Authenticated, institution-scoped | SSE events `credit-request-status`, `counterparty-status`, `credit-limit-updated`, `group-credit-limit-updated` (payloads below). Only events belonging to the authenticated user's financial institution are delivered. |
 | /financial-institutions | POST | Admin | name, status / FinancialInstitutionResponse |
 | /financial-institutions/{id} | PUT | Admin | name, status / FinancialInstitutionResponse |
 | /audit-logs | GET | Admin | Pageable; createdAt descending / Page<AuditLogResponse> |
@@ -49,3 +49,27 @@ The frontend displays monetary amounts in BHD as whole dinars (for example, `BD 
 SSE subscriptions send an initial `:connected` comment to flush the response immediately. The frontend ignores SSE comments and uses the response to show live connection status. Internal ASYNC and ERROR dispatches are permitted after the original request security checks; normal API requests remain authenticated.
 
 The counterparty register remains shared under the existing schema. SSE notifications are scoped by financial institution. Authenticated users subscribe to their own institution's events, and credit request status updates are delivered only to subscribers belonging to that institution. Cross-institution event isolation is covered by backend tests.
+
+
+## Integrated corporate and ML APIs
+
+- `GET /corporate-group-memberships`: membership ID, corporateGroupId, corporateGroupName, counterpartyId; all authenticated staff roles listed above.
+- `GET /group-credit-limits`: bank-scoped paginated directory with id, corporateGroupId, corporateGroupName, financialInstitutionId, amount.
+- `GET /group-credit-limits/groups/{corporateGroupId}/exposure` and `/headroom`: JSON monetary numbers; calculated by the backend.
+- `PUT /group-credit-limits/{id}`: ADMIN or RISK_OFFICER, `{limitAmount}`.
+- `GET /counterparties/{id}/financial-profile`: saved six ratios, year end and timestamps; authorized staff roles.
+- `POST /counterparties/{id}/risk-prediction`: RISK_OFFICER only, no body; `{probability, riskLevel, modelVersion}`. No prediction timestamp or confidence/explanation is supplied. The UI labels its local response-receipt time accordingly.
+- `GET /credit-requests/search`: RISK_OFFICER; optional status, counterpartyId, requesterId and pagination. Used for institution request history and recent outcomes.
+
+SSE payloads:
+
+- `credit-request-status`: `{creditRequestId, status}`, including USED in this implementation. RESERVED does not identify whether reservation was immediate or approved, so its toast says “reserved successfully”.
+- `counterparty-status`: `{counterpartyId, status}`.
+- `credit-limit-updated`: `{creditLimitId, oldLimitAmount, newLimitAmount}`.
+- `group-credit-limit-updated`: `{groupCreditLimitId, corporateGroupId, oldLimitAmount, newLimitAmount}`.
+
+The fetch-based stream uses a captured session bearer token in the Authorization header, validates content type and payloads, parses chunked CRLF events, reconnects with exponential backoff, stops on 401/403, and aborts on logout. Session-owned UI state is remounted on account changes. Toasts are delivered globally while signed in, with bounded history and short-window duplicate suppression. Data refresh is debounced, reconciles after reconnect, and runs periodically while visible because the server supplies no replay IDs/history. Updates received during a disconnection cannot be reconstructed as historical toasts.
+
+There is no individual credit-limit listing endpoint. Facility choices use the authenticated RM's request records; facilities without request history can be accessed by credit-limit ID. Current exposure is always fetched from the API. Group totals are labelled as group totals and exclude ungrouped limits. The company directory is shared by the existing schema. Industry and rejection/decision reasons are not present in the existing response DTOs; detailed audit access remains ADMIN-only.
+
+The request directory follows all pages before calculating status counts; it never treats the first page as an institution total. All authorized records appear in the normal application without dataset filters or imported files.

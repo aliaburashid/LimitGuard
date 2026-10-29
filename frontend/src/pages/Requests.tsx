@@ -11,6 +11,9 @@ import {
   Pager,
 } from "../components/ui";
 import { useAuth } from "../context/Auth";
+import { CreateRequest } from "../components/CreateRequest";
+import { requestDirectory, memberships } from "../api/portfolio";
+import type { Membership } from "../types";
 import type { Exposure, Page, Request, Review } from "../types";
 import { date, label, money, requestReference } from "../utils/format";
 import type { Mutation } from "./MutationDialog";
@@ -18,12 +21,20 @@ export function Requests({
   approval,
   version,
   mutate,
+  assess,
 }: {
   approval: boolean;
   version: number;
   mutate: (a: Mutation) => void;
+  assess?: (id: number) => void;
 }) {
   const { user } = useAuth();
+  const [lastResult, setLastResult] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [status, setStatus] = useState(approval ? "PENDING_APPROVAL" : "");
+  const [query, setQuery] = useState("");
+  const [members, setMembers] = useState<Membership[]>([]);
+  const [capacities, setCapacities] = useState<Record<number, Exposure>>({});
   const [page, setPage] = useState(0);
   const [data, setData] = useState<Page<Request> | null>(null);
   const [error, setError] = useState("");
@@ -36,18 +47,51 @@ export function Requests({
     const c = new AbortController();
     setData(null);
     setError("");
-    api<Page<Request>>(
-      `/credit-requests/${approval ? "pending" : "my"}?page=${page}&size=10${approval ? "&sort=createdAt,desc" : ""}`,
-      "GET",
-      undefined,
-      c.signal,
-    )
-      .then(setData)
+    requestDirectory(approval, c.signal)
+      .then((rows) => {
+        if (c.signal.aborted) return;
+        const result = rows.filter((r) => !status || r.status === status);
+        setData({
+          content: result,
+          totalElements: result.length,
+          totalPages: Math.ceil(result.length / 10),
+          number: page,
+        });
+        const visible = result
+          .filter(
+            (r) =>
+              !query ||
+              `${r.counterpartyName} ${r.id} ${r.requesterName}`
+                .toLowerCase()
+                .includes(query.toLowerCase()),
+          )
+          .slice(page * 10, page * 10 + 10);
+        void Promise.all(
+          visible.map((r) =>
+            api<Exposure>(
+              `/credit-limits/${r.creditLimitId}/exposure`,
+              "GET",
+              undefined,
+              c.signal,
+            ),
+          ),
+        )
+          .then((values) => {
+            if (!c.signal.aborted)
+              setCapacities(
+                Object.fromEntries(values.map((v) => [v.creditLimitId, v])),
+              );
+          })
+          .catch(() => {});
+      })
       .catch((e) => {
-        if (e.name !== "AbortError") setError(e.message);
+        if (!c.signal.aborted) setError(e.message);
       });
+    void memberships(c.signal)
+      .then(setMembers)
+      .catch(() => {});
     return () => c.abort();
-  }, [approval, page, version]);
+  }, [approval, page, version, status, query]);
   useEffect(() => {
     setReview(null);
     setExposure(null);
@@ -56,7 +100,7 @@ export function Requests({
     let active = true;
     setLoading(true);
     Promise.all([
-      approval
+      approval && selected.status === "PENDING_APPROVAL"
         ? api<Review>(`/credit-requests/${selected.id}/review`)
         : Promise.resolve(null),
       api<Exposure>(`/credit-limits/${selected.creditLimitId}/exposure`),
@@ -92,6 +136,18 @@ export function Requests({
       });
     return () => controller.abort();
   }, [version]);
+  const filtered =
+    data?.content.filter(
+      (r) =>
+        !query ||
+        `${r.counterpartyName} ${r.id} ${r.requesterName}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+    ) ?? [];
+  function openRequest(r: Request) {
+    if (approval && assess) assess(r.id);
+    else setSelected(r);
+  }
   function transition(action: string) {
     if (!selected) return;
     const id = selected.id;
@@ -129,36 +185,57 @@ export function Requests({
           </p>
         </div>
         {!approval && user?.role === "RELATIONSHIP_MANAGER" && (
-          <button
-            className="primary"
-            onClick={() =>
-              mutate({
-                title: "Create credit request",
-                path: "/credit-requests",
-                method: "POST",
-                fields: [
-                  {
-                    name: "creditLimitId",
-                    label: "Credit-limit ID",
-                    type: "number",
-                  },
-                  {
-                    name: "amount",
-                    label: "Requested amount (BHD)",
-                    type: "number",
-                  },
-                ],
-                description:
-                  "The backend determines whether your request reserves capacity immediately or requires Risk Officer approval.",
-              })
-            }
-          >
+          <button className="primary" onClick={() => setCreating(true)}>
             <Plus size={17} />
             New request
           </button>
         )}
       </div>
-      <section className="panel">
+      {lastResult && (
+        <div className="notice" role="status">
+          {lastResult}
+        </div>
+      )}
+      <div className={`register-filters ${approval ? "queue-toolbar" : ""}`}>
+        <label className="field">
+          <span>Search requests</span>
+          <input
+            value={query}
+            placeholder="Company, request ID or requester"
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(0);
+            }}
+          />
+        </label>
+        <label className="field">
+          <span>Status</span>
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(0);
+            }}
+          >
+            <option value="">All statuses</option>
+            {[
+              "PENDING_APPROVAL",
+              "RESERVED",
+              "USED",
+              "REJECTED",
+              "EXPIRED",
+              "CANCELLED",
+            ].map((s) => (
+              <option key={s} value={s}>
+                {label(s)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <section
+        className={`panel request-queue-panel ${approval ? "risk-queue" : ""}`}
+      >
         <div className="section-head">
           <h2>
             {approval ? "Pending risk decisions" : "Your request register"}
@@ -169,7 +246,7 @@ export function Requests({
           <ErrorBox message={error} />
         ) : !data ? (
           <Loading />
-        ) : !data.content.length ? (
+        ) : !filtered.length ? (
           <Empty
             title={approval ? "No pending approvals" : "No credit requests yet"}
           />
@@ -179,22 +256,24 @@ export function Requests({
               <thead>
                 <tr>
                   <th>Request</th>
-                  <th>Counterparty / institution</th>
-                  <th>Requester</th>
+                  <th>Company</th>
+                  <th>Corporate group</th>
+                  <th>Exposure / headroom</th>
+                  {!approval && <th>Requester</th>}
                   <th>Amount</th>
                   <th>Status</th>
                   <th>Created</th>
-                  <th>Reservation expiry</th>
+                  {!approval && <th>Reservation expiry</th>}
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {data.content.map((r) => (
+                {filtered.slice(page * 10, page * 10 + 10).map((r) => (
                   <tr key={r.id}>
                     <td>
                       <button
                         className="table-link mono"
-                        onClick={() => setSelected(r)}
+                        onClick={() => openRequest(r)}
                       >
                         {requestReference(r.id)}
                       </button>
@@ -203,16 +282,41 @@ export function Requests({
                       <strong>{r.counterpartyName}</strong>
                       <div className="small">{r.financialInstitutionName}</div>
                     </td>
-                    <td>{r.requesterName}</td>
+                    <td>
+                      {members.find(
+                        (m) => m.counterpartyId === r.counterpartyId,
+                      )?.corporateGroupName ?? "—"}
+                    </td>
+                    <td className="numeric">
+                      {capacities[r.creditLimitId] ? (
+                        <>
+                          {money(
+                            Number(capacities[r.creditLimitId].usedAmount) +
+                              Number(
+                                capacities[r.creditLimitId].reservedAmount,
+                              ),
+                          )}
+                          <div className="small">
+                            {money(
+                              capacities[r.creditLimitId].availableHeadroom,
+                            )}{" "}
+                            available
+                          </div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    {!approval && <td>{r.requesterName}</td>}
                     <td className="numeric">{money(r.amount)}</td>
                     <td>
                       <Badge status={r.status} />
                     </td>
                     <td>{date(r.createdAt)}</td>
-                    <td>{date(r.expiresAt)}</td>
+                    {!approval && <td>{date(r.expiresAt)}</td>}
                     <td>
-                      <button onClick={() => setSelected(r)}>
-                        {approval ? "Review" : "Details"}
+                      <button onClick={() => openRequest(r)}>
+                        {approval ? "Assess risk" : "Details"}
                         <ArrowUpRight size={14} />
                       </button>
                     </td>
@@ -225,12 +329,21 @@ export function Requests({
         {data && (
           <Pager
             page={page}
-            total={data.totalPages}
-            count={data.totalElements}
+            total={Math.ceil(filtered.length / 10)}
+            count={filtered.length}
             onChange={setPage}
           />
         )}
       </section>
+      {creating && (
+        <CreateRequest
+          close={() => setCreating(false)}
+          done={(message) => {
+            setLastResult(message);
+            window.dispatchEvent(new Event("workspace-refresh"));
+          }}
+        />
+      )}
       {selected && (
         <Modal
           title={`Credit request ${requestReference(selected.id)}`}
@@ -298,14 +411,18 @@ export function Requests({
             <div className="modal-actions">
               <button
                 className="danger"
-                disabled={loading || !!detailError}
+                disabled={
+                  loading || !!detailError || selected.requesterId === user?.id
+                }
                 onClick={() => transition("reject")}
               >
                 Reject request
               </button>
               <button
                 className="primary"
-                disabled={loading || !!detailError}
+                disabled={
+                  loading || !!detailError || selected.requesterId === user?.id
+                }
                 onClick={() => transition("approve")}
               >
                 Approve & reserve

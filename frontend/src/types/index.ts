@@ -69,3 +69,37 @@ export interface Page<T> {
   totalPages: number;
   number: number;
 }
+export interface Membership {
+  id: number;
+  corporateGroupId: number;
+  corporateGroupName: string;
+  counterpartyId: number;
+}
+export interface GroupLimit {
+  id: number;
+  corporateGroupId: number;
+  corporateGroupName: string;
+  financialInstitutionId: number;
+  amount: number;
+}
+export interface GroupExposure extends GroupLimit {
+  exposure: number;
+  headroom: number;
+}
+export interface FinancialProfile {
+  counterpartyId: number;
+  counterpartyName: string;
+  returnOnAssets: number;
+  profitMargin: number;
+  fixedAssetTurnover: number;
+  debtToTotalCapitalPercent: number;
+  interestCoverage: number;
+  totalDebtToEbitda: number;
+  financialYearEnd: string;
+  updatedAt: string;
+}
+export interface Prediction {
+  probability: number;
+  riskLevel: string;
+  modelVersion: string;
+}

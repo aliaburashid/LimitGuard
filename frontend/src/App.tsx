@@ -1,7 +1,8 @@
 import { Avatar } from "./components/Avatar";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import {
   LayoutDashboard,
+  BrainCircuit,
   Building2,
   ChartNoAxesCombined,
   FileText,
@@ -14,8 +15,6 @@ import {
   Menu,
   User,
   RefreshCw,
-  X,
-  CheckCircle2,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useAuth } from "./context/Auth";
@@ -31,7 +30,15 @@ import {
   MutationDialog,
   type Mutation,
 } from "./pages/Workspace";
+import { Loading } from "./components/ui";
+const RiskAnalytics = lazy(() =>
+  import("./pages/RiskAnalytics").then((module) => ({
+    default: module.RiskAnalytics,
+  })),
+);
 import { stream } from "./api/client";
+import { Notifications, type Notice } from "./components/Notifications";
+import { notification, type Tone } from "./api/events";
 import { label } from "./utils/format";
 const nav = [
   {
@@ -65,6 +72,12 @@ const nav = [
     roles: ["RISK_OFFICER"],
   },
   {
+    id: "analytics",
+    name: "Risk Analytics",
+    icon: BrainCircuit,
+    roles: ["RISK_OFFICER"],
+  },
+  {
     id: "institutions",
     name: "Institutions",
     icon: Building2,
@@ -74,45 +87,92 @@ const nav = [
   { id: "audit", name: "Audit log", icon: ScrollText, roles: ["ADMIN"] },
 ];
 export default function App() {
+  const { user } = useAuth();
+  return <WorkspaceApp key={user?.id ?? "signed-out"} />;
+}
+function WorkspaceApp() {
   const { user, logout, refresh } = useAuth();
   const [page, setPage] = useState("dashboard");
+  const [assessmentId, setAssessmentId] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [version, setVersion] = useState(0);
   const [action, setAction] = useState<Mutation | null>(null);
-  const [toast, setToast] = useState("");
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [toasts, setToasts] = useState<Notice[]>([]);
+  const nextNotice = useRef(0);
   const [live, setLive] = useState("Connecting");
   const reduced = useReducedMotion();
+  function assess(id: number) {
+    setAssessmentId(id);
+    navigate("analytics");
+  }
   function navigate(p: string) {
     setPage(p);
     setMobile(false);
   }
-  function notify(message: string) {
-    setToast(message);
+  function notify(message: string, tone: Tone = "success") {
+    const notice = {
+      id: ++nextNotice.current,
+      message,
+      tone,
+      time: new Date().toLocaleTimeString("en-GB"),
+    };
+    setNotices((previous) => [notice, ...previous].slice(0, 40));
+    setToasts((previous) => [...previous, notice].slice(-5));
   }
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(""), 5000);
-    return () => clearTimeout(timer);
-  }, [toast]);
+  function dismiss(id: number) {
+    setToasts((previous) => previous.filter((n) => n.id !== id));
+  }
   useEffect(() => {
     if (!user) return;
     const controller = new AbortController();
+    const seen = new Map<string, number>();
+    let refreshTimer: ReturnType<typeof setTimeout>;
     void stream(
       controller.signal,
-      () => {
-        setVersion((v) => v + 1);
-        notify("Credit request updated. Your workspace has been refreshed.");
+      (event) => {
+        if (controller.signal.aborted) return;
+        const key = JSON.stringify(event);
+        const now = Date.now();
+        if (now - (seen.get(key) ?? 0) < 1500) return;
+        seen.set(key, now);
+        for (const [k, time] of seen) if (now - time > 10000) seen.delete(k);
+        const notice = notification(event);
+        notify(notice.message, notice.tone);
+        clearTimeout(refreshTimer);
+        // USED is published before commit by the existing backend. Wait briefly
+        // before reading, then reconcile again to cover transaction visibility.
+        refreshTimer = setTimeout(() => setVersion((v) => v + 1), 250);
       },
-      setLive,
+      (state) => {
+        if (!controller.signal.aborted) {
+          setLive(state);
+          if (state === "Live") setVersion((v) => v + 1);
+        }
+      },
     );
-    return () => controller.abort();
+    const reconcile = setInterval(() => {
+      if (!document.hidden) setVersion((v) => v + 1);
+    }, 30000);
+    return () => {
+      controller.abort();
+      clearTimeout(refreshTimer);
+      clearInterval(reconcile);
+    };
   }, [user?.id]);
   useEffect(() => {
     setPage("dashboard");
     setAction(null);
-    setToast("");
+    setToasts([]);
+    setNotices([]);
   }, [user?.id]);
+  useEffect(() => {
+    const refreshWorkspace = () => setVersion((v) => v + 1);
+    window.addEventListener("workspace-refresh", refreshWorkspace);
+    return () =>
+      window.removeEventListener("workspace-refresh", refreshWorkspace);
+  }, []);
   if (!user) return <Auth />;
   const allowed = nav.filter((n) => n.roles.includes(user.role));
   const valid = page === "profile" || allowed.some((n) => n.id === page);
@@ -232,6 +292,11 @@ export default function App() {
             >
               <RefreshCw size={17} />
             </button>
+            <Notifications
+              notices={notices}
+              toasts={toasts}
+              dismiss={dismiss}
+            />
             <span className="divider" />
             <button
               className="header-profile"
@@ -263,7 +328,11 @@ export default function App() {
               transition={{ duration: 0.16 }}
             >
               {active === "dashboard" && (
-                <Dashboard navigate={navigate} version={version} />
+                <Dashboard
+                  navigate={navigate}
+                  version={version}
+                  assess={assess}
+                />
               )}{" "}
               {active === "counterparties" && (
                 <Counterparties version={version} mutate={setAction} />
@@ -277,8 +346,20 @@ export default function App() {
                   approval={active === "approvals"}
                   version={version}
                   mutate={setAction}
+                  assess={assess}
                 />
               )}{" "}
+              {active === "analytics" && (
+                <Suspense fallback={<Loading />}>
+                  <RiskAnalytics
+                    requestId={assessmentId}
+                    selectRequest={setAssessmentId}
+                    version={version}
+                    back={() => navigate("approvals")}
+                    changed={() => setVersion((v) => v + 1)}
+                  />
+                </Suspense>
+              )}
               {active === "audit" && <AuditPage version={version} />}{" "}
               {["institutions", "users"].includes(active) && (
                 <AdminPage
@@ -315,27 +396,6 @@ export default function App() {
           }}
         />
       )}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            className="toast"
-            role="status"
-            initial={reduced ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-          >
-            <CheckCircle2 size={19} />
-            {toast}
-            <button
-              className="icon-button"
-              onClick={() => setToast("")}
-              aria-label="Dismiss notification"
-            >
-              <X size={16} />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

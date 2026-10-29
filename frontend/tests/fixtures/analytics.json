@@ -1,0 +1,1034 @@
+{
+  "source": "Independent mocked API responses for frontend contract checks; never loaded by the application.",
+  "requests": [
+    {
+      "id": 337,
+      "amount": 600000.0,
+      "status": "USED",
+      "creditLimitId": 145,
+      "counterpartyId": 99,
+      "counterpartyName": "Gulf Horizon Airlines",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 338,
+      "amount": 300000.0,
+      "status": "USED",
+      "creditLimitId": 146,
+      "counterpartyId": 100,
+      "counterpartyName": "Gulf Horizon Cargo",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:32:35.572894"
+    },
+    {
+      "id": 339,
+      "amount": 250000.0,
+      "status": "USED",
+      "creditLimitId": 147,
+      "counterpartyId": 101,
+      "counterpartyName": "Gulf Horizon Aircraft Services",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:32:35.572894"
+    },
+    {
+      "id": 340,
+      "amount": 950000.0,
+      "status": "USED",
+      "creditLimitId": 148,
+      "counterpartyId": 102,
+      "counterpartyName": "Pearl Construction",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 341,
+      "amount": 700000.0,
+      "status": "USED",
+      "creditLimitId": 149,
+      "counterpartyId": 103,
+      "counterpartyName": "Pearl Engineering",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 342,
+      "amount": 1000000.0,
+      "status": "USED",
+      "creditLimitId": 150,
+      "counterpartyId": 104,
+      "counterpartyName": "Pearl Property Development",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 343,
+      "amount": 400000.0,
+      "status": "USED",
+      "creditLimitId": 151,
+      "counterpartyId": 105,
+      "counterpartyName": "Arabian Renewable Energy",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:32:35.572894"
+    },
+    {
+      "id": 344,
+      "amount": 1200000.0,
+      "status": "USED",
+      "creditLimitId": 152,
+      "counterpartyId": 106,
+      "counterpartyName": "Arabian Industrial Utilities",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 345,
+      "amount": 900000.0,
+      "status": "USED",
+      "creditLimitId": 153,
+      "counterpartyId": 107,
+      "counterpartyName": "Arabian Energy Logistics",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 346,
+      "amount": 200000.0,
+      "status": "USED",
+      "creditLimitId": 154,
+      "counterpartyId": 108,
+      "counterpartyName": "Bahrain Cloud Solutions",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:32:35.572894"
+    },
+    {
+      "id": 347,
+      "amount": 500000.0,
+      "status": "USED",
+      "creditLimitId": 155,
+      "counterpartyId": 109,
+      "counterpartyName": "Gulf Data Systems",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:32:35.572894"
+    },
+    {
+      "id": 348,
+      "amount": 1200000.0,
+      "status": "USED",
+      "creditLimitId": 156,
+      "counterpartyId": 110,
+      "counterpartyName": "Digital Payments Bahrain",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 349,
+      "amount": 800000.0,
+      "status": "USED",
+      "creditLimitId": 157,
+      "counterpartyId": 111,
+      "counterpartyName": "Seaside Hotels",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 350,
+      "amount": 600000.0,
+      "status": "USED",
+      "creditLimitId": 158,
+      "counterpartyId": 112,
+      "counterpartyName": "Seaside Restaurants",
+      "counterpartyStatus": "FROZEN",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 351,
+      "amount": 300000.0,
+      "status": "USED",
+      "creditLimitId": 159,
+      "counterpartyId": 113,
+      "counterpartyName": "Seaside Tourism Services",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:32:35.572894"
+    },
+    {
+      "id": 352,
+      "amount": 600000.0,
+      "status": "USED",
+      "creditLimitId": 160,
+      "counterpartyId": 114,
+      "counterpartyName": "Concurrency Trading Bahrain",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 353,
+      "amount": 600000.0,
+      "status": "USED",
+      "creditLimitId": 161,
+      "counterpartyId": 115,
+      "counterpartyName": "Concurrency Logistics Bahrain",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-26T04:32:35.572894",
+      "expiresAt": "2026-10-27T02:33:35.572894"
+    },
+    {
+      "id": 354,
+      "amount": 100000.0,
+      "status": "RESERVED",
+      "creditLimitId": 145,
+      "counterpartyId": 99,
+      "counterpartyName": "Gulf Horizon Airlines",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894",
+      "expiresAt": "2026-10-30T02:32:35.572894"
+    },
+    {
+      "id": 355,
+      "amount": 50000.0,
+      "status": "RESERVED",
+      "creditLimitId": 145,
+      "counterpartyId": 99,
+      "counterpartyName": "Gulf Horizon Airlines",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894",
+      "expiresAt": "2026-10-30T02:32:35.572894"
+    },
+    {
+      "id": 356,
+      "amount": 150000.0,
+      "status": "RESERVED",
+      "creditLimitId": 145,
+      "counterpartyId": 99,
+      "counterpartyName": "Gulf Horizon Airlines",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894",
+      "expiresAt": "2026-10-30T02:32:35.572894"
+    },
+    {
+      "id": 357,
+      "amount": 750000.0,
+      "status": "PENDING_APPROVAL",
+      "creditLimitId": 146,
+      "counterpartyId": 100,
+      "counterpartyName": "Gulf Horizon Cargo",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894",
+      "expiresAt": null
+    },
+    {
+      "id": 358,
+      "amount": 750000.0,
+      "status": "PENDING_APPROVAL",
+      "creditLimitId": 149,
+      "counterpartyId": 103,
+      "counterpartyName": "Pearl Engineering",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894",
+      "expiresAt": null
+    },
+    {
+      "id": 359,
+      "amount": 750000.0,
+      "status": "PENDING_APPROVAL",
+      "creditLimitId": 151,
+      "counterpartyId": 105,
+      "counterpartyName": "Arabian Renewable Energy",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894",
+      "expiresAt": null
+    },
+    {
+      "id": 360,
+      "amount": 750000.0,
+      "status": "REJECTED",
+      "creditLimitId": 155,
+      "counterpartyId": 109,
+      "counterpartyName": "Gulf Data Systems",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-27T02:32:35.572894",
+      "updatedAt": "2026-10-27T04:32:35.572894",
+      "expiresAt": null
+    },
+    {
+      "id": 361,
+      "amount": 100000.0,
+      "status": "CANCELLED",
+      "creditLimitId": 155,
+      "counterpartyId": 109,
+      "counterpartyName": "Gulf Data Systems",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-27T02:32:35.572894",
+      "updatedAt": "2026-10-27T04:32:35.572894",
+      "expiresAt": "2026-10-28T02:32:35.572894"
+    },
+    {
+      "id": 362,
+      "amount": 100000.0,
+      "status": "EXPIRED",
+      "creditLimitId": 155,
+      "counterpartyId": 109,
+      "counterpartyName": "Gulf Data Systems",
+      "counterpartyStatus": "ACTIVE",
+      "requesterId": 1,
+      "requesterName": "Alia Burashid",
+      "financialInstitutionId": 1,
+      "financialInstitutionName": "Citi",
+      "createdAt": "2026-10-26T02:32:35.572894",
+      "updatedAt": "2026-10-27T02:33:05.572894",
+      "expiresAt": "2026-10-27T02:32:35.572894"
+    }
+  ],
+  "profiles": [
+    {
+      "counterpartyId": 99,
+      "counterpartyName": "Gulf Horizon Airlines",
+      "returnOnAssets": 9.2,
+      "profitMargin": 14.8,
+      "fixedAssetTurnover": 2.1,
+      "debtToTotalCapitalPercent": 28.0,
+      "interestCoverage": 8.4,
+      "totalDebtToEbitda": 1.6,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 100,
+      "counterpartyName": "Gulf Horizon Cargo",
+      "returnOnAssets": 4.1,
+      "profitMargin": 6.8,
+      "fixedAssetTurnover": 1.2,
+      "debtToTotalCapitalPercent": 52.0,
+      "interestCoverage": 2.8,
+      "totalDebtToEbitda": 3.7,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 101,
+      "counterpartyName": "Gulf Horizon Aircraft Services",
+      "returnOnAssets": 9.2,
+      "profitMargin": 14.8,
+      "fixedAssetTurnover": 2.1,
+      "debtToTotalCapitalPercent": 28.0,
+      "interestCoverage": 8.4,
+      "totalDebtToEbitda": 1.6,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 102,
+      "counterpartyName": "Pearl Construction",
+      "returnOnAssets": -2.4,
+      "profitMargin": -4.8,
+      "fixedAssetTurnover": 0.65,
+      "debtToTotalCapitalPercent": 81.0,
+      "interestCoverage": 0.7,
+      "totalDebtToEbitda": 7.9,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 103,
+      "counterpartyName": "Pearl Engineering",
+      "returnOnAssets": 4.1,
+      "profitMargin": 6.8,
+      "fixedAssetTurnover": 1.2,
+      "debtToTotalCapitalPercent": 52.0,
+      "interestCoverage": 2.8,
+      "totalDebtToEbitda": 3.7,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 104,
+      "counterpartyName": "Pearl Property Development",
+      "returnOnAssets": 4.1,
+      "profitMargin": 6.8,
+      "fixedAssetTurnover": 1.2,
+      "debtToTotalCapitalPercent": 52.0,
+      "interestCoverage": 2.8,
+      "totalDebtToEbitda": 3.7,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 105,
+      "counterpartyName": "Arabian Renewable Energy",
+      "returnOnAssets": 9.2,
+      "profitMargin": 14.8,
+      "fixedAssetTurnover": 2.1,
+      "debtToTotalCapitalPercent": 28.0,
+      "interestCoverage": 8.4,
+      "totalDebtToEbitda": 1.6,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 106,
+      "counterpartyName": "Arabian Industrial Utilities",
+      "returnOnAssets": 4.1,
+      "profitMargin": 6.8,
+      "fixedAssetTurnover": 1.2,
+      "debtToTotalCapitalPercent": 52.0,
+      "interestCoverage": 2.8,
+      "totalDebtToEbitda": 3.7,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 107,
+      "counterpartyName": "Arabian Energy Logistics",
+      "returnOnAssets": -2.4,
+      "profitMargin": -4.8,
+      "fixedAssetTurnover": 0.65,
+      "debtToTotalCapitalPercent": 81.0,
+      "interestCoverage": 0.7,
+      "totalDebtToEbitda": 7.9,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 108,
+      "counterpartyName": "Bahrain Cloud Solutions",
+      "returnOnAssets": 9.2,
+      "profitMargin": 14.8,
+      "fixedAssetTurnover": 2.1,
+      "debtToTotalCapitalPercent": 28.0,
+      "interestCoverage": 8.4,
+      "totalDebtToEbitda": 1.6,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 109,
+      "counterpartyName": "Gulf Data Systems",
+      "returnOnAssets": 4.1,
+      "profitMargin": 6.8,
+      "fixedAssetTurnover": 1.2,
+      "debtToTotalCapitalPercent": 52.0,
+      "interestCoverage": 2.8,
+      "totalDebtToEbitda": 3.7,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 110,
+      "counterpartyName": "Digital Payments Bahrain",
+      "returnOnAssets": -2.4,
+      "profitMargin": -4.8,
+      "fixedAssetTurnover": 0.65,
+      "debtToTotalCapitalPercent": 81.0,
+      "interestCoverage": 0.7,
+      "totalDebtToEbitda": 7.9,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 111,
+      "counterpartyName": "Seaside Hotels",
+      "returnOnAssets": 4.1,
+      "profitMargin": 6.8,
+      "fixedAssetTurnover": 1.2,
+      "debtToTotalCapitalPercent": 52.0,
+      "interestCoverage": 2.8,
+      "totalDebtToEbitda": 3.7,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 112,
+      "counterpartyName": "Seaside Restaurants",
+      "returnOnAssets": -2.4,
+      "profitMargin": -4.8,
+      "fixedAssetTurnover": 0.65,
+      "debtToTotalCapitalPercent": 81.0,
+      "interestCoverage": 0.7,
+      "totalDebtToEbitda": 7.9,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 113,
+      "counterpartyName": "Seaside Tourism Services",
+      "returnOnAssets": 9.2,
+      "profitMargin": 14.8,
+      "fixedAssetTurnover": 2.1,
+      "debtToTotalCapitalPercent": 28.0,
+      "interestCoverage": 8.4,
+      "totalDebtToEbitda": 1.6,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 114,
+      "counterpartyName": "Concurrency Trading Bahrain",
+      "returnOnAssets": 4.1,
+      "profitMargin": 6.8,
+      "fixedAssetTurnover": 1.2,
+      "debtToTotalCapitalPercent": 52.0,
+      "interestCoverage": 2.8,
+      "totalDebtToEbitda": 3.7,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "counterpartyId": 115,
+      "counterpartyName": "Concurrency Logistics Bahrain",
+      "returnOnAssets": 4.1,
+      "profitMargin": 6.8,
+      "fixedAssetTurnover": 1.2,
+      "debtToTotalCapitalPercent": 52.0,
+      "interestCoverage": 2.8,
+      "totalDebtToEbitda": 3.7,
+      "financialYearEnd": "2025-12-31",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    }
+  ],
+  "exposures": [
+    {
+      "creditLimitId": 145,
+      "counterpartyId": 99,
+      "limitAmount": 3000000.0,
+      "usedAmount": 600000.0,
+      "reservedAmount": 300000.0,
+      "availableHeadroom": 2100000.0
+    },
+    {
+      "creditLimitId": 146,
+      "counterpartyId": 100,
+      "limitAmount": 2500000.0,
+      "usedAmount": 300000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 2200000.0
+    },
+    {
+      "creditLimitId": 147,
+      "counterpartyId": 101,
+      "limitAmount": 2000000.0,
+      "usedAmount": 250000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 1750000.0
+    },
+    {
+      "creditLimitId": 148,
+      "counterpartyId": 102,
+      "limitAmount": 1000000.0,
+      "usedAmount": 950000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 50000.0
+    },
+    {
+      "creditLimitId": 149,
+      "counterpartyId": 103,
+      "limitAmount": 2500000.0,
+      "usedAmount": 700000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 1800000.0
+    },
+    {
+      "creditLimitId": 150,
+      "counterpartyId": 104,
+      "limitAmount": 2000000.0,
+      "usedAmount": 1000000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 1000000.0
+    },
+    {
+      "creditLimitId": 151,
+      "counterpartyId": 105,
+      "limitAmount": 3000000.0,
+      "usedAmount": 400000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 2600000.0
+    },
+    {
+      "creditLimitId": 152,
+      "counterpartyId": 106,
+      "limitAmount": 2000000.0,
+      "usedAmount": 1200000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 800000.0
+    },
+    {
+      "creditLimitId": 153,
+      "counterpartyId": 107,
+      "limitAmount": 1500000.0,
+      "usedAmount": 900000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 600000.0
+    },
+    {
+      "creditLimitId": 154,
+      "counterpartyId": 108,
+      "limitAmount": 2000000.0,
+      "usedAmount": 200000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 1800000.0
+    },
+    {
+      "creditLimitId": 155,
+      "counterpartyId": 109,
+      "limitAmount": 2000000.0,
+      "usedAmount": 500000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 1500000.0
+    },
+    {
+      "creditLimitId": 156,
+      "counterpartyId": 110,
+      "limitAmount": 2000000.0,
+      "usedAmount": 1200000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 800000.0
+    },
+    {
+      "creditLimitId": 157,
+      "counterpartyId": 111,
+      "limitAmount": 2000000.0,
+      "usedAmount": 800000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 1200000.0
+    },
+    {
+      "creditLimitId": 158,
+      "counterpartyId": 112,
+      "limitAmount": 1500000.0,
+      "usedAmount": 600000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 900000.0
+    },
+    {
+      "creditLimitId": 159,
+      "counterpartyId": 113,
+      "limitAmount": 1500000.0,
+      "usedAmount": 300000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 1200000.0
+    },
+    {
+      "creditLimitId": 160,
+      "counterpartyId": 114,
+      "limitAmount": 1500000.0,
+      "usedAmount": 600000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 900000.0
+    },
+    {
+      "creditLimitId": 161,
+      "counterpartyId": 115,
+      "limitAmount": 1500000.0,
+      "usedAmount": 600000.0,
+      "reservedAmount": 0.0,
+      "availableHeadroom": 900000.0
+    }
+  ],
+  "memberships": [
+    {
+      "id": 69,
+      "corporateGroupId": 25,
+      "corporateGroupName": "Gulf Horizon Aviation Group",
+      "counterpartyId": 99
+    },
+    {
+      "id": 70,
+      "corporateGroupId": 25,
+      "corporateGroupName": "Gulf Horizon Aviation Group",
+      "counterpartyId": 100
+    },
+    {
+      "id": 71,
+      "corporateGroupId": 25,
+      "corporateGroupName": "Gulf Horizon Aviation Group",
+      "counterpartyId": 101
+    },
+    {
+      "id": 72,
+      "corporateGroupId": 26,
+      "corporateGroupName": "Pearl Infrastructure Holdings",
+      "counterpartyId": 102
+    },
+    {
+      "id": 73,
+      "corporateGroupId": 26,
+      "corporateGroupName": "Pearl Infrastructure Holdings",
+      "counterpartyId": 103
+    },
+    {
+      "id": 74,
+      "corporateGroupId": 26,
+      "corporateGroupName": "Pearl Infrastructure Holdings",
+      "counterpartyId": 104
+    },
+    {
+      "id": 75,
+      "corporateGroupId": 27,
+      "corporateGroupName": "Arabian Energy Group",
+      "counterpartyId": 105
+    },
+    {
+      "id": 76,
+      "corporateGroupId": 27,
+      "corporateGroupName": "Arabian Energy Group",
+      "counterpartyId": 106
+    },
+    {
+      "id": 77,
+      "corporateGroupId": 27,
+      "corporateGroupName": "Arabian Energy Group",
+      "counterpartyId": 107
+    },
+    {
+      "id": 78,
+      "corporateGroupId": 28,
+      "corporateGroupName": "Bahrain Digital Ventures",
+      "counterpartyId": 108
+    },
+    {
+      "id": 79,
+      "corporateGroupId": 28,
+      "corporateGroupName": "Bahrain Digital Ventures",
+      "counterpartyId": 109
+    },
+    {
+      "id": 80,
+      "corporateGroupId": 28,
+      "corporateGroupName": "Bahrain Digital Ventures",
+      "counterpartyId": 110
+    },
+    {
+      "id": 81,
+      "corporateGroupId": 29,
+      "corporateGroupName": "Seaside Hospitality Group",
+      "counterpartyId": 111
+    },
+    {
+      "id": 82,
+      "corporateGroupId": 29,
+      "corporateGroupName": "Seaside Hospitality Group",
+      "counterpartyId": 112
+    },
+    {
+      "id": 83,
+      "corporateGroupId": 29,
+      "corporateGroupName": "Seaside Hospitality Group",
+      "counterpartyId": 113
+    },
+    {
+      "id": 84,
+      "corporateGroupId": 30,
+      "corporateGroupName": "RM Concurrency",
+      "counterpartyId": 114
+    },
+    {
+      "id": 85,
+      "corporateGroupId": 30,
+      "corporateGroupName": "RM Concurrency",
+      "counterpartyId": 115
+    }
+  ],
+  "groups": [
+    {
+      "id": 25,
+      "corporateGroupId": 25,
+      "corporateGroupName": "Gulf Horizon Aviation Group",
+      "financialInstitutionId": 1,
+      "amount": 8000000.0
+    },
+    {
+      "id": 26,
+      "corporateGroupId": 26,
+      "corporateGroupName": "Pearl Infrastructure Holdings",
+      "financialInstitutionId": 1,
+      "amount": 6000000.0
+    },
+    {
+      "id": 27,
+      "corporateGroupId": 27,
+      "corporateGroupName": "Arabian Energy Group",
+      "financialInstitutionId": 1,
+      "amount": 5000000.0
+    },
+    {
+      "id": 28,
+      "corporateGroupId": 28,
+      "corporateGroupName": "Bahrain Digital Ventures",
+      "financialInstitutionId": 1,
+      "amount": 6000000.0
+    },
+    {
+      "id": 29,
+      "corporateGroupId": 29,
+      "corporateGroupName": "Seaside Hospitality Group",
+      "financialInstitutionId": 1,
+      "amount": 5000000.0
+    },
+    {
+      "id": 30,
+      "corporateGroupId": 30,
+      "corporateGroupName": "RM Concurrency",
+      "financialInstitutionId": 1,
+      "amount": 2000000.0
+    }
+  ],
+  "counterparties": [
+    {
+      "id": 99,
+      "name": "Gulf Horizon Airlines",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 100,
+      "name": "Gulf Horizon Cargo",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 101,
+      "name": "Gulf Horizon Aircraft Services",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 102,
+      "name": "Pearl Construction",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 103,
+      "name": "Pearl Engineering",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 104,
+      "name": "Pearl Property Development",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 105,
+      "name": "Arabian Renewable Energy",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 106,
+      "name": "Arabian Industrial Utilities",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 107,
+      "name": "Arabian Energy Logistics",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 108,
+      "name": "Bahrain Cloud Solutions",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 109,
+      "name": "Gulf Data Systems",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 110,
+      "name": "Digital Payments Bahrain",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 111,
+      "name": "Seaside Hotels",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 112,
+      "name": "Seaside Restaurants",
+      "status": "FROZEN",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 113,
+      "name": "Seaside Tourism Services",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 114,
+      "name": "Concurrency Trading Bahrain",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    },
+    {
+      "id": 115,
+      "name": "Concurrency Logistics Bahrain",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-29T02:32:35.572894",
+      "updatedAt": "2026-10-29T02:32:35.572894"
+    }
+  ]
+}

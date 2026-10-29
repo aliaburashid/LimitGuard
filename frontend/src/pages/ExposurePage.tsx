@@ -8,6 +8,9 @@ import {
   Field,
   Loading,
 } from "../components/ui";
+import { GroupPanel } from "../components/GroupPanel";
+import { groupPortfolio } from "../api/portfolio";
+import type { GroupExposure } from "../types";
 import { useAuth } from "../context/Auth";
 import type { Exposure } from "../types";
 import type { Mutation } from "./MutationDialog";
@@ -19,6 +22,18 @@ export function ExposurePage({
   version: number;
 }) {
   const { user } = useAuth();
+  const [groups, setGroups] = useState<GroupExposure[] | null>(null);
+  const [groupError, setGroupError] = useState("");
+  useEffect(() => {
+    const c = new AbortController();
+    setGroupError("");
+    void groupPortfolio(c.signal)
+      .then(setGroups)
+      .catch((e) => {
+        if (!c.signal.aborted) setGroupError(e.message);
+      });
+    return () => c.abort();
+  }, [version]);
   const [id, setId] = useState("");
   const [data, setData] = useState<Exposure | null>(null);
   const [error, setError] = useState("");
@@ -79,6 +94,51 @@ export function ExposurePage({
           </button>
         )}
       </div>
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">CORPORATE CAPACITY</span>
+            <h2>Group limits & utilization</h2>
+          </div>
+        </div>
+        {groupError && <ErrorBox message={groupError} />}
+        {!groups ? (
+          <Loading />
+        ) : !groups.length ? (
+          <Empty title="No corporate group limits" />
+        ) : (
+          <div className="group-grid">
+            {groups.map((g) => (
+              <div key={g.id}>
+                <GroupPanel group={g} />
+                {["RISK_OFFICER", "ADMIN"].includes(user!.role) && (
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      mutate({
+                        title: "Update group credit limit",
+                        path: `/group-credit-limits/${g.id}`,
+                        method: "PUT",
+                        fields: [
+                          {
+                            name: "limitAmount",
+                            label: "Group limit amount (BHD)",
+                            type: "number",
+                            defaultValue: g.amount,
+                          },
+                        ],
+                        description: `Update ${g.corporateGroupName}. The backend validates this limit against current group exposure.`,
+                      })
+                    }
+                  >
+                    Update group limit
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
       <section className="panel">
         <div className="section-head">
           <div>

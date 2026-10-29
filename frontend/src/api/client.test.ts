@@ -107,12 +107,65 @@ describe("authenticated SSE", () => {
     expect(onState).toHaveBeenCalledWith("Live");
     expect(onEvent).toHaveBeenCalledOnce();
     expect(onEvent).toHaveBeenCalledWith({
-      creditRequestId: 42,
-      status: "USED",
+      type: "credit-request-status",
+      data: { creditRequestId: 42, status: "USED" },
     });
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe(
       "Bearer fixture-only-token",
     );
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe("SSE session boundaries", () => {
+  it("stops dispatching buffered events after logout", async () => {
+    const { stream } = await import("./client");
+    setToken("old-session");
+    const onEvent = vi.fn(() => setToken(null));
+    const body = new ReadableStream({
+      start(c) {
+        c.enqueue(
+          new TextEncoder().encode(
+            'event:credit-request-status\ndata:{"creditRequestId":1,"status":"RESERVED"}\n\nevent:credit-request-status\ndata:{"creditRequestId":2,"status":"REJECTED"}\n\n',
+          ),
+        );
+        c.close();
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(body, {
+          headers: { "Content-Type": "text/event-stream" },
+        }),
+      ),
+    );
+    await stream(new AbortController().signal, onEvent, vi.fn());
+    expect(onEvent).toHaveBeenCalledOnce();
+  });
+  it("does not invalidate a new session after a stale SSE 401", async () => {
+    const { stream } = await import("./client");
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal("window", { dispatchEvent });
+    setToken("old-session");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        setToken("new-session");
+        return new Response("", { status: 401 });
+      }),
+    );
+    await stream(new AbortController().signal, vi.fn(), vi.fn());
+    expect(dispatchEvent).not.toHaveBeenCalled();
+  });
+  it("stops reconnecting on forbidden access", async () => {
+    const { stream } = await import("./client");
+    setToken("current-session");
+    const onState = vi.fn();
+    const fetch = vi.fn().mockResolvedValue(new Response("", { status: 403 }));
+    vi.stubGlobal("fetch", fetch);
+    await stream(new AbortController().signal, vi.fn(), onState);
+    expect(onState).toHaveBeenCalledWith("Access denied");
     expect(fetch).toHaveBeenCalledOnce();
   });
 });

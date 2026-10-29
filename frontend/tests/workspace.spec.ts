@@ -37,6 +37,7 @@ const paged = (content: unknown[]) => ({
   number: 0,
 });
 async function login(page: Page, role: string) {
+  let requestState = { ...request };
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (!path.startsWith("/api/")) {
@@ -56,8 +57,37 @@ async function login(page: Page, role: string) {
         profilePicturePath: null,
       };
     else if (path.endsWith("/counterparties")) response = paged([counterparty]);
-    else if (path.endsWith("/pending") || path.endsWith("/my"))
-      response = paged([request]);
+    else if (path.endsWith("/counterparties/12")) response = counterparty;
+    else if (path.endsWith("/credit-requests/42")) response = requestState;
+    else if (
+      path.endsWith("/pending") ||
+      path.endsWith("/my") ||
+      path.endsWith("/search")
+    )
+      response = paged([requestState]);
+    else if (path.endsWith("/42/approve")) {
+      requestState = { ...requestState, status: "RESERVED" };
+      response = requestState;
+    } else if (path.endsWith("/42/reject")) {
+      requestState = { ...requestState, status: "REJECTED" };
+      response = requestState;
+    } else if (path.endsWith("/group-credit-limits")) response = paged([]);
+    else if (path.endsWith("/corporate-group-memberships")) response = [];
+    else if (path.endsWith("/financial-profile"))
+      response = {
+        counterpartyId: 12,
+        counterpartyName: counterparty.name,
+        returnOnAssets: 9.2,
+        profitMargin: 14.8,
+        fixedAssetTurnover: 2.1,
+        debtToTotalCapitalPercent: 28,
+        interestCoverage: 8.4,
+        totalDebtToEbitda: 1.6,
+        financialYearEnd: "2025-12-31",
+        updatedAt: request.updatedAt,
+      };
+    else if (path.endsWith("/credit-requests"))
+      response = { ...request, status: "RESERVED" };
     else if (path.endsWith("/exposure")) response = exposure;
     else if (path.endsWith("/review"))
       response = {
@@ -112,17 +142,14 @@ test("Risk Officer can review real contracts and confirm an approval", async ({
     page.getByRole("cell", { name: "CR-000042", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: "Test Requester", exact: true }),
-  ).toBeVisible();
-  await expect(
     page.getByRole("cell", { name: "BD 600,000", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Review", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("CR-000042");
-  await expect(page.getByRole("dialog")).toContainText(counterparty.name);
-  await expect(page.getByRole("dialog")).toContainText("Test Institution");
-  await expect(page.getByRole("dialog")).toContainText("Test Requester");
-  await expect(page.getByRole("dialog")).toContainText("BD 750,000");
+  await page.getByRole("button", { name: "Assess risk", exact: true }).click();
+  await expect(page.getByRole("main")).toContainText("CR-000042");
+  await expect(page.getByRole("main")).toContainText(counterparty.name);
+  await expect(page.getByRole("main")).toContainText("Test Institution");
+  await expect(page.getByRole("main")).toContainText("Test Requester");
+  await expect(page.getByRole("main")).toContainText("BHD 750,000.00");
   await page.getByRole("button", { name: "Approve & reserve" }).click();
   await expect(page.getByRole("dialog")).toContainText(
     "Approval reserves the requested capacity",
@@ -144,7 +171,9 @@ test("RM sees request creation and no risk or admin actions", async ({
   await page
     .getByRole("button", { name: "Credit requests", exact: true })
     .click();
-  await expect(page.getByRole("cell", { name: "Test Requester", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Test Requester", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("Test Requester");
   await expect(page.getByRole("dialog")).toContainText(counterparty.name);
@@ -254,6 +283,71 @@ test("desktop overview and keyboard dialog dismissal", async ({ page }) => {
     page.getByRole("button", { name: "New counterparty" }),
   ).toBeFocused();
 });
+test("group headroom is explained when individual capacity is sufficient", async ({
+  page,
+}) => {
+  await login(page, "RELATIONSHIP_MANAGER");
+  await page.route("**/api/group-credit-limits?*", (route) =>
+    route.fulfill({
+      json: paged([
+        {
+          id: 9,
+          corporateGroupId: 4,
+          corporateGroupName: "Pearl Infrastructure Group",
+          financialInstitutionId: 3,
+          amount: 2000000,
+        },
+      ]),
+    }),
+  );
+  await page.route("**/api/corporate-group-memberships", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 10,
+          corporateGroupId: 4,
+          corporateGroupName: "Pearl Infrastructure Group",
+          counterpartyId: 12,
+        },
+      ],
+    }),
+  );
+  await page.route("**/api/group-credit-limits/groups/4/exposure", (route) =>
+    route.fulfill({ json: 1600000 }),
+  );
+  await page.route("**/api/group-credit-limits/groups/4/headroom", (route) =>
+    route.fulfill({ json: 400000 }),
+  );
+  await page.route("**/api/credit-requests", (route) =>
+    route.fulfill({
+      status: 400,
+      json: {
+        message: "Requested amount exceeds corporate group available headroom",
+      },
+    }),
+  );
+  await page
+    .getByRole("button", { name: "Credit requests", exact: true })
+    .click();
+  await page.getByRole("button", { name: "New request" }).click();
+  await page.getByLabel("Company / credit facility").selectOption("8");
+  await page.getByLabel("Requested amount (BHD)").fill("450000");
+  await expect(
+    page.getByText(/The company has sufficient individual headroom/),
+  ).toContainText("The shared group limit prevents this reservation.");
+  await expect(page.getByText("Fixture dataset", { exact: true })).toHaveCount(
+    0,
+  );
+  await page
+    .getByRole("button", { name: "Confirm create credit request" })
+    .click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Requested amount exceeds corporate group available headroom",
+  );
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("status")).toHaveCount(0);
+});
+
 test("backend headroom errors remain visible without fake success", async ({
   page,
 }) => {
@@ -295,13 +389,11 @@ async function choosePhoto(page: Page) {
     ctx.fillRect(200, 0, 200, 200);
     return canvas.toDataURL("image/png").split(",")[1];
   });
-  await page
-    .getByLabel("Choose profile photo")
-    .setInputFiles({
-      name: "fixture-photo.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(encoded, "base64"),
-    });
+  await page.getByLabel("Choose profile photo").setInputFiles({
+    name: "fixture-photo.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(encoded, "base64"),
+  });
   await expect(
     page.getByRole("button", { name: "Save photo", exact: true }),
   ).toBeEnabled();
@@ -380,4 +472,179 @@ test("failed photo upload keeps the editor open and leaves avatars unchanged", a
   await expect(page.locator(".avatar img")).toHaveCount(0);
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("Risk assessment runs the existing model contract without inventing confidence", async ({
+  page,
+}) => {
+  await login(page, "RISK_OFFICER");
+  await page.route("**/api/counterparties/12/risk-prediction", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        probability: 0.054284891687056774,
+        riskLevel: "LOW_RISK",
+        modelVersion: "financial-risk-model-sklearn-1.6.1",
+      }),
+    }),
+  );
+  await page
+    .getByRole("button", { name: "Approval queue", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Assess risk", exact: true }).click();
+  await expect(
+    page.getByText("Return on assets", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(page.getByText("28%", { exact: true })).toBeVisible();
+  const prediction = page.waitForRequest(
+    (r) => r.url().endsWith("/12/risk-prediction") && r.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Run risk prediction" }).click();
+  expect((await prediction).postData()).toBeNull();
+  await expect(page.getByText("5.43%", { exact: true })).toBeVisible();
+  await expect(page.getByRole("main")).toContainText(
+    "financial-risk-model-sklearn-1.6.1",
+  );
+  await page.screenshot({
+    path: "tests/artifacts/risk-assessment.png",
+    fullPage: true,
+  });
+});
+
+test("All four SSE events show real typed toasts across pages and refresh the directory", async ({
+  page,
+}) => {
+  await login(page, "RELATIONSHIP_MANAGER");
+  let refreshes = 0;
+  page.on("request", (r) => {
+    if (new URL(r.url()).pathname === "/api/counterparties") refreshes++;
+  });
+  await page
+    .getByRole("button", { name: "Counterparties", exact: true })
+    .click();
+  const before = refreshes;
+  let deliveries = 0;
+  await page.route("**/api/credit-requests/events", async (route) => {
+    const events =
+      deliveries++ === 0
+        ? [
+            [
+              "credit-request-status",
+              { creditRequestId: 125, status: "RESERVED" },
+            ],
+            [
+              "credit-request-status",
+              { creditRequestId: 125, status: "RESERVED" },
+            ],
+            ["counterparty-status", { counterpartyId: 12, status: "FROZEN" }],
+            [
+              "credit-limit-updated",
+              {
+                creditLimitId: 8,
+                oldLimitAmount: 2000000,
+                newLimitAmount: 2500000,
+              },
+            ],
+            [
+              "group-credit-limit-updated",
+              {
+                groupCreditLimitId: 4,
+                corporateGroupId: 9,
+                oldLimitAmount: 5000000,
+                newLimitAmount: 6000000,
+              },
+            ],
+          ]
+        : [];
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body:
+        events
+          .map(
+            ([type, data]) => `event:${type}\ndata:${JSON.stringify(data)}\n\n`,
+          )
+          .join("") || ":connected\n\n",
+    });
+  });
+  await expect(page.getByRole("status")).toHaveCount(4);
+  await expect(
+    page.getByRole("status").filter({ hasText: "#125 reserved successfully" }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("status").filter({ hasText: "FROZEN" }),
+  ).toHaveClass(/toast-warning/);
+  await expect(
+    page.getByRole("status").filter({ hasText: "group #9" }),
+  ).toHaveClass(/toast-info/);
+  await expect.poll(() => refreshes).toBeGreaterThan(before);
+  await page.getByRole("button", { name: "Notification history" }).click();
+  await expect(
+    page.getByRole("region", { name: "Recent notifications" }),
+  ).toContainText("group #9");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("status")).toHaveCount(0);
+});
+
+test("A competing Risk Officer decision displays the backend conflict", async ({
+  page,
+}) => {
+  await login(page, "RISK_OFFICER");
+  await page.route("**/api/credit-requests/42/approve", (route) =>
+    route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({
+        message: "Credit request is no longer pending approval",
+      }),
+    }),
+  );
+  await page
+    .getByRole("button", { name: "Approval queue", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Assess risk", exact: true }).click();
+  await page.getByRole("button", { name: "Approve & reserve" }).click();
+  await page.getByRole("button", { name: "Confirm approve request" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "no longer pending approval",
+  );
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("status")).toHaveCount(0);
+});
+
+test("Incoming decision toasts remain above an open risk review dialog", async ({
+  page,
+}) => {
+  await login(page, "RISK_OFFICER");
+  await page
+    .getByRole("button", { name: "Approval queue", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Assess risk", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Approve & Reserve", exact: true })
+    .click();
+  let delivered = false;
+  await page.route("**/api/credit-requests/events", async (route) => {
+    const body = delivered
+      ? ":connected\n\n"
+      : 'event:credit-request-status\ndata:{"creditRequestId":125,"status":"REJECTED"}\n\n';
+    delivered = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body,
+    });
+  });
+  const toast = page.getByRole("status").filter({ hasText: "#125 rejected" });
+  await expect(toast).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(toast).toHaveClass(/toast-danger/);
+  const unoccluded = await toast.evaluate((node) => {
+    const r = node.getBoundingClientRect();
+    return node.contains(
+      document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2),
+    );
+  });
+  expect(unoccluded).toBe(true);
 });

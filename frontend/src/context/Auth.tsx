@@ -28,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [picture, setPicture] = useState<string | null>(null);
   const pictureRef = useRef<string | null>(null);
   const activeUser = useRef<number | null>(null);
+  const sessionGeneration = useRef(0);
   function clearPicture() {
     if (pictureRef.current) URL.revokeObjectURL(pictureRef.current);
     pictureRef.current = null;
@@ -57,26 +58,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(profile);
   }
   function logout() {
+    sessionGeneration.current++;
     activeUser.current = null;
     clearPicture();
     setToken(null);
     setUser(null);
   }
   async function refresh() {
+    const generation = sessionGeneration.current;
     const profile = await api<Profile>("/auth/users/profile");
+    if (generation !== sessionGeneration.current)
+      throw new Error("Your session changed. Please sign in again.");
     activeUser.current = profile.id;
     setUser(profile);
   }
   async function login(email: string, password: string) {
+    const generation = ++sessionGeneration.current;
     const res = await api<{ message: string }>("/auth/users/login", "POST", {
       email,
       password,
     });
+    if (generation !== sessionGeneration.current) return;
     setToken(res.message);
     try {
       await refresh();
     } catch (e) {
-      logout();
+      if (generation === sessionGeneration.current) logout();
       throw e;
     }
   }
