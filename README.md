@@ -55,7 +55,11 @@ A new request for BD 600,000 would exceed the available headroom and must not be
 - **Auditability and notifications:** Audit logs, email notifications, and Server-Sent Events (SSE) for live credit-request updates.
 - **REST API documentation:** Swagger UI / OpenAPI.
 - **Frontend workspace:** React/TypeScript screens for credit requests, counterparties, exposure, and administration.
-- **Development demo data:** Fictional institutions, employees, counterparties, limits, and credit-request histories seeded only for local development.
+- **Development seed data:** Fictional banking records for local development. The original development seeders are opt-in; see the seed-plan status below before enabling them.
+- **Corporate group limits:** Connected companies share institution-specific group capacity, checked alongside individual headroom.
+- **ML risk analytics:** Six-ratio company profiles, a Python FastAPI inference service, and parallel group assessments.
+- **Concurrency controls:** Transactional database row locks protect request decisions and credit exposure during overlapping operations.
+- **Asynchronous processing:** A configured executor supports notification delivery; SSE provides live status updates.
 
 ### Counterparty statuses
 
@@ -96,6 +100,8 @@ The current demonstration rule uses a value threshold to route larger requests f
 | Testing | JUnit, Spring test tooling, Vitest, Playwright |
 | Developer tools | IntelliJ IDEA, pgAdmin, Postman, Git, GitHub, Jira |
 | Notifications | Spring Mail / SMTP, Server-Sent Events |
+| Risk analytics | Python FastAPI inference integration, Java parallel assessment service |
+| Concurrency | Spring transactions, JPA pessimistic database locks, configured executors |
 
 ## Architecture
 
@@ -126,7 +132,7 @@ audit logging, email notifications, and SSE events.
 
 ### Entity relationship diagram (ERD)
 
-The database models financial institutions, users, counterparties, credit limits, credit requests, approval decisions, audit logs, and user tokens.
+The current JPA model contains **12 entities**: FinancialInstitution, User, Counterparty, CreditLimit, CreditRequest, ApprovalDecision, AuditLog, UserToken, CorporateGroup, CorporateGroupMembership, GroupCreditLimit, and CounterpartyFinancialProfile. The linked diagram below may need updating to reflect the new Unit 3 entities.
 
 **[View the LimitGuard ERD on dbdiagram.io](https://dbdiagram.io/d/6abcbefa0f25a52d014bf6d3)**
 
@@ -287,3 +293,91 @@ These are **technical documentation and learning resources**, not endorsements o
 ## Project note
 
 This repository is a portfolio/learning project using fictional demonstration data. It should not be used to make real lending, counterparty-risk, or regulatory decisions without appropriate domain review, additional controls, and production-grade validation.
+
+
+---
+
+## Unit 3: Concurrency, connected counterparties and risk analytics
+
+Unit 3 extends the original Unit 2 application rather than replacing it. The key business problem is that **two employees can act on the same credit request or shared credit capacity at nearly the same time**. A banking system must not approve a request twice, reserve the same headroom twice, or let different subsidiaries collectively exceed their group's approved limit.
+
+For a full explanation, including transaction sequences and presenter walkthroughs, see **[Concurrency & demonstration scenarios](docs/CONCURRENCY.md)**.
+
+### New and extended business capabilities
+
+| Capability | Implementation | Business purpose |
+| --- | --- | --- |
+| Connected counterparties | `CorporateGroup`, `CorporateGroupMembership` | Associate subsidiaries with one parent group |
+| Shared group capacity | `GroupCreditLimit` and group-aware reservation checks | Prevent combined subsidiary exposure from exceeding a bank's group limit |
+| Financial risk inputs | `CounterpartyFinancialProfile` | Store six financial ratios and a financial-year-end date |
+| ML predictions | Java ML service → Python FastAPI model | Provide additional risk context for authorized company assessments |
+| Parallel group assessments | `ParallelRiskAssessmentService` using an executor | Assess multiple subsidiaries without requiring sequential external calls |
+| Thread-safe decisions | `@Transactional` and pessimistic JPA row locks | Serialize competing decisions and exposure changes |
+| Async notifications | Spring async notification executor and SSE | Notify relevant sessions after state changes without tying email work to the main request |
+| Frontend | React dashboard, risk analytics, group views and notifications | Make banking and concurrency workflows observable |
+
+**Model scope:** The current ZIP contains 12 JPA entities. `GroupExposureSnapshot` and `GroupLimitBreach` were discussed in design notes but are **not present as JPA entities** in this version; do not describe them as implemented.
+
+### Shared group headroom
+
+A company's individual limit is not enough on its own. When the company belongs to a corporate group with a limit at the same bank, the system must also respect:
+
+`Group headroom = Group approved limit − sum(member used exposure + member reserved exposure)`
+
+For example, if Arabian Energy Group has **BD 800,000** of group headroom and two RMs concurrently submit **BD 450,000** requests for different subsidiaries, the first successful reservation leaves **BD 350,000**. The second cannot reserve another BD 450,000. Both requests are below the application's BD 500,000 immediate-reservation threshold.
+
+### Race condition and thread-safety approach
+
+The primary scenario is **two Risk Officers approving the same pending BD 600,000 request**. Without a transactionally protected request state, both might observe `PENDING_APPROVAL` and try to reserve credit or record a decision.
+
+LimitGuard uses database-backed **pessimistic write locks** to serialize competing updates to the request and affected credit capacity. After the first transaction commits, the waiting transaction must re-evaluate the current status and cannot approve a request that is no longer pending. Database locks were chosen over a Java-only `ReentrantLock` because they coordinate access through the shared PostgreSQL database, including across different application instances.
+
+The existing `Thread.sleep(5000)` inside approval is a **demonstration delay**, not the safety mechanism. The transaction and locks are what protect consistency.
+
+Other important scenarios include approval versus rejection, simultaneous reservations on one facility, different subsidiaries competing for a shared group limit, duplicate cancellation, reservation versus usage, and scheduler expiry versus usage. The precise business rule and expected outcome for each are documented in [docs/CONCURRENCY.md](docs/CONCURRENCY.md).
+
+### Parallel ML assessment and interpretation
+
+`CounterpartyFinancialProfile` stores six inputs: return on assets, profit margin, fixed asset turnover, debt-to-total-capital percentage, interest coverage, and total debt-to-EBITDA. The Java ML integration sends authorized company inputs to the Python FastAPI prediction endpoint. A parallel assessment service coordinates multiple predictions and reports per-company success or failure.
+
+**Interpretation caution:** The model's positive-class probability should not be presented as a verified probability of default until the underlying model's class mapping is confirmed. Prediction output is decision support, not automatic credit approval.
+
+### Asynchronous emails and SSE
+
+Approval and rejection trigger notification work after successful banking state changes. Email sending is asynchronous; SSE events support real-time frontend refresh and toasts. A committed approval and an SSE event **do not prove** an email reached the inbox. SMTP acceptance and actual receipt require separate live verification.
+
+### Demonstration data and current verification status
+
+The separate demo tooling and practice/final UI controls were removed. The existing development seeders are guarded by the explicit `limitguard.seed.enabled=true` opt-in; **do not enable the old seed contents**. The additive data in `SEED_PLAN.md` was proposed, but the supplied plan says it **had not yet been written** to PostgreSQL. Treat the group names and request quantities below as **planned fixtures, not confirmed existing records**, until seeding and post-seed verification finish.
+
+| Proposed presentation fixture | Purpose |
+| --- | --- |
+| Gulf Aviation Holdings: 4 subsidiaries and 16 pending BD 600,000 requests | Normal approval, rejection, double approval, approval-versus-rejection |
+| Pearl Infrastructure Group: BD 400,000 group headroom | Show individual headroom sufficient but group headroom insufficient for BD 450,000 |
+| Arabian Energy Group: BD 800,000 group headroom | Two RMs compete with BD 450,000 requests on different subsidiaries |
+| Bahrain Digital Services | Cancellation, usage, expiry and ordinary request lifecycle |
+
+**Test evidence at the time of the supplied seed plan:** frontend build/lint, 27 frontend unit tests, 19 mocked browser checks, 46 existing backend tests, and two mocked email-sender tests passed. The plan explicitly says the live PostgreSQL concurrency tests and inbox delivery had **not** been verified in that run. Do not label those as passed until tested.
+
+### Unit 3 API, testing and documentation
+
+The existing Springdoc Swagger/OpenAPI interface remains the source of truth for the actual endpoint paths, request bodies, authentication and status codes. New controllers in this version include corporate group, group membership, group credit limit, financial profile, ML prediction and parallel assessment operations. Avoid copying guessed endpoint paths into documentation.
+
+**Testing strategy:** verify one winning decision and one final approval record; reconcile used/reserved balances; confirm rejected conflicting actions cannot change exposure; test group allocation with different subsidiaries; and separately verify notification dispatch, SMTP acceptance and inbox receipt. See [the step-by-step scenario guide](docs/CONCURRENCY.md) for reproducible demonstrations and limitations.
+
+### Challenges, trade-offs and next steps
+
+- **Locking shared data:** The hard part is protecting both the request's status and the capacity shared by multiple requests, while avoiding stale balance decisions.
+- **Cross-company limits:** Independent company-level checks are insufficient when subsidiaries belong to the same corporate group.
+- **Long-running work:** ML inference and email are better handled using controlled executors rather than blocking banking request threads unnecessarily.
+- **Observability:** Browser success messages, test mocks, database commits and email delivery are distinct kinds of evidence.
+- **Future improvements:** Verify repeated live PostgreSQL races and inbox delivery; consider a searchable authorized facility directory, better concurrency metrics, and clearer ML class-label documentation. Industry classifications, exposure snapshots and breach-history entities would require further model/API work.
+
+### Unit 3 documentation index
+
+- [Detailed race conditions and live presentation scenarios](docs/CONCURRENCY.md)
+- [Swagger/OpenAPI](#4-explore-the-api)
+- [Architecture and ERD](#architecture)
+- [Local setup](#running-the-project-locally)
+
+This project is a fictional educational simulation inspired by concentration-risk principles, including discussion of connected counterparties in the Central Bank of Bahrain's rulebook. It does **not** claim regulatory compliance or reproduce Citi's internal policies. The existing references and credits section above remains applicable; cite any external model, tutorials, documentation, and AI assistance actually used in the project.
