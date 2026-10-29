@@ -10,6 +10,8 @@ import com.example.limitguard.repository.CreditLimitRepository;
 import com.example.limitguard.security.InstitutionAccessService;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import com.example.limitguard.exception.CorporateGroupNotFoundException;
 import com.example.limitguard.exception.ParallelRiskAssessmentException;
@@ -26,6 +28,8 @@ import java.util.concurrent.Future;
 @Service
 @RequiredArgsConstructor
 public class ParallelRiskAssessmentService {
+
+    private static final Logger log = LoggerFactory.getLogger(ParallelRiskAssessmentService.class);
 
     // gets the companies belonging to a corporate group
     private final CorporateGroupMembershipRepository membershipRepository;
@@ -46,6 +50,21 @@ public class ParallelRiskAssessmentService {
 
     // assesses multiple companies in a corporate group using multithreading
     public List<CompanyRiskAssessmentResponse> assessGroup(Long groupId) {
+        long batchStart = System.nanoTime();
+        boolean completed = false;
+        log.info("ML BATCH START | Group ID={} | Thread={}", groupId, Thread.currentThread().getName());
+        try {
+            List<CompanyRiskAssessmentResponse> results = assessGroupWithWorkers(groupId);
+            completed = true;
+            return results;
+        } finally {
+            log.info("ML BATCH COMPLETE | Group ID={} | Thread={} | Outcome={} | Total elapsed ms={} | Includes authorization and worker collection",
+                    groupId, Thread.currentThread().getName(), completed ? "COMPLETED" : "FAILED",
+                    (System.nanoTime() - batchStart) / 1_000_000.0);
+        }
+    }
+
+    private List<CompanyRiskAssessmentResponse> assessGroupWithWorkers(Long groupId) {
 
         // make sure the requested corporate group exists
         if (!corporateGroupRepository.existsById(groupId)) {
@@ -106,8 +125,8 @@ public class ParallelRiskAssessmentService {
         // threadpool and multithreading
         //---------------------------------------------------------------------
 
-        // record the start time before submitting prediction tasks
-        long startTime = System.nanoTime();
+        log.info("ML BATCH AUTHORIZED | Group ID={} | Institution ID={} | Companies={}",
+                groupId, institutionId, authorizedCompanies.size());
 
         // executorservice manages a pool of worker threads
         // newfixedthreadpool(4) allows up to 4 prediction tasks to run at the same time
@@ -135,14 +154,12 @@ public class ParallelRiskAssessmentService {
                 // submit returns a future immediately without waiting for the prediction
                 Future<CompanyRiskAssessmentResponse> future =
                         executor.submit(() -> {
-
+                            long workerStart = System.nanoTime();
                             try {
 
                                 // show which worker thread starts assessing this company
-                                System.out.println(
-                                        "starting risk assessment for " + counterpartyName
-                                                + " on thread " + Thread.currentThread().getName()
-                                );
+                                log.info("ML WORKER START | Group ID={} | Institution ID={} | Company ID={} | Company={} | Thread={}",
+                                        groupId, institutionId, counterpartyId, counterpartyName, Thread.currentThread().getName());
 
                                 // call the ml prediction service for this company
                                 // authorization was already checked before submitting the task
@@ -153,10 +170,9 @@ public class ParallelRiskAssessmentService {
                                         );
 
                                 // show which worker thread completed this company's assessment
-                                System.out.println(
-                                        "completed risk assessment for " + counterpartyName
-                                                + " on thread " + Thread.currentThread().getName()
-                                );
+                                log.info("ML WORKER COMPLETE | Group ID={} | Institution ID={} | Company ID={} | Company={} | Thread={} | Elapsed ms={}",
+                                        groupId, institutionId, counterpartyId, counterpartyName, Thread.currentThread().getName(),
+                                        (System.nanoTime() - workerStart) / 1_000_000.0);
 
 
                                 // create a successful result containing the company's details
@@ -171,6 +187,9 @@ public class ParallelRiskAssessmentService {
                                 );
 
                             } catch (Exception exception) {
+                                log.warn("ML WORKER FAILED | Group ID={} | Institution ID={} | Company ID={} | Company={} | Thread={} | Elapsed ms={}",
+                                        groupId, institutionId, counterpartyId, counterpartyName, Thread.currentThread().getName(),
+                                        (System.nanoTime() - workerStart) / 1_000_000.0);
 
                                 // if this company's prediction fails return a failed result
                                 // other worker threads can continue assessing their companies
