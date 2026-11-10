@@ -17,9 +17,16 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Optional;
+import javax.imageio.ImageIO;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 // tells JUnit to use Mockito to create fake objects for our tests
@@ -58,6 +65,33 @@ public class UserServiceTest {
         // removes the fake logged-in user
         // this prevents authentication information from affecting other tests
         SecurityContextHolder.clearContext();
+    }
+
+    // retrieves the saved photo for the authenticated user
+    @Test
+    void shouldRetrieveSavedProfilePicture() throws Exception {
+        User user = new User();
+        user.setEmail("test@example.com");
+        when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        ByteArrayOutputStream image = new ByteArrayOutputStream();
+        ImageIO.write(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB), "png", image);
+        userService.uploadProfilePicture(
+                new MockMultipartFile("image", "profile.png", "image/png", image.toByteArray())
+        );
+
+        Path savedPicture = Path.of(user.getProfilePicturePath());
+        try {
+            try (var picture = userService.getMyProfilePicture().orElseThrow().getInputStream()) {
+                assertArrayEquals(Files.readAllBytes(savedPicture), picture.readAllBytes());
+            }
+
+            user.setProfilePicturePath("uploads/../profile.png");
+            assertTrue(userService.getMyProfilePicture().isEmpty());
+        } finally {
+            Files.deleteIfExists(savedPicture);
+        }
     }
 
     // checks that the application rejects an empty profile picture

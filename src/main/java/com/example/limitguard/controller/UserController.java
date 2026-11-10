@@ -8,7 +8,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -111,6 +114,19 @@ public class UserController implements UserApi {
 
         return new ResponseEntity<>(updatedProfile, HttpStatus.OK);
     }
+
+    // serves the authenticated user's own saved picture
+    @GetMapping("/profile-picture")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Resource> getMyProfilePicture() throws IOException {
+        return userService.getMyProfilePicture()
+                .map(picture -> ResponseEntity.ok()
+                        .contentType(picture.getFilename().endsWith(".png") ? MediaType.IMAGE_PNG : MediaType.IMAGE_JPEG)
+                        .cacheControl(CacheControl.noStore())
+                        .body(picture))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
 
     // uploads or replaces the profile picture of the currently logged-in user
     @PatchMapping("/profile-picture")

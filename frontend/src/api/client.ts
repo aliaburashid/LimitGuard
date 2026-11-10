@@ -29,12 +29,12 @@ export function safeError(status: number, message?: unknown) {
     return message;
   return "The operation could not be completed. Check the information and try again.";
 }
-export async function api<T>(
+async function requestApi(
   path: string,
   method = "GET",
   body?: unknown,
   signal?: AbortSignal,
-): Promise<T> {
+): Promise<Response> {
   const requestToken = token;
   let response: Response;
   try {
@@ -61,6 +61,25 @@ export async function api<T>(
       0,
     );
   }
+  if (response.status === 401 && requestToken && token === requestToken) {
+    setToken(null);
+    window.dispatchEvent(new Event("session-expired"));
+  }
+  return response;
+}
+export async function apiBlob(path: string, signal: AbortSignal) {
+  const response = await requestApi(path, "GET", undefined, signal);
+  if (!response.ok)
+    throw new ApiError(safeError(response.status), response.status);
+  return response.blob();
+}
+export async function api<T>(
+  path: string,
+  method = "GET",
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await requestApi(path, method, body, signal);
   const raw = await response.text();
   let data;
   try {
@@ -69,10 +88,6 @@ export async function api<T>(
     data = raw;
   }
   if (!response.ok) {
-    if (response.status === 401 && requestToken && token === requestToken) {
-      setToken(null);
-      window.dispatchEvent(new Event("session-expired"));
-    }
     throw new ApiError(
       path === "/auth/users/login" && response.status === 401
         ? "Sign-in failed. Check your email and password."

@@ -143,19 +143,10 @@ export function ProfilePage({
           />
           <button onClick={() => input.current?.click()}>
             <Camera size={16} />
-            {picture ? "Change photo" : "Choose photo"}
+            {user?.profilePicturePath || picture
+              ? "Change photo"
+              : "Choose photo"}
           </button>
-          {user?.profilePicturePath && !picture && (
-            <p className="small photo-session-note">
-              A photo is saved on your account. Image retrieval is currently
-              unavailable; choose a photo to show a preview in this session.
-            </p>
-          )}
-          {picture && (
-            <p className="small photo-session-note">
-              Photo saved. The preview stays visible throughout this session.
-            </p>
-          )}
           {error && <ErrorBox message={error} />}
         </section>
       </div>

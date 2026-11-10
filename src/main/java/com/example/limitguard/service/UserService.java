@@ -13,6 +13,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.example.limitguard.model.UserToken;
 import com.example.limitguard.repository.UserTokenRepository;
@@ -31,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import com.example.limitguard.repository.AuditLogRepository;
@@ -375,6 +378,29 @@ public class UserService {
                 user.getFinancialInstitution(),
                 user.getProfilePicturePath()
         );
+    }
+
+
+    // reads only the picture stored against the authenticated user
+    public Optional<Resource> getMyProfilePicture() throws IOException {
+        String storedPath = getMyProfile().getProfilePicturePath();
+        if (storedPath == null || !storedPath.matches("uploads[/\\\\][0-9a-fA-F-]{36}\\.(jpg|png)")) {
+            return Optional.empty();
+        }
+
+        try {
+            Path uploadPath = Paths.get("uploads").toRealPath();
+            String filename = storedPath.substring("uploads/".length());
+            Path picturePath = uploadPath.resolve(filename).toRealPath();
+
+            if (!picturePath.getParent().equals(uploadPath) || !Files.isRegularFile(picturePath)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(new FileSystemResource(picturePath));
+        } catch (NoSuchFileException exception) {
+            return Optional.empty();
+        }
     }
 
 

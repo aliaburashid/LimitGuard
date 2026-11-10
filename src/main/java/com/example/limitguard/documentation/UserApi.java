@@ -24,7 +24,7 @@ public interface UserApi {
                     - The user must verify their email address before logging in.
 
                     **Next Step:**
-                    - A verification token is sent to the user's email address.
+                    - A six-digit code is emailed to the user. The response includes verification challenge and timing information. Codes expire in 10 minutes; resends require 60 seconds; each code allows five attempts.
                     - The user must verify the email before accessing authenticated features.
                     """
     )
