@@ -1,0 +1,43 @@
+package com.example.authservice.security;
+
+
+// Security Packages -- Classes
+// Our Classes -> Implements -> Spring Security Interface
+// MyUserDetailsService      -> UserDetailsService
+// MyUserDetails             -> UserDetails
+// SecurityConfiguration     -> configures Spring Security
+// InstitutionAccessService  -> Checks access to financial institution data
+// JwtRequestFilter          -> Validates JWT authentication for requests
+// JWTUtils                  -> Generates and validates JWT tokens
+// RateLimitFilter           -> Restricts excessive requests
+
+import com.example.authservice.model.User;
+import com.example.authservice.repository.UserRepository;
+import lombok.AllArgsConstructor;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+
+@Service
+@AllArgsConstructor
+public class MyUserDetailsService implements UserDetailsService {
+
+    // Gives this service access to users stored in the database
+    private UserRepository userRepository;
+
+    // Spring Security uses this method to find a user when they try to log in
+    @Override
+    public UserDetails loadUserByUsername(String email)
+            throws UsernameNotFoundException {
+
+        // Find the user in the database using their email
+        User userFound = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException(
+                        "User not found"
+                ));
+
+        // Convert our User into the UserDetails format Spring Security understands
+        return new MyUserDetails(userFound);
+    }
+}

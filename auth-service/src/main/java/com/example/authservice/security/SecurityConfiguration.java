@@ -1,0 +1,159 @@
+package com.example.authservice.security;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import jakarta.servlet.DispatcherType;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
+
+// @Bean tells Spring to create and manage this object
+
+// Tells Spring that this class contains security configuration settings
+@Configuration
+
+// Enables method-level security
+// Allows us to use annotations such as @PreAuthorize later
+@EnableMethodSecurity(prePostEnabled = true)
+public class SecurityConfiguration {
+
+    // Gives Spring Security access to our JWT filter
+    @Autowired
+    private JwtRequestFilter jwtRequestFilter;
+
+    // Gives Spring Security access to our rate-limiting filter
+    // This filter protects public endpoints from too many requests
+    @Autowired
+    private RateLimitFilter rateLimitFilter;
+
+    // Creates the password encoder that will hash users passwords
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        //BCrypt securely hashes passwords before storing them
+        return new BCryptPasswordEncoder();
+    }
+
+    // Controls which API endpoints are public and which require login
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
+        http
+                // Disables CSRF protection, Common for stateless REST APIs
+                .csrf(csrf -> csrf.disable())
+
+                // Makes the application stateless
+                // Spring Security will not store user login sessions
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+
+                // Handles authentication and authorization errors
+                .exceptionHandling(exception -> exception
+
+                        // Return 401 when a user is not authenticated
+                        .authenticationEntryPoint((request, response, authException) -> {
+
+                            // Set HTTP status to 401 Unauthorized
+                            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+
+                            // Return a JSON response
+                            response.setContentType("application/json");
+
+                            // Explain the authentication error
+                            response.getWriter().write(
+                                    "{\"error\":\"Unauthorized\",\"message\":\"Authentication is required\"}"
+                            );
+                        })
+                )
+
+                // Defines which endpoints are public and which require authentication
+                .authorizeHttpRequests(auth -> auth
+
+                        // these internal dispatches follow the original request's security checks
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
+
+                        // These endpoints can be accessed without logging in
+                        .requestMatchers(
+                                "/api/auth/users/register",
+                                "/api/auth/users/verify-email",
+                                "/api/auth/users/login",
+                                "/api/auth/users/forgot-password",
+                                "/api/auth/users/reset-password",
+                                // allows users to open swagger documentation without logging in
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**"
+                        ).permitAll()
+
+                        // only the directory GET is public; institution changes remain protected
+                        .requestMatchers(HttpMethod.GET, "/api/financial-institutions/directory").permitAll()
+
+                        // provider availability and the one-time session exchange are public
+                        .requestMatchers(HttpMethod.GET, "/api/auth/sso/providers").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/sso/exchange").permitAll()
+
+                        // only these code actions are public; account changes stay protected
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/auth/users/verification-code/request",
+                                "/api/auth/users/verification-code/verify",
+                                "/api/auth/users/verification-code/resend",
+                                "/api/auth/users/verification-code/change-email").permitAll()
+
+                        // password recovery verifies the emailed code before issuing a reset token
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/auth/users/password-reset-code/request",
+                                "/api/auth/users/password-reset-code/resend",
+                                "/api/auth/users/password-reset-code/verify").permitAll()
+
+                        // Every other endpoint requires the user to be authenticated
+                        .anyRequest().authenticated()
+                )
+
+                // check for a JWT before Spring Security's username/password filter
+                .addFilterBefore(
+                        jwtRequestFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                )
+
+                // run rate limiting before JWT authentication
+                // excessive requests are rejected before reaching the controller
+                .addFilterBefore(
+                        rateLimitFilter,
+                        JwtRequestFilter.class
+                );
+
+        // Builds and returns the security configuration
+        return http.build();
+    }
+
+    // Spring Boot normally registers @Component filters automatically
+    // since we already added RateLimitFilter to Spring Security,
+    // disable its separate servlet registration so it runs only
+    // through the Spring Security filter chain.
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(
+            RateLimitFilter rateLimitFilter) {
+        FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(rateLimitFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+
+    // Creates the AuthenticationManager that handles user authentication
+    // when a user tries to log in
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
+        // Gets Spring Security's configured AuthenticationManager
+        return authConfig.getAuthenticationManager();
+    }
+}
