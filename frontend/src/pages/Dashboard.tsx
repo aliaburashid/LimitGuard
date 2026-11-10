@@ -242,7 +242,10 @@ function OperationalDashboard({
               .slice(0, 4)
               .map((g) => <GroupPanel key={g.id} group={g} />)
           )}
-          <button className="text-button" onClick={() => navigate("exposure")}>
+          <button
+            className="text-button"
+            onClick={() => navigate("facilities")}
+          >
             Explore all group limits
             <ArrowRight size={15} />
           </button>

@@ -1,0 +1,43 @@
+.company-brand,
+.rm-directory-company,
+.control-card.institution-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.company-brand > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.company-logo {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #e8eef5;
+  color: #29445f;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.company-logo-large {
+  width: 44px;
+  height: 44px;
+  font-size: 14px;
+}
+.app[data-theme="dark"] .company-logo {
+  background: #26394d;
+  color: #dbe7f4;
+}
+.control-card.institution-identity strong,
+.control-card.institution-identity small {
+  display: block;
+  margin: 0;
+}
+.control-card.institution-identity > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

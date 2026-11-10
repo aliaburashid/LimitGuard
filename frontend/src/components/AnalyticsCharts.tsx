@@ -4,6 +4,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  DefaultTooltipContent,
   Pie,
   PieChart,
   ReferenceLine,
@@ -15,10 +16,16 @@ import {
 import { ArrowUpRight, Info } from "lucide-react";
 import type { Exposure, GroupExposure, FinancialProfile } from "../types";
 import { bhd, compact, percent, reconciles } from "../analytics/metrics";
+import {
+  committedSegments,
+  ExposureTrack,
+  facilitySegments,
+} from "./ExposureTrack";
 export const CHART_COLORS = {
-  used: "#254d7d",
-  reserved: "#7396be",
-  available: "#dfe9e6",
+  used: "var(--exposure-used)",
+  navy: "#254d7d",
+  reserved: "var(--exposure-reserved)",
+  available: "var(--exposure-available)",
   green: "#25785c",
   amber: "#b58029",
   red: "#b65059",
@@ -176,52 +183,17 @@ export function ExposureStack({ data }: { data: Exposure }) {
         </strong>
         <span>{bhd(data.limitAmount)} approved limit</span>
       </div>
-      <div
+      <ExposureTrack
         className="capacity-stack"
-        role="group"
-        aria-label="Individual exposure stacked bar"
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={[
-              {
-                name: "Facility",
-                Used: Number(data.usedAmount),
-                Reserved: Number(data.reservedAmount),
-                Available: Number(data.availableHeadroom),
-              },
-            ]}
-            layout="vertical"
-            margin={{ left: 0, right: 0, top: 0, bottom: 0 }}
-            accessibilityLayer
-          >
-            <XAxis hide type="number" domain={[0, Number(data.limitAmount)]} />
-            <YAxis hide type="category" dataKey="name" />
-            <Tooltip
-              formatter={(v) => bhd(Number(v))}
-              contentStyle={tooltipStyle}
-              itemStyle={{ color: "#4b6079" }}
-              labelStyle={{ color: "#344d68" }}
-            />
-            {["Used", "Reserved", "Available"].map((key, index) => (
-              <Bar
-                key={key}
-                dataKey={key}
-                stackId="capacity"
-                fill={
-                  [
-                    CHART_COLORS.used,
-                    CHART_COLORS.reserved,
-                    CHART_COLORS.available,
-                  ][index]
-                }
-                isAnimationActive={false}
-                barSize={24}
-              />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+        limit={Number(data.limitAmount)}
+        segments={facilitySegments(data)}
+        label={[
+          "Individual exposure stacked bar",
+          ...exposureParts(data).map(
+            (part) => part.name + " " + bhd(part.value),
+          ),
+        ].join(". ")}
+      />
       <div className="capacity-values">
         {exposureParts(data).map((p) => (
           <div key={p.name}>
@@ -318,26 +290,63 @@ export function GroupComparison({
               }
             />
             <Tooltip
-              labelFormatter={(value, payload) =>
-                String(payload?.[0]?.payload?.fullName ?? value)
-              }
-              formatter={(v) => bhd(Number(v))}
-              contentStyle={tooltipStyle}
-              itemStyle={{ color: "#4b6079" }}
-              labelStyle={{ color: "#344d68" }}
+              cursor={false}
+              content={({ active, payload }) => {
+                const row = payload[0]?.payload as
+                  (typeof rows)[number] | undefined;
+                if (!active || !row) return null;
+                return (
+                  <DefaultTooltipContent
+                    label={row.name}
+                    payload={[
+                      {
+                        graphicalItemId: "committed",
+                        name: "Committed",
+                        value: row.Committed,
+                      },
+                      {
+                        graphicalItemId: "available",
+                        name: "Available",
+                        value: row.Available,
+                      },
+                    ]}
+                    formatter={(value) => bhd(Number(value))}
+                    contentStyle={tooltipStyle}
+                    itemStyle={{ color: "#4b6079" }}
+                    labelStyle={{ color: "#344d68" }}
+                  />
+                );
+              }}
             />
             <Bar
-              dataKey="Committed"
-              stackId="group"
-              fill={CHART_COLORS.used}
+              dataKey="limit"
+              barSize={13}
               isAnimationActive={false}
-            />
-            <Bar
-              dataKey="Available"
-              stackId="group"
-              fill={CHART_COLORS.available}
-              radius={[0, 3, 3, 0]}
-              isAnimationActive={false}
+              shape={({ x, y, width, height, index }) => {
+                const row = rows[index];
+                if (!row || width <= 0) return null;
+                return (
+                  <foreignObject
+                    className="group-comparison-bar"
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={height}
+                  >
+                    <ExposureTrack
+                      limit={row.limit}
+                      segments={committedSegments(row.Committed, row.Available)}
+                      label={
+                        row.name +
+                        ". Committed " +
+                        bhd(row.Committed) +
+                        ". Available " +
+                        bhd(row.Available)
+                      }
+                    />
+                  </foreignObject>
+                );
+              }}
             />
           </BarChart>
         </ResponsiveContainer>
@@ -481,7 +490,7 @@ export function ProfitabilityChart({ profile }: { profile: FinancialProfile }) {
                 fill={
                   r.value < 0
                     ? CHART_COLORS.red
-                    : [CHART_COLORS.used, "#649d92"][index]
+                    : [CHART_COLORS.navy, "#649d92"][index]
                 }
               />
             ))}
@@ -546,7 +555,7 @@ export function RatioChart({
             <Bar
               dataKey="value"
               name={name}
-              fill={value < 0 ? CHART_COLORS.red : CHART_COLORS.used}
+              fill={value < 0 ? CHART_COLORS.red : CHART_COLORS.navy}
               background={{ fill: "#f0f3f7", radius: 3 }}
               barSize={6}
               radius={3}
@@ -566,7 +575,7 @@ export function RatioChart({
 }
 export function DebtCapitalChart({ value }: { value: number }) {
   const data = [
-    { name: "Debt share", value, fill: CHART_COLORS.used },
+    { name: "Debt share", value, fill: CHART_COLORS.navy },
     { name: "Remaining capital share", value: 100 - value, fill: "#e8edf2" },
   ];
   return (

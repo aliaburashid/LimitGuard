@@ -1,7 +1,8 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X, Inbox, AlertCircle, ArrowRight } from "lucide-react";
 import { label, money, utilization } from "../utils/format";
 import type { Exposure } from "../types";
+import { ExposureTrack, facilitySegments } from "./ExposureTrack";
 export function Badge({ status }: { status: string }) {
   return (
     <span className={`badge ${status.toLowerCase()}`}>
@@ -46,11 +47,14 @@ export function Modal({
   title,
   children,
   onClose,
+  className,
 }: {
-  title: string;
+  title: ReactNode;
   children: ReactNode;
   onClose: () => void;
+  className?: string;
 }) {
+  const headingId = useId();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement;
@@ -64,6 +68,7 @@ export function Modal({
   return (
     <dialog
       ref={ref}
+      className={className}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
@@ -71,10 +76,10 @@ export function Modal({
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
-      aria-labelledby="dialog-title"
+      aria-labelledby={headingId}
     >
       <div className="modal-head">
-        <h2 id="dialog-title">{title}</h2>
+        <h2 id={headingId}>{title}</h2>
         <button
           className="icon-button"
           onClick={onClose}
@@ -111,24 +116,12 @@ export function ExposurePanel({ data }: { data: Exposure }) {
           </div>
         ))}
       </div>
-      <div
-        className="bar"
-        role="img"
-        aria-label={`${u.toFixed(1)} percent utilized, including reservations`}
-      >
-        <div
-          className="used"
-          style={{
-            width: `${Math.min(100, (Number(data.usedAmount) / Number(data.limitAmount)) * 100)}%`,
-          }}
-        />
-        <div
-          className="reserved"
-          style={{
-            width: `${Math.min(100, (Number(data.reservedAmount) / Number(data.limitAmount)) * 100)}%`,
-          }}
-        />
-      </div>
+      <ExposureTrack
+        className="facility-exposure-track"
+        limit={Number(data.limitAmount)}
+        segments={facilitySegments(data)}
+        label={`${u.toFixed(1)} percent utilized, including reservations`}
+      />
       <div className="legend">
         <span>
           <i className="used" />

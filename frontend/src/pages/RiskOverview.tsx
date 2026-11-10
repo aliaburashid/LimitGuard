@@ -186,7 +186,7 @@ export function RiskOverview({
           {groups?.length ? (
             <GroupComparison
               groups={groups}
-              onSelect={() => navigate("exposure")}
+              onSelect={() => navigate("facilities")}
             />
           ) : !groups && !errors.length ? (
             <Loading />

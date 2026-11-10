@@ -10,6 +10,9 @@
   --border: #e4e9ef;
   --muted: #718095;
   --green: #218466;
+  --exposure-used: #17345c;
+  --exposure-reserved: #c9a45c;
+  --exposure-available: #cbd5e1;
 }
 * {
   box-sizing: border-box;
@@ -555,13 +558,13 @@ main#main {
   color: #405774;
 }
 .used {
-  background: #446db5;
+  background: var(--exposure-used);
 }
 .reserved {
-  background: #d2ae6b;
+  background: var(--exposure-reserved);
 }
 .available {
-  background: #e1eee9;
+  background: var(--exposure-available);
 }
 .activity-list {
   display: flex;
@@ -989,12 +992,7 @@ dd {
 .exposure-values > div:last-child strong {
   color: #298467;
 }
-.bar {
-  height: 15px;
-  border-radius: 4px;
-  display: flex;
-  overflow: hidden;
-  background: #e1eee9;
+.facility-exposure-track {
   margin: 15px 0;
 }
 .lifecycle {
@@ -2056,18 +2054,8 @@ dt,
 .group-card .eyebrow {
   font-size: 9px;
 }
-.group-bar {
-  height: 8px;
-  border-radius: 4px;
-  background: #e6ecf2;
-  overflow: hidden;
+.group-exposure-track {
   margin: 18px 0;
-}
-.group-bar span {
-  display: block;
-  height: 100%;
-  background: #2d547e;
-  border-radius: 4px;
 }
 .group-figures {
   display: grid;

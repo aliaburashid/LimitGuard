@@ -723,10 +723,6 @@ main#main {
   font-size: 9px;
   color: #8796a9;
 }
-.capacity-stack {
-  height: 40px;
-  margin: 10px 0 15px;
-}
 .capacity-values {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1515,8 +1511,10 @@ main#main {
   margin-top: 12px;
 }
 .capacity-stack {
-  height: 32px;
   margin: 8px 0 12px;
+}
+.group-comparison-bar {
+  overflow: visible;
 }
 .approval-impact {
   margin-top: 14px;

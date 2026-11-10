@@ -1,0 +1,39 @@
+.exposure-track {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 13px;
+  overflow: hidden;
+  border-radius: 9999px;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: var(--workspace-border, #e8edf4);
+}
+.exposure-track > span {
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+.exposure-track > [data-fill] {
+  flex-grow: 1;
+}
+.rm-segment-used {
+  background: var(--exposure-used);
+}
+.rm-segment-reserved {
+  background: var(--exposure-reserved);
+}
+.rm-segment-proposed {
+  background: #008f72;
+}
+.rm-segment-available {
+  background: var(--exposure-available);
+}
+.app[data-theme="dark"] .exposure-track {
+  outline: 1px solid var(--workspace-exposure-edge);
+}

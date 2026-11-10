@@ -1,5 +1,7 @@
+import { CompanyLogo } from "./CompanyLogo";
 import type { GroupExposure } from "../types";
 import { money } from "../utils/format";
+import { ExposureTrack, committedSegments } from "./ExposureTrack";
 export function GroupPanel({ group }: { group: GroupExposure }) {
   const percent =
     Number(group.amount) > 0
@@ -10,19 +12,21 @@ export function GroupPanel({ group }: { group: GroupExposure }) {
       <div className="section-head">
         <div>
           <span className="eyebrow">CORPORATE GROUP</span>
-          <h3>{group.corporateGroupName}</h3>
+          <h3 className="company-brand">
+            <CompanyLogo name={group.corporateGroupName} />
+            <span>{group.corporateGroupName}</span>
+          </h3>
         </div>
         <span className={`utilization-chip ${percent >= 85 ? "elevated" : ""}`}>
           {percent.toFixed(1)}%
         </span>
       </div>
-      <div
-        className="group-bar"
-        role="img"
-        aria-label={`${group.corporateGroupName}: ${percent.toFixed(1)} percent utilized`}
-      >
-        <span style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
-      </div>
+      <ExposureTrack
+        className="group-exposure-track"
+        limit={Number(group.amount)}
+        segments={committedSegments(group.exposure, group.headroom)}
+        label={`${group.corporateGroupName}: ${percent.toFixed(1)} percent utilized`}
+      />
       <div className="group-figures">
         <span>
           Approved limit<strong>{money(group.amount)}</strong>
