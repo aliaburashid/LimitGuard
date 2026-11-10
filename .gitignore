@@ -43,3 +43,6 @@ __pycache__/
 
 # Local database backups (contain private account data)
 /backups/
+
+# Local work sign-in configuration (may contain provider secrets)
+/sso.local.yml

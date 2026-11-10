@@ -6,3 +6,7 @@ dist/
 tests/artifacts/
 test-results/
 playwright-report/
+
+# Archived local demo assets
+/.local-branding/
+/public/branding/
