@@ -37,7 +37,7 @@ Research: [banking dashboards](https://dribbble.com/tags/dashboard-banking), [fi
 
 - No credit-limit listing or counterparty-to-limit lookup. Exposure uses a known ID; create/update workflows are available to Risk Officers.
 - No portfolio aggregate. Dashboard shows actual accessible counterparty and request counts, not invented financial balances. Its exposure-category illustration is explicitly labeled as nonfinancial data.
-- No user listing/lookup or financial institution listing/lookup. Admin workflows use explicit known IDs with confirmation. Registration asks for the institution ID.
+- No user listing/lookup or general institution administration listing. Admin workflows use explicit known IDs with confirmation. Registration loads active institution IDs and names from the public `GET /api/financial-institutions/directory` endpoint and displays an institution dropdown.
 - Counterparty responses have no institution or exposure data. Details explain this limitation.
 - Risk Officers can list pending requests only. No complete Risk Officer request history or Admin request access is exposed.
 - Request responses do not include approval history or rejection reasons. Detail screens show current status and actual timestamps, not invented lifecycle history.

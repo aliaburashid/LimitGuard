@@ -113,10 +113,9 @@ function groupServer() {
     const token = `test-${role}-${manager}`;
     queues.set(token, []);
     await page.route("**/api/**", async (route) => {
-      const path = new URL(route.request().url()).pathname.replace(
-        /^\/api/,
-        "",
-      );
+      const pathname = new URL(route.request().url()).pathname;
+      if (!pathname.startsWith("/api/")) return route.continue();
+      const path = pathname.slice("/api".length);
       const method = route.request().method();
       const response = async (json: unknown, status = 200) =>
         route.fulfill({ json, status });
@@ -151,6 +150,27 @@ function groupServer() {
             companies.find((c) => c.id === Number(path.split("/")[2])),
           );
         if (path === "/corporate-group-memberships") return response(members);
+        if (path === "/credit-limits")
+          return response(
+            paged(
+              facilities.map((facility) => {
+                const company = companies.find(
+                  (company) => company.id === facility.counterpartyId,
+                )!;
+                return {
+                  name: company.name,
+                  status: company.status,
+                  exposure: {
+                    ...facility,
+                    availableHeadroom:
+                      facility.limitAmount -
+                      facility.usedAmount -
+                      facility.reservedAmount,
+                  },
+                };
+              }),
+            ),
+          );
         if (path === "/group-credit-limits") return response(paged(limits));
         if (
           /^\/group-credit-limits\/groups\/\d+\/(headroom|exposure)$/.test(path)
@@ -162,6 +182,33 @@ function groupServer() {
               ? limit.amount - exposure(id)
               : exposure(id),
           );
+        }
+        if (
+          /^\/group-credit-limits\/groups\/\d+\/exposure-breakdown$/.test(path)
+        ) {
+          const id = Number(path.split("/")[3]);
+          const limit = limits.find((group) => group.corporateGroupId === id)!;
+          const memberIds = new Set(
+            members
+              .filter((member) => member.corporateGroupId === id)
+              .map((member) => member.counterpartyId),
+          );
+          const groupFacilities = facilities.filter((facility) =>
+            memberIds.has(facility.counterpartyId),
+          );
+          return response({
+            limitAmount: limit.amount,
+            usedAmount: groupFacilities.reduce(
+              (sum, facility) => sum + facility.usedAmount,
+              0,
+            ),
+            reservedAmount: groupFacilities.reduce(
+              (sum, facility) => sum + facility.reservedAmount,
+              0,
+            ),
+            availableHeadroom: limit.amount - exposure(id),
+            facilities: groupFacilities,
+          });
         }
         if (/^\/credit-limits\/\d+\/exposure$/.test(path)) {
           const f = facilities.find(
@@ -281,16 +328,30 @@ function groupServer() {
       }
       return response({ message: "Unsupported mutation" }, 400);
     });
-    await page.goto("/");
+    await page.goto("/login");
     await page.getByLabel("Work email").fill("employee@example.test");
     await page
       .getByLabel("Password", { exact: true })
       .fill("mock-session-only");
     await page.getByRole("button", { name: "Sign in securely" }).click();
+    if (role === "RELATIONSHIP_MANAGER") {
+      await page
+        .getByRole("button", { name: "Counterparties", exact: true })
+        .click();
+      await page.getByRole("tab", { name: "Corporate Groups" }).click();
+      await page
+        .getByRole("button", { name: "View members of Gulf Investment Group" })
+        .click();
+      await expect(
+        page.getByRole("heading", { name: "Member counterparties" }),
+      ).toBeVisible();
+      return { page, context };
+    }
     await page
       .getByRole("navigation", { name: "Main navigation" })
-      .getByRole("button", { name: "Limits & exposure", exact: true })
+      .getByRole("button", { name: "Counterparties", exact: true })
       .click();
+    await page.getByRole("button", { name: "Facilities & Groups" }).click();
     await expect(
       page.getByRole("heading", { name: "Credit exposure", exact: true }),
     ).toBeVisible();
@@ -472,10 +533,10 @@ test("Two RM browser sessions submit competing subsidiary requests and immediate
   const second = await server.login(browser, "RELATIONSHIP_MANAGER", 58);
   await expect(
     first.page
-      .getByRole("row")
+      .locator(".rm-group-member")
       .filter({ hasText: "Pearl Coast Shipping Co." })
-      .getByRole("button", { name: "Request credit", exact: true }),
-  ).toBeDisabled();
+      .getByRole("button", { name: /Request credit/ }),
+  ).toHaveCount(0);
   for (const { page } of [first, second]) {
     await expect(
       page.getByRole("button", { name: "Create corporate group", exact: true }),
@@ -487,24 +548,42 @@ test("Two RM browser sessions submit competing subsidiary requests and immediate
       page.getByRole("button", { name: "Update shared limit", exact: true }),
     ).toHaveCount(0);
     await expect(
-      page
-        .locator(".corporate-management .group-card")
-        .getByText("BD 800,000", { exact: true }),
-    ).toBeVisible();
+      page.getByRole("img", { name: /^Shared group limit\. Approved/ }),
+    ).toHaveAccessibleName(/Available BD 800,000/);
   }
   for (const [page, company] of [
     [first.page, "Falcon Freight Services"],
     [second.page, "Bahrain Gateway Warehousing"],
   ] as [Page, string][]) {
     await page
-      .getByRole("row")
+      .locator(".rm-group-member")
       .filter({ hasText: company })
-      .getByRole("button", { name: "Request credit", exact: true })
+      .getByRole("button", {
+        name: `Request credit for ${company}`,
+        exact: true,
+      })
       .click();
     await page.getByLabel("Requested amount (BHD)").fill("450000");
+    await page.getByRole("button", { name: "Check exposure" }).click();
     await expect(
-      page.getByRole("dialog").getByText("BD 800,000", { exact: true }),
-    ).toBeVisible();
+      page.getByRole("dialog").getByRole("img", { name: /^Shared group/ }),
+    ).toHaveAccessibleName(/Available BD 350,000/);
+    await page.getByRole("button", { name: "Review request" }).click();
+  }
+  // Let both submits reach the fixture before the first response can refresh either page.
+  let arriving = 0;
+  let release = () => {};
+  const bothArrived = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  for (const { page } of [first, second]) {
+    await page.route("**/api/credit-requests", async (route) => {
+      if (route.request().method() === "POST") {
+        if (++arriving === 2) release();
+        await bothArrived;
+      }
+      await route.fallback();
+    });
   }
   await Promise.all(
     [first.page, second.page].map((p) =>
@@ -524,16 +603,16 @@ test("Two RM browser sessions submit competing subsidiary requests and immediate
   await expect(loser.getByRole("dialog").getByRole("alert")).toHaveText(
     "Requested amount exceeds corporate group available headroom",
   );
+  await expect(loser.getByRole("dialog")).toContainText(
+    /corporate group has only BD 350,000 available/,
+  );
   await expect(
-    loser.getByRole("dialog").getByText("BD 350,000", { exact: true }),
-  ).toBeVisible();
+    loser.getByRole("button", { name: "Confirm create credit request" }),
+  ).toBeDisabled();
   for (const { page } of [first, second])
     await expect(
-      page
-        .locator(".corporate-management .group-card")
-        .first()
-        .getByText("BD 350,000", { exact: true }),
-    ).toBeVisible();
+      page.getByRole("img", { name: /^Shared group limit\. Approved/ }),
+    ).toHaveAccessibleName(/Available BD 350,000/);
   expect(server.forbiddenSearches).toEqual([]);
   await first.context.close();
   await second.context.close();

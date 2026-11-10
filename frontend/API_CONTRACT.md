@@ -4,9 +4,19 @@ Base prefix `/api`. Authenticated requests use `Authorization: Bearer <JWT>`. Lo
 
 | Endpoint | Method | Access | Request / response |
 | --- | --- | --- | --- |
-| /auth/users/register | POST | Public | firstName, lastName, email, password, financialInstitutionId / RegisterResponse |
+| /financial-institutions/directory | GET | Public | Active institutions ordered by name and ID / array of `{ id, name }`; empty array when none exist |
+| /auth/sso/providers | GET | Public | Configured provider availability / `{ google, microsoft }` booleans |
+| /auth/sso/exchange | POST | Public, completed OAuth session required | JSON `{}` / existing `{ message: JWT }`, single use, expires after 60 seconds |
+| /auth/users/register | POST | Public | firstName, lastName, email, password, financialInstitutionId / RegisterResponse with `verification: { challengeId, email, expiresAt, resendAfter }`; six-digit code sent by email |
 | /auth/users/login | POST | Public | email, password / message (JWT) |
+| /auth/users/verification-code/verify | POST | Public, rate-limited | challengeId, code (six-digit string) / message; 400 on invalid, expired, used or exhausted code |
+| /auth/users/verification-code/resend | POST | Public, rate-limited | challengeId / new challenge timing; 429 before 60 seconds |
+| /auth/users/verification-code/change-email | POST | Public, rate-limited | challengeId, email / rotated challenge and new code; only pending accounts |
+| /auth/users/verification-code/request | POST | Public, rate-limited | email, password / resume pending verification after checking password |
 | /auth/users/verify-email?token=… | GET | Public | token query / text |
+| /auth/users/password-reset-code/request | POST | Public, rate-limited | email / `{ challengeId, email, expiresAt, resendAfter }`; code emailed for active accounts |
+| /auth/users/password-reset-code/resend | POST | Public, rate-limited | challengeId / replacement code timing; 60-second cooldown |
+| /auth/users/password-reset-code/verify | POST | Public, rate-limited | challengeId, six-digit code / `{ token }` for the existing reset-password endpoint; token expires in 5 minutes |
 | /auth/users/forgot-password | POST | Public | email / text |
 | /auth/users/reset-password | POST | Public | token, newPassword / text |
 | /auth/users/change-password | PATCH | Authenticated | currentPassword, newPassword / text |
@@ -19,9 +29,11 @@ Base prefix `/api`. Authenticated requests use `Authorization: Bearer <JWT>`. Lo
 | /counterparties | POST | Risk | name / CounterpartyResponse |
 | /counterparties/{id} | PUT | Risk | name / CounterpartyResponse |
 | /counterparties/{id}/status | PATCH | Risk | status / CounterpartyResponse |
+| /credit-limits | GET | RM, Risk, Admin | Paginated institution facility directory. Each item has `exposure` (CreditExposureResponse), `name`, and `status`. |
 | /credit-limits | POST | Risk | financialInstitutionId, counterpartyId, limitAmount / CreditLimitResponse |
 | /credit-limits/{id} | PUT | Risk | limitAmount / CreditLimitResponse |
 | /credit-limits/{id}/exposure | GET | RM, Risk, Admin | CreditExposureResponse |
+| /credit-limits/exposure-history | GET | RM | Optional includeCurrent=true / array of individual facility observations with capturedAt (UTC), limitAmount, usedAmount, reservedAmount, synthetic, and current=true on the optional live reading. Scoped to the RM’s institution and own request facilities. Missing dates are omitted. The live reading is never stored as history. |
 | /credit-requests | POST | RM | creditLimitId, amount / CreditRequestResponse |
 | /credit-requests/my | GET | RM | page, size, sortBy, direction / Page<CreditRequestResponse> |
 | /credit-requests/{id} | GET | RM, Risk | CreditRequestResponse, subject to institution and ownership rules |
@@ -84,3 +96,12 @@ The request directory follows all pages before calculating status counts; it nev
 - RM company-row actions use the existing `POST /credit-requests` with `{creditLimitId, amount}`. Exposure and shared headroom are reloaded after success or rejection and on SSE events. No automatic POST retry occurs.
 
 No new backend endpoints or authorization rules were added. Admin never calls the RO-only request search. Individual facility discovery uses permitted request history and explicit in-app ID lookups because no complete directory endpoint exists; group totals remain backend-authoritative. Missing individual values are not synthesized as zero. The lookup verifies the returned counterparty before attaching the facility to a group row. No groups, memberships, limits, requests or seed data are created on mount.
+
+
+New registrations use email codes instead of links. Codes expire in 10 minutes, permit at most five guesses and become unusable after successful verification or resend. Only a keyed HMAC is stored in the new `email_verification_codes` table; the raw code is sent only to the mail service. Verification/resend actions lock the current challenge to serialize concurrent requests. A 60-second resend cooldown applies to the pending registration, in addition to existing per-IP request limits. Correct email/password credentials can reopen an unverified account's challenge after browser storage is lost. Existing verification-token GET URLs and password-reset links remain supported for previously sent emails. No banking data or existing account verification states are migrated.
+
+Pending challenge identifiers and email/timing are held in browser session storage to restore the screen after reload; no password or entered code is stored. Successful verification returns to email login and never automatically signs in.
+
+For legacy registrations with an outstanding verification link, pending email correction is refused without altering the link. This preserves existing links and prevents them from verifying a different email address. New code-only registrations support email correction normally.
+
+The Forgot Password UI now requests a six-digit email code, verifies it, and then shows the new-password form. Password-recovery codes use a separate purpose and table from registration codes. Codes expire after 10 minutes, allow five guesses, and are replaced on resend after a 60-second cooldown. Unknown or inactive email addresses follow the same response shape without sending email or creating reset tokens. The reset token is returned only after successful code verification, stays in browser component memory, expires after five minutes, and is consumed by the existing password-reset service under a row lock. Pending code metadata can restore after reload; a reset token is never persisted or shown as an editable field. Existing password-reset token callers remain supported.

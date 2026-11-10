@@ -151,7 +151,7 @@ async function setup(
       body: JSON.stringify(response),
     });
   });
-  await page.goto("/");
+  await page.goto("/login");
   await page.getByLabel("Work email").fill("burashid993@gmail.com");
   await page.getByLabel("Password", { exact: true }).fill("ui-fixture-only");
   await page.getByRole("button", { name: "Sign in securely" }).click();
@@ -173,9 +173,10 @@ async function assess(page: Page, id: number) {
   await expect(
     page.getByRole("heading", { name: "Risk Analytics", exact: true }),
   ).toBeVisible();
-  await page
-    .getByLabel("Select credit request for assessment")
-    .selectOption(String(id));
+  const picker = page.getByLabel("Select credit request for assessment");
+  await expect(picker).toHaveValue(/^\d+$/);
+  await picker.selectOption(String(id));
+  await expect(picker).toHaveValue(String(id));
   await expect(
     page.getByRole("button", { name: "Run risk prediction", exact: true }),
   ).toBeEnabled();
