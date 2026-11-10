@@ -1,0 +1,285 @@
+/* Keep the existing forms and move their panels as one coordinated transition. */
+.auth-sliding {
+  isolation: isolate;
+  overflow: clip;
+}
+.auth-sliding .auth-story,
+.auth-sliding .auth-form {
+  grid-row: 1;
+  transition: transform 680ms cubic-bezier(0.65, 0, 0.2, 1);
+  min-width: 0;
+}
+.auth-sliding .auth-story {
+  grid-column: 1;
+  z-index: 2;
+}
+.auth-sliding .auth-form {
+  grid-column: 2;
+  z-index: 1;
+}
+.auth-sliding.is-register .auth-story {
+  transform: translateX(100%);
+}
+.auth-sliding.is-register .auth-form {
+  transform: translateX(-100%);
+}
+.auth-panel-switch {
+  margin-top: 28px;
+  position: relative;
+  z-index: 1;
+}
+.auth-panel-switch p {
+  color: #bac9dd;
+  font-size: 12px;
+  margin-bottom: 13px;
+}
+.auth-panel-switch button {
+  background: transparent;
+  border: 1px solid #657d9e;
+  color: #fff;
+  padding: 12px 22px;
+  border-radius: 7px;
+}
+.auth-panel-switch button:hover:not(:disabled) {
+  background: #ffffff12;
+  border-color: #b7c9e1;
+}
+.auth-panel-switch button:focus-visible {
+  outline: 3px solid #aac9ff;
+  outline-offset: 4px;
+}
+.auth-sliding .auth-form-inner {
+  animation: auth-form-enter 450ms ease both;
+}
+.auth-sliding .auth-form h2:focus {
+  outline: none;
+}
+@keyframes auth-form-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (max-width: 1000px) {
+  .auth.auth-sliding {
+    grid-template-columns: 1fr;
+  }
+  .auth-sliding .auth-story,
+  .auth-sliding .auth-form {
+    grid-row: auto;
+    grid-column: auto;
+    transform: none !important;
+    transition: none;
+  }
+  .auth-sliding .story-body {
+    padding-block: 35px;
+  }
+  .auth-panel-switch {
+    margin-top: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-sliding .auth-story,
+  .auth-sliding .auth-form {
+    transition: none;
+  }
+  .auth-sliding .auth-form-inner {
+    animation: none;
+  }
+}
+
+/* matches the existing authentication inputs */
+.auth-sliding .institution-directory select {
+  width: 100%;
+  height: 46px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid #dbe2ea;
+  border-radius: 7px;
+  background: #fff;
+  color: #273c56;
+  padding: 10px 12px;
+}
+.auth-sliding .institution-directory select:focus-visible {
+  outline: 3px solid #aac9ff;
+  outline-offset: 2px;
+}
+.institution-directory .text-button {
+  display: block;
+  margin-top: 7px;
+}
+
+.institution-directory .field > label {
+  font-size: 12px;
+  font-weight: 550;
+  color: #3f5571;
+}
+
+.work-signin {
+  margin: 6px 0 24px;
+}
+.work-signin > button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 46px;
+  margin-top: 10px;
+  color: #162236;
+  background: #fff;
+  border: 1px solid #d9e2ec;
+  border-radius: 7px;
+  font-weight: 600;
+  font-size: 12px;
+}
+.work-signin > button svg {
+  position: absolute;
+  left: 17px;
+}
+.work-signin > button:focus-visible {
+  outline: 3px solid #aac9ff;
+  outline-offset: 3px;
+}
+.work-signin > button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.work-signin-divider {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  color: #748298;
+  font-size: 10px;
+  margin: 0 0 14px;
+}
+.work-signin-divider::before,
+.work-signin-divider::after {
+  content: "";
+  height: 1px;
+  background: #e4eaf1;
+  flex: 1;
+}
+.auth-sliding .auth-form {
+  padding-block: 45px 75px;
+}
+
+/* centers the welcome introduction while keeping form labels aligned */
+.auth-sliding .auth-lock {
+  margin-inline: auto;
+}
+.auth-sliding .auth-form-inner > .eyebrow {
+  display: block;
+  text-align: center;
+}
+.auth-sliding .auth-form-inner > h2,
+.auth-sliding .auth-form-inner > p {
+  text-align: center;
+}
+
+.email-code-screen {
+  text-align: center;
+}
+.email-code-screen > p {
+  margin: 18px 0 30px;
+  color: #64758c;
+  line-height: 1.8;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.email-code-screen strong {
+  color: #344c68;
+  font-weight: 600;
+}
+.email-code-screen .auth-lock {
+  margin-bottom: 25px;
+}
+.otp-entry {
+  position: relative;
+  margin-top: 30px;
+  cursor: text;
+}
+.otp-digits {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 9px;
+}
+.otp-digits span {
+  min-height: 62px;
+  border-radius: 10px;
+  background: #f3f6f9;
+  border: 1px solid #dce5ef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font:
+    600 26px Manrope,
+    sans-serif;
+  color: #162236;
+}
+.otp-entry:focus-within .otp-digits .current {
+  border: 2px solid #4874b4;
+  box-shadow: 0 0 0 3px #4874b419;
+}
+.auth-form .otp-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.01;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  font-size: 16px;
+}
+.otp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.otp-timing {
+  color: #64758c;
+  font-size: 10px;
+  line-height: 1.7;
+  margin-top: 15px;
+}
+.email-code-screen .auth-submit {
+  background: #162236;
+  border-color: #162236;
+  font-size: 13px;
+}
+.email-code-screen .auth-submit:hover:not(:disabled) {
+  background: #223b5b;
+}
+.otp-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: #64758c;
+  font-size: 11px;
+}
+.otp-change-email,
+.otp-back {
+  display: block;
+  margin: 16px auto 0;
+}
+.email-code-screen .field {
+  text-align: left;
+}
+@media (max-width: 380px) {
+  .otp-digits {
+    gap: 6px;
+  }
+  .otp-digits span {
+    min-height: 52px;
+    font-size: 22px;
+  }
+}
