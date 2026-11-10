@@ -1,6 +1,8 @@
 import { api } from "./client";
+import type { Facility } from "../analytics/metrics";
 import type {
   Page,
+  Exposure,
   GroupLimit,
   GroupExposure,
   Membership,
@@ -25,6 +27,20 @@ export async function allPages<T>(
     if (page >= 999)
       throw new Error("Directory is too large. Narrow the search.");
   }
+}
+export async function facilityDirectory(
+  signal?: AbortSignal,
+): Promise<Facility[]> {
+  const rows = await allPages<{
+    exposure: Exposure;
+    name: string;
+    status: string;
+  }>("/credit-limits", signal);
+  return rows.map(({ exposure, name, status }) => ({
+    ...exposure,
+    name,
+    status,
+  }));
 }
 export async function groupPortfolio(
   signal?: AbortSignal,

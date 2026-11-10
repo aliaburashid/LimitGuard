@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import {
+  facilityDirectory,
   groupPortfolio,
   memberships,
   requestDirectory,
 } from "../api/portfolio";
 import { facilityReferences, type Facility } from "../analytics/metrics";
 import type { GroupExposure, Membership, Request } from "../types";
-export function usePortfolio(version: number, risk = true) {
+export function usePortfolio(version: number, risk = true, enabled = true) {
   const [requests, setRequests] = useState<Request[] | null>(null);
   const [groups, setGroups] = useState<GroupExposure[] | null>(null);
   const [members, setMembers] = useState<Membership[] | null>(null);
@@ -15,6 +16,7 @@ export function usePortfolio(version: number, risk = true) {
   const [errors, setErrors] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
+    if (!enabled) return;
     const c = new AbortController();
     setErrors([]);
     setRefreshing(true);
@@ -35,6 +37,7 @@ export function usePortfolio(version: number, risk = true) {
       .then(async (values) => {
         if (c.signal.aborted) return;
         setRequests(values);
+        if (!risk) return;
         const refs = facilityReferences(values);
         const result = await Promise.all(
           refs.map(async (ref) => ({
@@ -51,13 +54,28 @@ export function usePortfolio(version: number, risk = true) {
         if (!c.signal.aborted) setFacilities(result);
       })
       .catch((e) => {
-        if (!c.signal.aborted) setFacilities(null);
+        if (risk && !c.signal.aborted) setFacilities(null);
         capture(e);
       });
-    void Promise.all([groupLoad, memberLoad, requestLoad]).finally(() => {
+    const facilityLoad = risk
+      ? Promise.resolve()
+      : facilityDirectory(c.signal)
+          .then((values) => {
+            if (!c.signal.aborted) setFacilities(values);
+          })
+          .catch((error: Error) => {
+            if (!c.signal.aborted) setFacilities(null);
+            capture(error);
+          });
+    void Promise.all([
+      groupLoad,
+      memberLoad,
+      requestLoad,
+      facilityLoad,
+    ]).finally(() => {
       if (!c.signal.aborted) setRefreshing(false);
     });
     return () => c.abort();
-  }, [version, risk]);
+  }, [version, risk, enabled]);
   return { requests, groups, members, facilities, errors, refreshing };
 }
