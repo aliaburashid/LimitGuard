@@ -187,6 +187,8 @@ On Windows:
 
 The application uses the `dev` profile by default in the current local configuration. The backend runs on `http://localhost:8080` unless you change its port.
 
+In the `dev` profile, Spring initializes the individual facility snapshot table and records the first observation on startup. The collector targets midnight UTC and retries hourly if that day's capture has not committed. The timestamp reflects the actual observation time. Days missed while the backend is offline remain gaps. The Relationship Manager chart needs two recorded observations in the manager's own facility scope.
+
 ### 3. Start the frontend
 
 In a separate terminal:
@@ -375,7 +377,7 @@ The existing Springdoc Swagger/OpenAPI interface remains the source of truth for
 - **Cross-company limits:** Independent company-level checks are insufficient when subsidiaries belong to the same corporate group.
 - **Long-running work:** ML inference and email are better handled using controlled executors rather than blocking banking request threads unnecessarily.
 - **Observability:** Browser success messages, test mocks, database commits and email delivery are distinct kinds of evidence.
-- **Future improvements:** Verify repeated live PostgreSQL races and inbox delivery; consider a searchable authorized facility directory, better concurrency metrics, and clearer ML class-label documentation. Industry classifications, exposure snapshots and breach-history entities would require further model/API work.
+- **Future improvements:** Verify repeated live PostgreSQL races and inbox delivery; consider a searchable authorized facility directory, better concurrency metrics, and clearer ML class-label documentation. Industry classifications, shared group exposure history and breach-history entities would require further model/API work.
 
 ### Unit 3 documentation index
 

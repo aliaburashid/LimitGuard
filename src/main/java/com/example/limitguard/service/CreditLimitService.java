@@ -14,6 +14,7 @@ import com.example.limitguard.model.User;
 import com.example.limitguard.repository.AuditLogRepository;
 import com.example.limitguard.repository.CounterpartyRepository;
 import com.example.limitguard.repository.CreditLimitRepository;
+import com.example.limitguard.repository.CreditExposureSnapshotRepository;
 import com.example.limitguard.repository.FinancialInstitutionRepository;
 import com.example.limitguard.security.InstitutionAccessService;
 import com.example.limitguard.security.MyUserDetails;
@@ -24,11 +25,13 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.limitguard.dto.CreditExposureResponse;
+import com.example.limitguard.dto.CreditExposureSnapshotResponse;
 import com.example.limitguard.exception.CreditLimitNotFoundException;
 import com.example.limitguard.dto.UpdateCreditLimitRequest;
 import com.example.limitguard.exception.InvalidCreditLimitReductionException;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +55,9 @@ public class CreditLimitService {
 
     @Autowired
     private InstitutionAccessService institutionAccessService;
+
+    @Autowired
+    private CreditExposureSnapshotRepository exposureSnapshots;
 
     // Sends real-time notifications when credit limits are updated
     @Autowired
@@ -204,6 +210,15 @@ public class CreditLimitService {
                 creditLimit.getReservedAmount(),
                 availableHeadroom
         );
+    }
+
+
+    // returns only recorded individual facility exposure for the logged-in institution
+    public List<CreditExposureSnapshotResponse> getExposureHistory(boolean includeCurrent) {
+        Long institutionId = institutionAccessService.getCurrentInstitutionId();
+        Long requesterId = getCurrentLoggedInUser().getId();
+        return includeCurrent ? exposureSnapshots.findHistory(institutionId, requesterId, true)
+                : exposureSnapshots.findHistory(institutionId, requesterId);
     }
 
 

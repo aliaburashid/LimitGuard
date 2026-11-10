@@ -1,5 +1,6 @@
 package com.example.limitguard.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -39,6 +40,18 @@ public class AsyncConfig {
         executor.initialize();
 
         // Register the executor with Spring
+        return executor;
+    }
+
+    // keeps database waits for snapshot collection off the reservation expiry scheduler
+    @Bean(name = "creditExposureSnapshotExecutor", defaultCandidate = false)
+    @ConditionalOnProperty(name = "limitguard.exposure-snapshots.enabled", havingValue = "true")
+    public Executor creditExposureSnapshotExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(0);
+        executor.setThreadNamePrefix("credit-exposure-snapshot-");
         return executor;
     }
 }

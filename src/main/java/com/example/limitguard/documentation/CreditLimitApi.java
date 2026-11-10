@@ -2,6 +2,7 @@ package com.example.limitguard.documentation;
 
 import com.example.limitguard.dto.CreditExposureResponse;
 import com.example.limitguard.dto.CreditFacilityResponse;
+import com.example.limitguard.dto.CreditExposureSnapshotResponse;
 import com.example.limitguard.dto.CreditLimitRequest;
 import com.example.limitguard.dto.CreditLimitResponse;
 import com.example.limitguard.dto.UpdateCreditLimitRequest;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 
+import java.util.List;
 
 public interface CreditLimitApi {
 
@@ -91,6 +93,19 @@ public interface CreditLimitApi {
             @Parameter(description = "ID of the credit limit", example = "1")
             Long creditLimitId
     );
+
+    @Operation(
+            summary = "Get individual facility exposure history",
+            description = "Returns recorded portfolio snapshots for the authenticated Relationship Manager. "
+                    + "Includes facilities linked to the manager’s requests. Set includeCurrent=true to append "
+                    + "one live reading from committed facility balances without writing a snapshot."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Exposure history retrieved successfully"),
+            @ApiResponse(responseCode = "401", description = "Authentication required or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Relationship Manager role and institution required")
+    })
+    ResponseEntity<List<CreditExposureSnapshotResponse>> getExposureHistory(boolean includeCurrent);
 
     @Operation(
             summary = "Update a credit limit",

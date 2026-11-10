@@ -1,5 +1,6 @@
 package com.example.limitguard.integration;
 
+import com.example.limitguard.dto.CreditExposureSnapshotResponse;
 import com.example.limitguard.dto.CreditRequestRequest;
 import com.example.limitguard.dto.UpdateCreditLimitRequest;
 import com.example.limitguard.enums.CounterpartyStatus;
@@ -72,6 +73,9 @@ public class CreditRequestConcurrencyIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private CreditExposureSnapshotRepository snapshots;
 
     // Prevent real emails from being sent during tests
     @MockitoBean
@@ -312,6 +316,78 @@ public class CreditRequestConcurrencyIntegrationTest {
                 0,
                 new BigDecimal(expected).compareTo(actual)
         );
+    }
+
+    @Test
+    void liveExposureFollowsCommittedLifecycleWithoutChangingDailyHistory() {
+        Long institutionId = getLimit().getFinancialInstitution().getId();
+        User secondManager = createUser("second-rm@test.local", UserRole.RELATIONSHIP_MANAGER,
+                getLimit().getFinancialInstitution());
+        Long approvedRequest = submitForTrend(requesterId, "600000");
+        Long rejectedRequest = submitForTrend(secondManager.getId(), "550000");
+        jdbcTemplate.update("""
+                INSERT INTO credit_exposure_snapshots
+                    (institution_id, facility_id, captured_at, reporting_date, limit_amount, used_amount, reserved_amount)
+                VALUES (?, ?, TIMESTAMPTZ '2026-01-01 00:00Z', DATE '2026-01-01', 1000000, 0, 0)
+                ON CONFLICT (institution_id, facility_id, reporting_date) DO UPDATE
+                    SET captured_at = EXCLUDED.captured_at, limit_amount = EXCLUDED.limit_amount,
+                        used_amount = EXCLUDED.used_amount, reserved_amount = EXCLUDED.reserved_amount
+                """, institutionId, creditLimitId);
+        var history = snapshots.findHistory(institutionId, requesterId);
+
+        assertLiveExposure(institutionId, requesterId, history, "1000000", "0", "0");
+        performAs(checkerOneId, () -> creditRequestService.rejectCreditRequest(rejectedRequest, "Test decision"));
+        assertLiveExposure(institutionId, requesterId, history, "1000000", "0", "0");
+        performAs(checkerOneId, () -> creditRequestService.approveCreditRequest(approvedRequest));
+        assertLiveExposure(institutionId, requesterId, history, "1000000", "0", "600000");
+        assertLiveExposure(institutionId, secondManager.getId(), history, "1000000", "0", "600000");
+        performAs(requesterId, () -> creditRequestService.markCreditRequestAsUsed(approvedRequest));
+        assertLiveExposure(institutionId, requesterId, history, "1000000", "600000", "0");
+
+        Long cancelled = submitForTrend(requesterId, "100000");
+        assertLiveExposure(institutionId, requesterId, history, "1000000", "600000", "100000");
+        performAs(requesterId, () -> creditRequestService.cancelCreditRequest(cancelled));
+        assertLiveExposure(institutionId, requesterId, history, "1000000", "600000", "0");
+
+        Long expired = submitForTrend(requesterId, "150000");
+        assertLiveExposure(institutionId, requesterId, history, "1000000", "600000", "150000");
+        jdbcTemplate.update("UPDATE credit_requests SET expires_at = ? WHERE id = ?", LocalDateTime.now().minusMinutes(1), expired);
+        performAs(null, () -> creditRequestService.expireCreditRequest(expired));
+        assertLiveExposure(institutionId, requesterId, history, "1000000", "600000", "0");
+
+        UpdateCreditLimitRequest update = new UpdateCreditLimitRequest();
+        update.setLimitAmount(new BigDecimal("1250000"));
+        performAs(checkerOneId, () -> creditLimitService.updateCreditLimit(creditLimitId, update));
+        assertLiveExposure(institutionId, secondManager.getId(), history, "1250000", "600000", "0");
+        assertTrue(snapshots.findHistory(institutionId, -1L, true).isEmpty());
+        assertTrue(snapshots.findHistory(-1L, requesterId, true).isEmpty());
+    }
+
+    private Long submitForTrend(Long userId, String amount) {
+        CreditRequestRequest request = new CreditRequestRequest();
+        request.setCreditLimitId(creditLimitId);
+        request.setAmount(new BigDecimal(amount));
+        List<Long> ids = new ArrayList<>();
+        performAs(userId, () -> ids.add(creditRequestService.createCreditRequest(request).getId()));
+        return ids.get(0);
+    }
+
+    private void performAs(Long userId, ConcurrentAction action) {
+        Result result = runAs(userId, action);
+        assertTrue(result.success(), () -> String.valueOf(result.error()));
+    }
+
+    private void assertLiveExposure(Long institutionId, Long userId, List<CreditExposureSnapshotResponse> history,
+                                    String approved, String used, String reserved) {
+        var trend = snapshots.findHistory(institutionId, userId, true);
+        assertEquals(history.size() + 1, trend.size());
+        assertEquals(history, trend.subList(0, history.size()));
+        var live = trend.get(trend.size() - 1);
+        assertTrue(live.current());
+        assertFalse(live.synthetic());
+        assertMoneyEquals(approved, live.limitAmount());
+        assertMoneyEquals(used, live.usedAmount());
+        assertMoneyEquals(reserved, live.reservedAmount());
     }
 
     // Creates a credit request directly in the database.
