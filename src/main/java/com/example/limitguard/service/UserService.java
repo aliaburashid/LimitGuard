@@ -64,6 +64,10 @@ public class UserService {
     @Autowired
     private UserTokenRepository userTokenRepository;
 
+    // sends a short-lived code for each new registration
+    @Autowired
+    private EmailVerificationCodeService verificationCodeService;
+
     // Gives this service access to the email service
     @Autowired
     private EmailService emailService;
@@ -134,22 +138,8 @@ public class UserService {
         // User saved temporarily
         User savedUser = userRepository.save(newUser);
 
-        // Create a new token for email verification
-        UserToken verificationToken = new UserToken();
-        // Generate a random unique difficult-to-guess token
-        verificationToken.setToken(UUID.randomUUID().toString());
-        // This token will be used to verify the user's email
-        verificationToken.setTokenType(UserTokenType.EMAIL_VERIFICATION);
-        // The verification link will expire after 24 hours
-        verificationToken.setExpiresAt(LocalDateTime.now().plusHours(24));
-        // Connect the token to the newly registered user
-        verificationToken.setUser(savedUser);
-        // Save the verification token in the database temporarily
-        userTokenRepository.save(verificationToken);
-
-        // runtime exception happens here
-        // send the verification link to the users email
-        emailService.SendVerificationEmail(savedUser.getEmail(), verificationToken.getToken());
+        // sends the six-digit code and returns its safe challenge information
+        VerificationCodeResponse verification = verificationCodeService.create(savedUser);
 
         // Log successful registration without logging the verification token
         logger.info("User ID {} registered successfully", savedUser.getId());
@@ -157,6 +147,7 @@ public class UserService {
         // response that will be sent back after registration
         RegisterResponse registerResponse = new RegisterResponse();
 
+        registerResponse.setVerification(verification);
         registerResponse.setId(savedUser.getId());
         registerResponse.setFirstName(savedUser.getFirstName());
         registerResponse.setLastName(savedUser.getLastName());

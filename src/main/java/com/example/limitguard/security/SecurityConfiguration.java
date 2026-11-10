@@ -98,6 +98,13 @@ public class SecurityConfiguration {
                         // only the directory GET is public; institution changes remain protected
                         .requestMatchers(HttpMethod.GET, "/api/financial-institutions/directory").permitAll()
 
+                        // only these code actions are public; account changes stay protected
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/auth/users/verification-code/request",
+                                "/api/auth/users/verification-code/verify",
+                                "/api/auth/users/verification-code/resend",
+                                "/api/auth/users/verification-code/change-email").permitAll()
+
                         // Every other endpoint requires the user to be authenticated
                         .anyRequest().authenticated()
                 )

@@ -13,6 +13,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Setter
 public class RegisterResponse {
 
+    // identifies the pending code screen without exposing the code itself
+    private VerificationCodeResponse verification;
+
     // The ID of the newly created user
     private Long id;
 

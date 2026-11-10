@@ -16,6 +16,35 @@ public class EmailService {
     @Autowired
     private JavaMailSender mailSender;
 
+    // sends a code that the user enters on the registration screen
+    public void SendVerificationCodeEmail(String email, String code) {
+        sendEmailCode(email, code, "Your LimitGuard verification code", "Verify your work email",
+                "Enter this six-digit code on your LimitGuard registration screen:");
+    }
+
+    // keeps the shared code email layout in one place
+    private void sendEmailCode(String email, String code, String subject, String heading, String explanation) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(email);
+            helper.setSubject(subject);
+            helper.setText("""
+                    <html><body style="font-family:Arial,sans-serif;background:#f4f6f8;padding:32px;color:#162236">
+                    <div style="max-width:520px;margin:auto;background:white;padding:36px;border-radius:12px">
+                    <h1>LimitGuard</h1><h2>%s</h2>
+                    <p>%s</p>
+                    <p style="font-size:36px;font-weight:bold;letter-spacing:10px;padding:20px;background:#f4f6f8">%s</p>
+                    <p>This code expires in 10 minutes and can only be used once.</p>
+                    <p>Never share this code. If you did not request it, you can ignore this email.</p>
+                    </div></body></html>
+                    """.formatted(heading, explanation, code), true);
+            mailSender.send(message);
+        } catch (MessagingException exception) {
+            throw new RuntimeException("Unable to create code email", exception);
+        }
+    }
+
     public void SendVerificationEmail(String email, String token) {
 
         // Create the verification link using the user's token

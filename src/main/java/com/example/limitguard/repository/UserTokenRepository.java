@@ -8,6 +8,9 @@ import java.util.Optional;
 // Allows us to access and manage user tokens in the database
 public interface UserTokenRepository extends JpaRepository<UserToken, Long> {
 
+    // checks for existing verification links without changing or invalidating them
+    boolean existsByUserIdAndTokenTypeAndUsedFalse(Long userId, com.example.limitguard.enums.UserTokenType tokenType);
+
     // Finds a user token using the unique token value
     Optional<UserToken> findByToken(String token);
 }
