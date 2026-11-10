@@ -3,6 +3,7 @@ package com.example.limitguard.controller;
 import com.example.limitguard.documentation.GroupCreditLimitApi;
 import com.example.limitguard.dto.GroupCreditLimitRequest;
 import com.example.limitguard.dto.GroupCreditLimitResponse;
+import com.example.limitguard.dto.GroupExposureBreakdownResponse;
 import com.example.limitguard.dto.UpdateGroupCreditLimitRequest;
 import com.example.limitguard.service.GroupCreditLimitService;
 import jakarta.validation.Valid;
@@ -103,6 +104,14 @@ public class GroupCreditLimitController implements GroupCreditLimitApi {
 
         // returns the calculated exposure
         return ResponseEntity.ok(exposure);
+    }
+
+    // gets the shared exposure split and the member facilities for the logged-in bank
+    @GetMapping("/groups/{corporateGroupId}/exposure-breakdown")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RISK_OFFICER', 'RELATIONSHIP_MANAGER')")
+    public ResponseEntity<GroupExposureBreakdownResponse> getGroupExposureBreakdown(
+            @PathVariable Long corporateGroupId) {
+        return ResponseEntity.ok(groupCreditLimitService.getGroupExposureBreakdown(corporateGroupId));
     }
 
     // gets the remaining available credit headroom of a corporate group

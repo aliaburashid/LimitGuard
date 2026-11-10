@@ -1,7 +1,9 @@
 package com.example.limitguard.service;
 
+import com.example.limitguard.dto.CreditExposureResponse;
 import com.example.limitguard.dto.GroupCreditLimitRequest;
 import com.example.limitguard.dto.GroupCreditLimitResponse;
+import com.example.limitguard.dto.GroupExposureBreakdownResponse;
 import com.example.limitguard.dto.UpdateGroupCreditLimitRequest;
 import com.example.limitguard.exception.*;
 import com.example.limitguard.model.AuditLog;
@@ -18,11 +20,11 @@ import com.example.limitguard.security.MyUserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-import com.example.limitguard.model.CorporateGroupMembership;
 import com.example.limitguard.model.CreditLimit;
 import com.example.limitguard.repository.CorporateGroupMembershipRepository;
 import com.example.limitguard.repository.CreditLimitRepository;
@@ -33,6 +35,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import java.math.BigDecimal;
@@ -377,32 +380,7 @@ public class GroupCreditLimitService {
         // gets the logged-in user's financial institution id
         Long institutionId = institutionAccessService.getCurrentInstitutionId();
 
-        // checks that the corporate group exists
-        corporateGroupRepository.findById(corporateGroupId)
-                .orElseThrow(() -> new CorporateGroupNotFoundException(
-                        "Corporate group not found with ID: " + corporateGroupId
-                ));
-
-        // finds all counterparties assigned to this corporate group
-        List<CorporateGroupMembership> memberships =
-                corporateGroupMembershipRepository.findByCorporateGroupId(corporateGroupId);
-
-        // returns zero if the corporate group has no counterparties
-        if (memberships.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-
-        // gets the ids of all counterparties in the group
-        List<Long> counterpartyIds = memberships.stream()
-                .map(membership -> membership.getCounterparty().getId())
-                .toList();
-
-        // finds the credit limits for these counterparties belonging to this bank
-        List<CreditLimit> creditLimits =
-                creditLimitRepository.findByFinancialInstitutionIdAndCounterpartyIdIn(
-                        institutionId,
-                        counterpartyIds
-                );
+        List<CreditLimit> creditLimits = findGroupFacilities(institutionId, corporateGroupId);
 
         // calculates the total used and reserved amounts across all group members
         BigDecimal totalExposure = BigDecimal.ZERO;
@@ -422,6 +400,45 @@ public class GroupCreditLimitService {
     }
 
 
+    // reads the shared limit and member balances from one committed database view
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public GroupExposureBreakdownResponse getGroupExposureBreakdown(Long corporateGroupId) {
+        Long institutionId = institutionAccessService.getCurrentInstitutionId();
+        GroupCreditLimit groupLimit = requireGroupLimit(institutionId, corporateGroupId);
+
+        BigDecimal used = BigDecimal.ZERO;
+        BigDecimal reserved = BigDecimal.ZERO;
+        List<CreditExposureResponse> facilities = new ArrayList<>();
+
+        for (CreditLimit facility : findGroupFacilities(institutionId, corporateGroupId)) {
+            used = used.add(facility.getUsedAmount());
+            reserved = reserved.add(facility.getReservedAmount());
+            facilities.add(CreditLimitService.toExposureResponse(facility));
+        }
+
+        return new GroupExposureBreakdownResponse(
+                groupLimit.getAmount(), used, reserved,
+                groupLimit.getAmount().subtract(used).subtract(reserved),
+                facilities
+        );
+    }
+
+    private List<CreditLimit> findGroupFacilities(Long institutionId, Long corporateGroupId) {
+        corporateGroupRepository.findById(corporateGroupId)
+                .orElseThrow(() -> new CorporateGroupNotFoundException(
+                        "Corporate group not found with ID: " + corporateGroupId
+                ));
+
+        List<Long> counterpartyIds = corporateGroupMembershipRepository.findByCorporateGroupId(corporateGroupId)
+                .stream().map(membership -> membership.getCounterparty().getId()).toList();
+
+        if (counterpartyIds.isEmpty()) {
+            return List.of();
+        }
+
+        return creditLimitRepository.findByFinancialInstitutionIdAndCounterpartyIdIn(institutionId, counterpartyIds);
+    }
+
     // calculates the available group credit headroom
     @Transactional(readOnly = true)
     public BigDecimal calculateGroupHeadroom(Long corporateGroupId) {
@@ -429,16 +446,7 @@ public class GroupCreditLimitService {
         // gets the logged-in user's financial institution id
         Long institutionId = institutionAccessService.getCurrentInstitutionId();
 
-        // finds the approved group credit limit for this bank
-        GroupCreditLimit groupCreditLimit = groupCreditLimitRepository
-                .findByFinancialInstitutionIdAndCorporateGroupId(
-                        institutionId,
-                        corporateGroupId
-                )
-                .orElseThrow(() -> new GroupCreditLimitNotFoundException(
-                        "Group credit limit not found for corporate group ID: "
-                                + corporateGroupId
-                ));
+        GroupCreditLimit groupCreditLimit = requireGroupLimit(institutionId, corporateGroupId);
 
         // gets the current combined group exposure
         BigDecimal totalExposure = calculateGroupExposure(corporateGroupId);
@@ -447,6 +455,16 @@ public class GroupCreditLimitService {
         return groupCreditLimit.getAmount().subtract(totalExposure);
     }
 
-
-
+    private GroupCreditLimit requireGroupLimit(Long institutionId, Long corporateGroupId) {
+        // finds the approved group credit limit for this bank
+        return groupCreditLimitRepository
+                .findByFinancialInstitutionIdAndCorporateGroupId(
+                        institutionId,
+                        corporateGroupId
+                )
+                .orElseThrow(() -> new GroupCreditLimitNotFoundException(
+                        "Group credit limit not found for corporate group ID: "
+                                + corporateGroupId
+                ));
+    }
 }
