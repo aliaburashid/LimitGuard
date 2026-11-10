@@ -1,38 +1,54 @@
-import { ArrowRight, ArrowUpRight, CheckCircle2, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CompanyLogo } from "../components/CompanyLogo";
+import { ArrowUpRight, Plus, Search, SlidersHorizontal } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { api } from "../api/client";
-import {
-  Badge,
-  Empty,
-  ErrorBox,
-  ExposurePanel,
-  Loading,
-  Modal,
-  Pager,
-} from "../components/ui";
+import { Badge, Empty, ErrorBox, Loading, Pager } from "../components/ui";
 import { useAuth } from "../context/Auth";
+import type { RelationshipPortfolio } from "../hooks/useRelationshipPortfolio";
 import { CreateRequest } from "../components/CreateRequest";
 import { requestDirectory, memberships } from "../api/portfolio";
 import type { Membership } from "../types";
 import type { Exposure, Page, Request, Review } from "../types";
 import { date, label, money, requestReference } from "../utils/format";
+import { PersonalRequestTable } from "./PersonalRequestTable";
+import "../styles/request-register.css";
+import { CreditRequestDetails } from "./CreditRequestDetails";
 import type { Mutation } from "./MutationDialog";
 export function Requests({
   approval,
+  initialStatus = "",
+  companyFilter,
+  clearCompanyFilter,
   version,
   mutate,
   assess,
+  portfolio,
+  selection,
+  createRequest,
 }: {
   approval: boolean;
+  initialStatus?: string;
+  companyFilter?: { id: number; name: string } | null;
+  clearCompanyFilter?: () => void;
   version: number;
   mutate: (a: Mutation) => void;
   assess?: (id: number) => void;
+  portfolio?: RelationshipPortfolio;
+  selection?: { id: number } | null;
+  createRequest?: () => void;
 }) {
   const { user } = useAuth();
+  const personal = !approval && user?.role === "RELATIONSHIP_MANAGER";
+  const filterId = useId();
+  const [moreFilters, setMoreFilters] = useState(false);
   const [lastResult, setLastResult] = useState("");
   const [creating, setCreating] = useState(false);
-  const [status, setStatus] = useState(approval ? "PENDING_APPROVAL" : "");
+  const [status, setStatus] = useState(
+    approval ? "PENDING_APPROVAL" : initialStatus,
+  );
   const [query, setQuery] = useState("");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdThrough, setCreatedThrough] = useState("");
   const [members, setMembers] = useState<Membership[]>([]);
   const [capacities, setCapacities] = useState<Record<number, Exposure>>({});
   const [page, setPage] = useState(0);
@@ -44,6 +60,7 @@ export function Requests({
   const [detailError, setDetailError] = useState("");
   const [loading, setLoading] = useState(false);
   useEffect(() => {
+    if (portfolio) return;
     const c = new AbortController();
     setData(null);
     setError("");
@@ -91,7 +108,7 @@ export function Requests({
       .then(setMembers)
       .catch(() => {});
     return () => c.abort();
-  }, [approval, page, version, status, query]);
+  }, [approval, page, version, status, query, Boolean(portfolio)]);
   useEffect(() => {
     setReview(null);
     setExposure(null);
@@ -130,20 +147,79 @@ export function Requests({
       undefined,
       controller.signal,
     )
-      .then(setSelected)
+      .then((request) => {
+        if (!controller.signal.aborted)
+          setSelected((previous) =>
+            previous?.id === request.id ? request : previous,
+          );
+      })
       .catch((e) => {
         if (e.name !== "AbortError") setDetailError(e.message);
       });
     return () => controller.abort();
   }, [version]);
-  const filtered =
-    data?.content.filter(
-      (r) =>
-        !query ||
-        `${r.counterpartyName} ${r.id} ${r.requesterName}`
+  useEffect(() => {
+    if (!selection) return;
+    const controller = new AbortController();
+    void api<Request>(
+      `/credit-requests/${selection.id}`,
+      "GET",
+      undefined,
+      controller.signal,
+    )
+      .then((request) => {
+        if (!controller.signal.aborted) setSelected(request);
+      })
+      .catch((error: Error) => {
+        if (!controller.signal.aborted) setError(error.message);
+      });
+    return () => controller.abort();
+  }, [selection]);
+  const source = portfolio ? portfolio.requests : (data?.content ?? null);
+  const loadError =
+    error ||
+    (portfolio && !portfolio.requests && !portfolio.refreshing
+      ? portfolio.errors.join(" ")
+      : "");
+  const search = query.trim().toLowerCase();
+  const filtersActive = Boolean(
+    search || status || createdFrom || createdThrough || companyFilter,
+  );
+  function clearFilters() {
+    setQuery("");
+    setStatus("");
+    setCreatedFrom("");
+    setCreatedThrough("");
+    setPage(0);
+    clearCompanyFilter?.();
+  }
+  function newRequest() {
+    if (createRequest) createRequest();
+    else setCreating(true);
+  }
+  const filtered = (source ?? []).filter((request) => {
+    const created = request.createdAt.slice(0, 10);
+    return (
+      (!companyFilter || request.counterpartyId === companyFilter.id) &&
+      (!status || request.status === status) &&
+      (!search ||
+        [
+          request.counterpartyName,
+          requestReference(request.id),
+          ...(!personal ? [request.requesterName, request.creditLimitId] : []),
+        ]
+          .join(" ")
           .toLowerCase()
-          .includes(query.toLowerCase()),
-    ) ?? [];
+          .includes(search)) &&
+      (!createdFrom || created >= createdFrom) &&
+      (!createdThrough || created <= createdThrough)
+    );
+  });
+  const visiblePage = Math.min(
+    page,
+    Math.max(0, Math.ceil(filtered.length / 10) - 1),
+  );
+  const rows = filtered.slice(visiblePage * 10, visiblePage * 10 + 10);
   function openRequest(r: Request) {
     if (approval && assess) assess(r.id);
     else setSelected(r);
@@ -172,22 +248,28 @@ export function Requests({
   }
   return (
     <>
-      <div className="page-heading">
+      <div
+        className={
+          personal
+            ? "rm-overview-header rm-request-register-heading"
+            : "page-heading"
+        }
+      >
         <div>
-          <span className="eyebrow">
-            {approval ? "RISK DECISION WORKSPACE" : "CREDIT OPERATIONS"}
-          </span>
-          <h1>{approval ? "Approval queue" : "Credit requests"}</h1>
+          {!personal && (
+            <span className="eyebrow">RISK DECISION WORKSPACE</span>
+          )}
+          <h1>{personal ? "My Credit Requests" : "Approval queue"}</h1>
           <p>
-            {approval
-              ? "Review capacity. Make deliberate, informed decisions."
-              : "Track your requests from submission to final outcome."}
+            {personal
+              ? "Track your submitted credit requests and manage active reservations."
+              : "Review capacity. Make deliberate, informed decisions."}
           </p>
         </div>
-        {!approval && user?.role === "RELATIONSHIP_MANAGER" && (
-          <button className="primary" onClick={() => setCreating(true)}>
-            <Plus size={17} />
-            New request
+        {personal && (
+          <button className="primary" onClick={newRequest}>
+            <Plus size={17} aria-hidden="true" />
+            New Request
           </button>
         )}
       </div>
@@ -196,12 +278,23 @@ export function Requests({
           {lastResult}
         </div>
       )}
-      <div className={`register-filters ${approval ? "queue-toolbar" : ""}`}>
+      <div
+        className={
+          personal ? "rm-request-filters" : "register-filters queue-toolbar"
+        }
+      >
         <label className="field">
-          <span>Search requests</span>
+          <span className={personal ? "sr-only" : undefined}>
+            Search requests
+          </span>
+          {personal && <Search size={16} aria-hidden="true" />}
           <input
             value={query}
-            placeholder="Company, request ID or requester"
+            placeholder={
+              personal
+                ? "Search company or request reference"
+                : "Company, request ID or requester"
+            }
             onChange={(e) => {
               setQuery(e.target.value);
               setPage(0);
@@ -209,7 +302,7 @@ export function Requests({
           />
         </label>
         <label className="field">
-          <span>Status</span>
+          <span className={personal ? "sr-only" : undefined}>Status</span>
           <select
             value={status}
             onChange={(e) => {
@@ -232,24 +325,116 @@ export function Requests({
             ))}
           </select>
         </label>
+        {personal && (
+          <>
+            <button
+              type="button"
+              aria-expanded={moreFilters}
+              aria-controls={filterId}
+              onClick={() => setMoreFilters(!moreFilters)}
+            >
+              <SlidersHorizontal size={15} aria-hidden="true" />
+              More Filters
+            </button>
+            {filtersActive && (
+              <button
+                className="text-button rm-request-clear"
+                onClick={clearFilters}
+              >
+                Clear filters
+              </button>
+            )}
+          </>
+        )}
+        {personal && (
+          <div className="rm-request-dates" id={filterId} hidden={!moreFilters}>
+            <label className="field">
+              <span>Created from</span>
+              <input
+                type="date"
+                value={createdFrom}
+                max={createdThrough || undefined}
+                onChange={(event) => {
+                  setCreatedFrom(event.target.value);
+                  setPage(0);
+                }}
+              />
+            </label>
+            <label className="field">
+              <span>Created through</span>
+              <input
+                type="date"
+                value={createdThrough}
+                min={createdFrom || undefined}
+                onChange={(event) => {
+                  setCreatedThrough(event.target.value);
+                  setPage(0);
+                }}
+              />
+            </label>
+          </div>
+        )}
       </div>
       <section
-        className={`panel request-queue-panel ${approval ? "risk-queue" : ""}`}
+        className={
+          personal
+            ? "panel rm-request-register"
+            : "panel request-queue-panel risk-queue"
+        }
       >
-        <div className="section-head">
-          <h2>
-            {approval ? "Pending risk decisions" : "Your request register"}
-          </h2>
-          <span className="subtle">Newest requests first</span>
-        </div>
-        {error ? (
-          <ErrorBox message={error} />
-        ) : !data ? (
+        {(!personal || companyFilter) && (
+          <div className="section-head">
+            <h2>
+              {approval ? "Pending risk decisions" : "Your request register"}
+            </h2>
+            {companyFilter ? (
+              <div className="rm-request-company-filter">
+                <span>{companyFilter.name}</span>
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setPage(0);
+                    clearCompanyFilter?.();
+                  }}
+                >
+                  Clear company filter
+                </button>
+              </div>
+            ) : (
+              <span className="subtle">Newest requests first</span>
+            )}
+          </div>
+        )}
+        {loadError ? (
+          <ErrorBox message={loadError} />
+        ) : !source ? (
           <Loading />
         ) : !filtered.length ? (
-          <Empty
-            title={approval ? "No pending approvals" : "No credit requests yet"}
-          />
+          personal ? (
+            <div className="rm-request-empty">
+              <Empty
+                title={
+                  filtersActive
+                    ? "No matching requests"
+                    : "No credit requests yet"
+                }
+              >
+                {filtersActive
+                  ? "Try adjusting your search or filters."
+                  : "Requests you submit will appear here."}
+              </Empty>
+              <button
+                className={filtersActive ? "text-button" : "primary"}
+                onClick={filtersActive ? clearFilters : newRequest}
+              >
+                {filtersActive ? "Clear filters" : "New Request"}
+              </button>
+            </div>
+          ) : (
+            <Empty title="No pending approvals" />
+          )
+        ) : personal ? (
+          <PersonalRequestTable requests={rows} openRequest={openRequest} />
         ) : (
           <div className="table-scroll">
             <table>
@@ -259,16 +444,15 @@ export function Requests({
                   <th>Company</th>
                   <th>Corporate group</th>
                   <th>Exposure / headroom</th>
-                  {!approval && <th>Requester</th>}
+                  <th>Requester</th>
                   <th>Amount</th>
                   <th>Status</th>
                   <th>Created</th>
-                  {!approval && <th>Reservation expiry</th>}
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {filtered.slice(page * 10, page * 10 + 10).map((r) => (
+                {rows.map((r) => (
                   <tr key={r.id}>
                     <td>
                       <button
@@ -279,8 +463,15 @@ export function Requests({
                       </button>
                     </td>
                     <td>
-                      <strong>{r.counterpartyName}</strong>
-                      <div className="small">{r.financialInstitutionName}</div>
+                      <div className="company-brand">
+                        <CompanyLogo name={r.counterpartyName} />
+                        <div>
+                          <strong>{r.counterpartyName}</strong>
+                          <div className="small">
+                            {r.financialInstitutionName}
+                          </div>
+                        </div>
+                      </div>
                     </td>
                     <td>
                       {members.find(
@@ -307,13 +498,12 @@ export function Requests({
                         "—"
                       )}
                     </td>
-                    {!approval && <td>{r.requesterName}</td>}
+                    <td>{r.requesterName}</td>
                     <td className="numeric">{money(r.amount)}</td>
                     <td>
                       <Badge status={r.status} />
                     </td>
                     <td>{date(r.createdAt)}</td>
-                    {!approval && <td>{date(r.expiresAt)}</td>}
                     <td>
                       <button onClick={() => openRequest(r)}>
                         {approval ? "Assess risk" : "Details"}
@@ -326,9 +516,9 @@ export function Requests({
             </table>
           </div>
         )}
-        {data && (
+        {filtered.length > 0 && (
           <Pager
-            page={page}
+            page={visiblePage}
             total={Math.ceil(filtered.length / 10)}
             count={filtered.length}
             onChange={setPage}
@@ -345,105 +535,27 @@ export function Requests({
         />
       )}
       {selected && (
-        <Modal
-          title={`Credit request ${requestReference(selected.id)}`}
+        <CreditRequestDetails
+          request={selected}
+          exposure={exposure}
+          review={approval ? review : null}
+          loading={loading}
+          error={detailError}
+          canDecide={
+            approval &&
+            user?.role === "RISK_OFFICER" &&
+            selected.status === "PENDING_APPROVAL" &&
+            selected.requesterId !== user.id
+          }
+          canManageReservation={
+            !approval &&
+            user?.role === "RELATIONSHIP_MANAGER" &&
+            selected.status === "RESERVED" &&
+            selected.requesterId === user.id
+          }
           onClose={() => setSelected(null)}
-        >
-          <div className="detail-meta">
-            <Badge status={selected.status} />
-            <strong className="request-amount">{money(selected.amount)}</strong>
-          </div>
-          <dl>
-            <dt>Counterparty</dt>
-            <dd>{selected.counterpartyName}</dd>
-            <dt>Institution</dt>
-            <dd>{selected.financialInstitutionName}</dd>
-            <dt>Counterparty status</dt>
-            <dd>
-              <Badge status={selected.counterpartyStatus} />
-            </dd>
-            <dt>Requester</dt>
-            <dd>{selected.requesterName}</dd>
-            <dt>Created</dt>
-            <dd>{date(selected.createdAt)}</dd>
-            <dt>Updated</dt>
-            <dd>{date(selected.updatedAt)}</dd>
-            <dt>Reservation expiry</dt>
-            <dd>{date(selected.expiresAt)}</dd>
-          </dl>
-          <div className="lifecycle">
-            <span className="complete">
-              <CheckCircle2 size={16} />
-              Created
-            </span>
-            <ArrowRight size={15} />
-            <span className="complete">{label(selected.status)}</span>
-          </div>
-          {loading ? (
-            <Loading />
-          ) : detailError ? (
-            <ErrorBox message={detailError} />
-          ) : (
-            exposure && (
-              <>
-                <ExposurePanel data={exposure} />
-                {approval && review && (
-                  <div className="notice">
-                    If approved: committed exposure{" "}
-                    {money(
-                      Number(review.usedAmount) +
-                        Number(review.reservedAmount) +
-                        Number(review.requestedAmount),
-                    )}
-                    ; remaining headroom{" "}
-                    {money(
-                      Number(review.availableHeadroom) -
-                        Number(review.requestedAmount),
-                    )}
-                    . Illustrative arithmetic; the backend makes the final
-                    capacity decision.
-                  </div>
-                )}
-              </>
-            )
-          )}
-          {approval && selected.status === "PENDING_APPROVAL" && (
-            <div className="modal-actions">
-              <button
-                className="danger"
-                disabled={
-                  loading || !!detailError || selected.requesterId === user?.id
-                }
-                onClick={() => transition("reject")}
-              >
-                Reject request
-              </button>
-              <button
-                className="primary"
-                disabled={
-                  loading || !!detailError || selected.requesterId === user?.id
-                }
-                onClick={() => transition("approve")}
-              >
-                Approve & reserve
-              </button>
-            </div>
-          )}
-          {!approval && selected.status === "RESERVED" && (
-            <div className="modal-actions">
-              <button disabled={loading} onClick={() => transition("cancel")}>
-                Cancel reservation
-              </button>
-              <button
-                className="primary"
-                disabled={loading}
-                onClick={() => transition("use")}
-              >
-                Mark as used
-              </button>
-            </div>
-          )}
-        </Modal>
+          transition={transition}
+        />
       )}
     </>
   );
