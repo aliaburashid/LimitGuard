@@ -98,6 +98,10 @@ public class SecurityConfiguration {
                         // only the directory GET is public; institution changes remain protected
                         .requestMatchers(HttpMethod.GET, "/api/financial-institutions/directory").permitAll()
 
+                        // provider availability and the one-time session exchange are public
+                        .requestMatchers(HttpMethod.GET, "/api/auth/sso/providers").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/sso/exchange").permitAll()
+
                         // only these code actions are public; account changes stay protected
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/users/verification-code/request",
