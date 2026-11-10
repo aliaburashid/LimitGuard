@@ -919,13 +919,20 @@ public class CreditRequestService {
                 currentUser
         );
 
-        // sends the new USED status to clients listening to the SSE stream
-        // only clients from the same bank receive the update
-        creditRequestEventService.publishStatusUpdate(
-                savedCreditRequest.getCreditLimit().getFinancialInstitution().getId(),
-                savedCreditRequest.getId(),
-                savedCreditRequest.getStatus()
-        );
+        // Notify the institution only after the new exposure balances are committed.
+        Long institutionId = creditLimit.getFinancialInstitution().getId();
+        Long requestId = savedCreditRequest.getId();
+        CreditRequestStatus status = savedCreditRequest.getStatus();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    creditRequestEventService.publishStatusUpdate(institutionId, requestId, status);
+                } catch (Exception exception) {
+                    logger.error("Failed to publish utilization SSE for credit request ID {}", requestId, exception);
+                }
+            }
+        });
 
         // Log the successful use of reserved capacity
         logger.info("[{}] MARK_USED | SUCCESS | Request ID={} | Status={}",
