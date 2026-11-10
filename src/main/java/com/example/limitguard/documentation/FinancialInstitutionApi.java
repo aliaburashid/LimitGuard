@@ -1,6 +1,8 @@
 package com.example.limitguard.documentation;
 
 import com.example.limitguard.dto.FinancialInstitutionRequest;
+import com.example.limitguard.dto.FinancialInstitutionDirectoryResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import com.example.limitguard.dto.FinancialInstitutionResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -8,7 +10,24 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.http.ResponseEntity;
 
+import java.util.List;
+
 public interface FinancialInstitutionApi {
+
+    // this directory is public because users need it before registering
+    @SecurityRequirements
+    @Operation(
+            summary = "Get the registration institution directory",
+            description = """
+                    Returns active financial institutions ordered by name, then ID.
+                    Each item contains only the institution ID and name.
+                    Returns an empty array when there are no active institutions.
+                    No JWT is required. This endpoint does not change any records.
+                    Institution creation and updates still require an ADMIN.
+                    """
+    )
+    @ApiResponse(responseCode = "200", description = "Active institution IDs and names")
+    ResponseEntity<List<FinancialInstitutionDirectoryResponse>> getInstitutionDirectory();
 
     @Operation(
             summary = "Create a financial institution",

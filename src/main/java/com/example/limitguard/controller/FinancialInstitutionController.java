@@ -2,6 +2,7 @@ package com.example.limitguard.controller;
 
 import com.example.limitguard.documentation.FinancialInstitutionApi;
 import com.example.limitguard.dto.FinancialInstitutionRequest;
+import com.example.limitguard.dto.FinancialInstitutionDirectoryResponse;
 import com.example.limitguard.dto.FinancialInstitutionResponse;
 import com.example.limitguard.service.FinancialInstitutionService;
 import jakarta.validation.Valid;
@@ -11,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/financial-institutions")
 public class FinancialInstitutionController implements FinancialInstitutionApi {
@@ -18,6 +21,15 @@ public class FinancialInstitutionController implements FinancialInstitutionApi {
     // gives this controller access to the FI service
     @Autowired
     private FinancialInstitutionService financialInstitutionService;
+
+    @GetMapping("/directory")
+    // allows users to choose an active institution before creating their account
+    @Override
+    public ResponseEntity<List<FinancialInstitutionDirectoryResponse>> getInstitutionDirectory() {
+
+        // gets the directory from the service and returns HTTP 200
+        return ResponseEntity.ok(financialInstitutionService.getInstitutionDirectory());
+    }
 
     @PostMapping
     // only a logged-in ADMIN can create a financial institution

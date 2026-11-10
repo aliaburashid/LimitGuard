@@ -1,6 +1,7 @@
 package com.example.limitguard.service;
 
 import com.example.limitguard.dto.FinancialInstitutionRequest;
+import com.example.limitguard.dto.FinancialInstitutionDirectoryResponse;
 import com.example.limitguard.dto.FinancialInstitutionResponse;
 import com.example.limitguard.exception.FinancialInstitutionAlreadyExistsException;
 import com.example.limitguard.exception.FinancialInstitutionNotFoundException;
@@ -15,6 +16,8 @@ import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 public class FinancialInstitutionService {
@@ -66,6 +69,20 @@ public class FinancialInstitutionService {
                 financialInstitution.getUpdatedAt()
         );
 
+    }
+
+    // gets the active institutions that users can select before logging in
+    public List<FinancialInstitutionDirectoryResponse> getInstitutionDirectory() {
+
+        // reads the existing institutions without changing any database records
+        return financialInstitutionRepository
+                .findByStatusOrderByNameAscIdAsc(FinancialInstitutionStatus.ACTIVE)
+                .stream()
+                // only returns the ID and name, not the full institution entity
+                .map(institution -> new FinancialInstitutionDirectoryResponse(
+                        institution.getId(), institution.getName()
+                ))
+                .toList();
     }
 
     // If something fails during the database transaction

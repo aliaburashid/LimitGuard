@@ -15,6 +15,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import jakarta.servlet.DispatcherType;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
 
 // @Bean tells Spring to create and manage this object
 
@@ -93,6 +94,9 @@ public class SecurityConfiguration {
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**"
                         ).permitAll()
+
+                        // only the directory GET is public; institution changes remain protected
+                        .requestMatchers(HttpMethod.GET, "/api/financial-institutions/directory").permitAll()
 
                         // Every other endpoint requires the user to be authenticated
                         .anyRequest().authenticated()
