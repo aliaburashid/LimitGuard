@@ -1,0 +1,27 @@
+.app {
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='m2.5 4.5 3.5 3.5 3.5-3.5' fill='none' stroke='%23546b83' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.app[data-theme="dark"] {
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='m2.5 4.5 3.5 3.5 3.5-3.5' fill='none' stroke='%23adc0d6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.app select:not([multiple], [size]) {
+  appearance: none;
+  min-height: 42px;
+  padding-inline: 12px 34px;
+  background-image: var(--select-chevron);
+  background-position: right 12px center;
+  background-size: 12px;
+  background-repeat: no-repeat;
+}
+@media (forced-colors: active) {
+  .app select:not([multiple], [size]) {
+    appearance: auto;
+    padding-inline-end: 12px;
+    background-image: none;
+  }
+}
+.workspace-session-loading {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+}

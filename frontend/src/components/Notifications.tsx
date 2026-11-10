@@ -43,12 +43,17 @@ export function Notifications({
   notices,
   toasts,
   dismiss,
+  unreadCount,
+  openInbox,
 }: {
   notices: Notice[];
+  unreadCount?: number;
+  openInbox?: () => void;
   toasts: Notice[];
   dismiss: (id: number) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const count = unreadCount ?? notices.length;
   const toastLayer = useRef<HTMLDivElement>(null);
   const [toastParent, setToastParent] = useState<HTMLElement>(
     () => document.body,
@@ -86,13 +91,11 @@ export function Notifications({
         <button
           className="icon-button"
           aria-label="Notification history"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
+          aria-expanded={openInbox ? undefined : open}
+          onClick={openInbox ?? (() => setOpen(!open))}
         >
           <Bell size={19} />
-          {notices.length > 0 && (
-            <span className="notification-count">{notices.length}</span>
-          )}
+          {count > 0 && <span className="notification-count">{count}</span>}
         </button>
         {open && (
           <section
