@@ -1,6 +1,7 @@
 package com.example.limitguard.documentation;
 
 import com.example.limitguard.dto.CreditExposureResponse;
+import com.example.limitguard.dto.CreditFacilityResponse;
 import com.example.limitguard.dto.CreditLimitRequest;
 import com.example.limitguard.dto.CreditLimitResponse;
 import com.example.limitguard.dto.UpdateCreditLimitRequest;
@@ -8,7 +9,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+
 
 public interface CreditLimitApi {
 
@@ -41,6 +44,17 @@ public interface CreditLimitApi {
     ResponseEntity<CreditLimitResponse> createCreditLimit(
             CreditLimitRequest creditLimitRequest
     );
+
+    @Operation(
+            summary = "List individual facility exposure",
+            description = "Returns paginated facility balances for the authenticated institution, including facilities with no credit requests."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Facility exposure directory retrieved"),
+            @ApiResponse(responseCode = "401", description = "Authentication required"),
+            @ApiResponse(responseCode = "403", description = "Institution access or required role missing")
+    })
+    ResponseEntity<Page<CreditFacilityResponse>> getFacilityDirectory(int page, int size);
 
     @Operation(
             summary = "Get credit limit exposure and available headroom",

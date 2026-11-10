@@ -1,6 +1,8 @@
 package com.example.limitguard.repository;
 
 import com.example.limitguard.model.CreditLimit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.EntityGraph;
 
@@ -17,6 +19,10 @@ public interface CreditLimitRepository extends JpaRepository<CreditLimit, Long> 
     @Override
     @EntityGraph(attributePaths = {"financialInstitution", "counterparty"})
     Optional<CreditLimit> findById(Long id);
+
+    // lists only the individual facilities belonging to the authenticated institution
+    @EntityGraph(attributePaths = "counterparty")
+    Page<CreditLimit> findByFinancialInstitutionIdOrderByIdAsc(Long institutionId, Pageable pageable);
 
     // finds a credit limit by ID and locks it while updating the balance
     // prevents two Risk Officers from reserving the same available credit at the same time

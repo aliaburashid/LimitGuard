@@ -1,5 +1,6 @@
 package com.example.limitguard.service;
 
+import com.example.limitguard.dto.CreditFacilityResponse;
 import com.example.limitguard.dto.CreditLimitRequest;
 import com.example.limitguard.dto.CreditLimitResponse;
 import com.example.limitguard.exception.CounterpartyNotFoundException;
@@ -17,6 +18,8 @@ import com.example.limitguard.repository.FinancialInstitutionRepository;
 import com.example.limitguard.security.InstitutionAccessService;
 import com.example.limitguard.security.MyUserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -156,6 +159,19 @@ public class CreditLimitService {
         return toResponse(savedCreditLimit);
     }
 
+    // reads current exposure for every facility at the logged-in institution
+    @Transactional(readOnly = true)
+    public Page<CreditFacilityResponse> getFacilityDirectory(Pageable pageable) {
+        Long institutionId = institutionAccessService.getCurrentInstitutionId();
+
+        return creditLimitRepository.findByFinancialInstitutionIdOrderByIdAsc(institutionId, pageable)
+                .map(facility -> new CreditFacilityResponse(
+                        toExposureResponse(facility),
+                        facility.getCounterparty().getName(),
+                        facility.getCounterparty().getStatus()
+                ));
+    }
+
     // gets the credit exposure and available headroom
     public CreditExposureResponse getCreditExposure(Long creditLimitId) {
 
@@ -169,6 +185,11 @@ public class CreditLimitService {
         // if it belongs to another bank, we throw AccessDeniedException
         institutionAccessService.requireInstitution(creditLimit.getFinancialInstitution().getId());
 
+        return toExposureResponse(creditLimit);
+    }
+
+    // converts an already authorized facility into its current exposure response
+    static CreditExposureResponse toExposureResponse(CreditLimit creditLimit) {
         // calculates the remaining available credit
         BigDecimal availableHeadroom = creditLimit.getLimitAmount()
                 .subtract(creditLimit.getUsedAmount())
