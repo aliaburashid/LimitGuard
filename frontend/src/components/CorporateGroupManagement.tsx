@@ -17,6 +17,8 @@ import type {
 } from "../types";
 import { money } from "../utils/format";
 import { CreateRequest, type RequestCompany } from "./CreateRequest";
+import type { RelationshipPortfolio } from "../hooks/useRelationshipPortfolio";
+import { ExposureHeadroomBar, groupHeadroom } from "./ExposureHeadroomBar";
 import { GroupPanel } from "./GroupPanel";
 import { Badge, Empty, ErrorBox, Loading, Modal } from "./ui";
 
@@ -30,12 +32,17 @@ export function CorporateGroupManagement({
   version,
   resolvedFacility,
   findFacility,
+  initialGroup,
+  relationshipPortfolio,
 }: {
   version: number;
   resolvedFacility: Exposure | null;
   findFacility: (company: Counterparty) => void;
+  initialGroup?: { id: number } | null;
+  relationshipPortfolio?: RelationshipPortfolio;
 }) {
   const { user } = useAuth();
+  const hasFacilityDirectory = Boolean(relationshipPortfolio);
   const manage = user?.role === "ADMIN" || user?.role === "RISK_OFFICER";
   const [groups, setGroups] = useState<CorporateGroup[] | null>(null);
   const [companies, setCompanies] = useState<Counterparty[]>([]);
@@ -43,7 +50,12 @@ export function CorporateGroupManagement({
   const [limits, setLimits] = useState<GroupExposure[]>([]);
   const [facilities, setFacilities] = useState<Record<number, Exposure>>({});
   const known = useRef(new Map<number, number>());
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(
+    initialGroup ? String(initialGroup.id) : "",
+  );
+  useEffect(() => {
+    if (initialGroup) setSelectedId(String(initialGroup.id));
+  }, [initialGroup]);
   const [error, setError] = useState("");
   const [facilityError, setFacilityError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -68,7 +80,7 @@ export function CorporateGroupManagement({
     setError("");
     setFacilityError("");
     const history =
-      user?.role === "ADMIN"
+      user?.role === "ADMIN" || hasFacilityDirectory
         ? Promise.resolve([])
         : requestDirectory(user?.role === "RISK_OFFICER", c.signal).catch(
             (e) => {
@@ -147,7 +159,13 @@ export function CorporateGroupManagement({
         if (!c.signal.aborted) setLoading(false);
       });
     return () => c.abort();
-  }, [version, user?.id, user?.role]);
+  }, [version, user?.id, user?.role, hasFacilityDirectory]);
+  const directoryFacilities = new Map(
+    (relationshipPortfolio?.facilities ?? []).map((facility) => [
+      facility.counterpartyId,
+      facility,
+    ]),
+  );
   const selected = groups?.find((g) => g.id === Number(selectedId));
   const shared = limits.find((g) => g.corporateGroupId === selected?.id);
   const rows = members.filter((m) => m.corporateGroupId === selected?.id);
@@ -234,7 +252,14 @@ export function CorporateGroupManagement({
           {selected && (
             <>
               {shared ? (
-                <GroupPanel group={shared} />
+                user?.role === "RELATIONSHIP_MANAGER" ? (
+                  <ExposureHeadroomBar
+                    title={shared.corporateGroupName}
+                    capacity={groupHeadroom(shared)}
+                  />
+                ) : (
+                  <GroupPanel group={shared} />
+                )
               ) : (
                 <p className="notice">
                   Shared limit not configured for {selected.name} at your
@@ -276,7 +301,9 @@ export function CorporateGroupManagement({
                         const company = companies.find(
                           (c) => c.id === m.counterpartyId,
                         );
-                        const facility = facilities[m.counterpartyId];
+                        const facility =
+                          directoryFacilities.get(m.counterpartyId) ??
+                          facilities[m.counterpartyId];
                         return (
                           <tr key={m.id}>
                             <td>
@@ -325,7 +352,6 @@ export function CorporateGroupManagement({
                                       onClick={() =>
                                         setRequesting({
                                           name: company.name,
-                                          creditLimitId: facility.creditLimitId,
                                           counterpartyId: company.id,
                                         })
                                       }
@@ -344,9 +370,10 @@ export function CorporateGroupManagement({
               )}
               <p className="small muted">
                 Group totals include used and reserved exposure across all
-                members at your institution. Facility details use permitted
-                request history and verified lookups; unloaded details are not
-                treated as zero exposure.
+                members at your institution.{" "}
+                {hasFacilityDirectory
+                  ? "Individual balances come from the institution’s facility directory."
+                  : "Facility details use permitted request history and verified lookups."}
               </p>
             </>
           )}
@@ -368,6 +395,7 @@ export function CorporateGroupManagement({
       {requesting && (
         <CreateRequest
           initialCompany={requesting}
+          portfolio={relationshipPortfolio}
           close={() => setRequesting(null)}
           done={(message) => {
             setNotice(message);

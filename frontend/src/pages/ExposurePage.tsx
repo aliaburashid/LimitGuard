@@ -10,21 +10,25 @@ import type { Mutation } from "./MutationDialog";
 export function ExposurePage({
   mutate,
   version,
+  initialFacilityId,
+  initialCompany,
 }: {
   mutate: (a: Mutation) => void;
   version: number;
+  initialFacilityId?: number;
+  initialCompany?: Counterparty | null;
 }) {
   const { user } = useAuth();
   const lookupInput = useRef<HTMLInputElement>(null);
   const lookupController = useRef<AbortController | null>(null);
   const [expectedCompany, setExpectedCompany] = useState<Counterparty | null>(
-    null,
+    initialCompany ?? null,
   );
-  const [id, setId] = useState("");
+  const [id, setId] = useState(initialFacilityId?.toString() ?? "");
   const [data, setData] = useState<Exposure | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  async function load(value: string) {
+  async function load(value: string, company = expectedCompany) {
     lookupController.current?.abort();
     const controller = new AbortController();
     lookupController.current = controller;
@@ -38,7 +42,7 @@ export function ExposurePage({
         undefined,
         controller.signal,
       );
-      if (expectedCompany && result.counterpartyId !== expectedCompany.id)
+      if (company && result.counterpartyId !== company.id)
         throw new Error(
           "This facility belongs to a different company. Enter the selected company’s facility ID.",
         );
@@ -52,13 +56,16 @@ export function ExposurePage({
   useEffect(() => {
     if (id && data) void load(id);
   }, [version]);
-  useEffect(() => () => lookupController.current?.abort(), []);
+  useEffect(() => {
+    if (initialFacilityId) void load(String(initialFacilityId));
+    return () => lookupController.current?.abort();
+  }, [initialFacilityId]);
   return (
     <>
-      <div className="page-heading">
+      <div className="section-head">
         <div>
           <span className="eyebrow">CAPACITY & CONTROL</span>
-          <h1>Credit exposure</h1>
+          <h2>Credit exposure</h2>
           <p>Understand available capacity before committing credit.</p>
         </div>
         {user?.role === "RISK_OFFICER" && (
