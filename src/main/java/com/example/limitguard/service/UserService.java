@@ -241,11 +241,12 @@ public class UserService {
 
 
     // resets a users password using a valid password-reset token
+    @Transactional
     public void resetPassword(ResetPasswordRequest resetPasswordDetails) {
 
         // find the password-reset token
         UserToken passwordResetToken = userTokenRepository
-                .findByToken(resetPasswordDetails.getToken())
+                .findResetTokenForUpdate(resetPasswordDetails.getToken())
                 .orElseThrow(() ->
                         new InvalidTokenException("Password reset token not found"));
 

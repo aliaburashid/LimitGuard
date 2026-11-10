@@ -105,6 +105,12 @@ public class SecurityConfiguration {
                                 "/api/auth/users/verification-code/resend",
                                 "/api/auth/users/verification-code/change-email").permitAll()
 
+                        // password recovery verifies the emailed code before issuing a reset token
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/auth/users/password-reset-code/request",
+                                "/api/auth/users/password-reset-code/resend",
+                                "/api/auth/users/password-reset-code/verify").permitAll()
+
                         // Every other endpoint requires the user to be authenticated
                         .anyRequest().authenticated()
                 )

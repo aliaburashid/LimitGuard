@@ -22,6 +22,12 @@ public class EmailService {
                 "Enter this six-digit code on your LimitGuard registration screen:");
     }
 
+    // sends the code needed before choosing a new password
+    public void SendPasswordResetCodeEmail(String email, String code) {
+        sendEmailCode(email, code, "Your LimitGuard password reset code", "Reset your password",
+                "Enter this six-digit code in LimitGuard to continue to the password reset form:");
+    }
+
     // keeps the shared code email layout in one place
     private void sendEmailCode(String email, String code, String subject, String heading, String explanation) {
         try {
