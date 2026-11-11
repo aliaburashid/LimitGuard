@@ -1,0 +1,19 @@
+
+package com.example.authservice.dto;
+
+import jakarta.validation.constraints.Email;
+import lombok.Getter;
+import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Getter
+@Setter
+public class UpdateProfileRequest {
+
+    private String firstName;
+    private String lastName;
+
+    // the user can update their email, but it must be a valid email address
+    @Email(message = "Email must be valid")
+    private String email;
+}
