@@ -1,5 +1,6 @@
 package com.example.authservice.service;
 
+import com.example.authservice.dto.UserAuthorizationResponse;
 import com.example.authservice.dto.*;
 import com.example.authservice.exception.*;
 import com.example.authservice.model.AuthAuditLog;
@@ -370,6 +371,24 @@ public class UserService {
         );
     }
 
+
+
+    // Returns the authenticated user's current authorization information
+    public UserAuthorizationResponse getCurrentUserAuthorization() {
+
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getName();
+
+        User user = findUserByEmail(email);
+
+        return new UserAuthorizationResponse(
+                user.getId(),
+                user.getRole(),
+                user.getStatus(),
+                user.getFinancialInstitution().getId()
+        );
+    }
 
     @Value("${limitguard.profile-pictures.directory:}")
     private String profilePictureDirectory;
