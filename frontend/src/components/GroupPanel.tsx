@@ -1,4 +1,4 @@
-import { CompanyLogo } from "./CompanyLogo";
+import { CorporateGroupLogo } from "./CompanyLogo";
 import type { GroupExposure } from "../types";
 import { money } from "../utils/format";
 import { ExposureTrack, committedSegments } from "./ExposureTrack";
@@ -13,7 +13,7 @@ export function GroupPanel({ group }: { group: GroupExposure }) {
         <div>
           <span className="eyebrow">CORPORATE GROUP</span>
           <h3 className="company-brand">
-            <CompanyLogo name={group.corporateGroupName} />
+            <CorporateGroupLogo name={group.corporateGroupName} />
             <span>{group.corporateGroupName}</span>
           </h3>
         </div>

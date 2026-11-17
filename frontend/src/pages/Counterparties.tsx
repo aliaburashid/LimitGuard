@@ -1,3 +1,4 @@
+import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
 import { CompanyLogo } from "../components/CompanyLogo";
 import { ArrowUpRight, Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -175,7 +176,10 @@ export function Counterparties({
                             className="table-link company-brand"
                             onClick={() => setDetail(c)}
                           >
-                            <CompanyLogo name={c.name} />
+                            <CompanyLogo
+                              name={c.name}
+                              domain={counterpartyLogoDomain(c.name)}
+                            />
                             <span>{c.name}</span>
                           </button>
                         </td>
@@ -214,7 +218,11 @@ export function Counterparties({
         <Modal
           title={
             <span className="company-brand">
-              <CompanyLogo name={detail.name} large />
+              <CompanyLogo
+                name={detail.name}
+                domain={counterpartyLogoDomain(detail.name)}
+                large
+              />
               <span>{detail.name}</span>
             </span>
           }

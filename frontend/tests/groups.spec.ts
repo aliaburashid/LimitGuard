@@ -473,7 +473,7 @@ test("Risk Officer sees every member's individual capacity and backend rejects a
   await context.close();
 });
 
-test("Admin resolves a facility in the UI without requesting forbidden RO history", async ({
+test("Admin sees directory capacity and can verify facilities without requesting RO history", async ({
   browser,
 }) => {
   const server = groupServer();
@@ -481,7 +481,7 @@ test("Admin resolves a facility in the UI without requesting forbidden RO histor
   const row = page
     .getByRole("row")
     .filter({ hasText: "Falcon Freight Services" });
-  await expect(row).toContainText("Individual facility details are not loaded");
+  await expect(row).toContainText("BD 700,000");
   await page
     .getByRole("button", { name: "Find facility for Falcon Freight Services" })
     .click();

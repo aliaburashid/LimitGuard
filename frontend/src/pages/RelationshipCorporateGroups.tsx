@@ -1,4 +1,5 @@
-import { CompanyLogo } from "../components/CompanyLogo";
+import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
+import { CompanyLogo, CorporateGroupLogo } from "../components/CompanyLogo";
 import { ArrowLeft, ArrowUpRight, Plus, Search } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { api } from "../api/client";
@@ -140,7 +141,7 @@ export default function RelationshipCorporateGroups({
                 tabIndex={-1}
                 className="company-brand"
               >
-                <CompanyLogo name={selected.corporateGroupName} />
+                <CorporateGroupLogo name={selected.corporateGroupName} />
                 <span>{selected.corporateGroupName}</span>
               </h2>
             </div>
@@ -183,7 +184,10 @@ export default function RelationshipCorporateGroups({
                     <div className="section-head">
                       <div>
                         <h3 className="company-brand">
-                          <CompanyLogo name={name} />
+                          <CompanyLogo
+                            name={name}
+                            domain={counterpartyLogoDomain(name)}
+                          />
                           <span>{name}</span>
                         </h3>
                       </div>
@@ -351,7 +355,9 @@ export default function RelationshipCorporateGroups({
               <article className="rm-group-card" key={id}>
                 <ExposureHeadroomBar
                   title={group.corporateGroupName}
-                  headingIcon={<CompanyLogo name={group.corporateGroupName} />}
+                  headingIcon={
+                    <CorporateGroupLogo name={group.corporateGroupName} />
+                  }
                   description={memberCount}
                   approvedLabel="Shared approved credit limit"
                   capacity={

@@ -1,10 +1,18 @@
 # Company branding
 
-LimitGuard currently shows initials for counterparties, corporate groups, and financial institutions. The previous presentation assets and manifest are archived locally in `frontend/.local-branding/`. Git ignores this folder and the frontend build does not include it.
+LimitGuard can show Brandfetch logos for the revised Citi demo portfolio. Other company and institution badges use initials. The previous presentation assets and manifest are archived locally in `frontend/.local-branding/`. Git ignores this folder and the frontend build does not include it.
+
+## Brandfetch configuration
+
+Set `VITE_BRANDFETCH_CLIENT_ID` in the ignored `frontend/.env.local` file, then restart Vite or rebuild the frontend. Use the public Logo API client ID from the [Brandfetch developer dashboard](https://developers.brandfetch.com/). Each image loads directly from Brandfetch. Missing configuration, unmatched records, and failed images use the initials badge.
+
+The sidebar maps [Citi](https://www.citi.com/) for the existing demo institution. The counterparty directory and detail badges use the [reviewed exact-name mappings](src/config/verifiedLogoDomains.ts), covering all 59 companies in the revised Citi seed catalog. Seed runs can assign different IDs. [AWS](https://aws.amazon.com/) and [Amazon.com Services LLC](https://ship.amazon.com/site-terms) use their respective operating domains. [Microsoft Ireland Operations Limited](https://www.microsoft.com/en-ie/store/b/imprint) is identified on Microsoft's Irish storefront.
+
+Earlier demo databases may still contain legacy names that use initials. The revised fixtures use real company identities with fictional borrowing scenarios and synthetic financial data. Review each brand’s usage terms before enabling its mark in a public deployment.
 
 ## Local presentation asset sources
 
-The inventory below uses the checked-in Citi presentation fixture. The current frontend displays initials for every record. Logos identify the named entity and do not indicate affiliation or endorsement.
+The inventory below uses the checked-in Citi presentation fixture. Logos identify the named entity and do not indicate affiliation or endorsement.
 
 The source pages document the copyright classification of the archived assets. Trademark rights still apply.
 
@@ -23,7 +31,7 @@ The source pages document the copyright classification of the archived assets. T
 
 ## Initials fallbacks
 
-The official Citi mark uses a fallback because permission for this use could not be verified. The sidebar reads the signed-in institution name from the profile. [Citi website terms](https://www.citigroup.com/global/terms)
+The sidebar uses the signed-in institution identity from the profile. The Citi website terms remain a separate consideration for public use. [Citi website terms](https://www.citigroup.com/global/terms)
 
 ### Brand permissions checked
 
@@ -39,7 +47,7 @@ The official Citi mark uses a fallback because permission for this use could not
 - PepsiCo
 - Gulf Investment Group (Citi Demo)
 
-### Individual counterparties
+### Historical list of individual counterparties in the initials-only release
 
 - Google LLC
 - XXVI Holdings Inc.

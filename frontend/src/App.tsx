@@ -1,3 +1,4 @@
+import { institutionLogoDomain } from "./config/verifiedLogoDomains";
 import { CompanyLogo } from "./components/CompanyLogo";
 import { readWorkspaceState, saveWorkspaceState } from "./utils/workspaceState";
 import { Avatar } from "./components/Avatar";
@@ -396,7 +397,10 @@ function WorkspaceApp() {
         </nav>
         <div className="sidebar-bottom">
           <div className="control-card institution-identity">
-            <CompanyLogo name={user.financialInstitution.name} />
+            <CompanyLogo
+              name={user.financialInstitution.name}
+              domain={institutionLogoDomain(user.financialInstitution)}
+            />
             <div>
               <strong>{user.financialInstitution.name}</strong>
               <small>Financial institution</small>
