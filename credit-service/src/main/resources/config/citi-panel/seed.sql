@@ -60,8 +60,8 @@ WHERE s.approved IS NOT NULL ORDER BY c.id;
 
 CREATE TEMP TABLE seeded_facilities AS
 SELECT f.id, s.*, CASE
-    WHEN s.name = 'Falcon Freight Services (Citi Demo)' THEN 15
-    WHEN s.name = 'Bahrain Gateway Warehousing (Citi Demo)' THEN 58
+    WHEN s.name = 'Hyundai Motor Company' THEN 15
+    WHEN s.name = 'Kia Corporation' THEN 58
     WHEN row_number() OVER (ORDER BY s.name) % 2 = 0 THEN 15 ELSE 58
 END AS owner_id
 FROM seed_companies s JOIN public.counterparties c USING (name)
@@ -78,11 +78,11 @@ WITH tranches AS (
     SELECT f.id, f.owner_id, 'RESERVED', n,
            least(500000, f.reserved - 500000 * (n - 1)), NULL
     FROM seeded_facilities f CROSS JOIN LATERAL generate_series(1, ceil(f.reserved / 500000)::int) n
-    WHERE f.name <> 'Gulf Meridian Logistics W.L.L. (Citi Demo)'
+    WHERE f.name <> 'Hyundai Mobis Co., Ltd.'
     UNION ALL
     SELECT f.id, parts.owner_id, 'RESERVED', parts.part, parts.amount, NULL
     FROM seeded_facilities f CROSS JOIN (VALUES (15,1,450000),(58,2,225000)) parts(owner_id,part,amount)
-    WHERE f.name = 'Gulf Meridian Logistics W.L.L. (Citi Demo)'
+    WHERE f.name = 'Hyundai Mobis Co., Ltd.'
 ), timing AS (
     -- Synthetic used tranches start in the evening and settle before the 24-hour expiry.
     SELECT tranches.*, coalesce((reporting_date - days_before_seed) + TIME '19:00', local_time) AS opened_at
@@ -161,14 +161,14 @@ WITH headroom AS (
     FROM seed_groups g JOIN seeded_facilities f ON f.group_name=g.name GROUP BY g.name, g.approved
 )
 SELECT pg_temp.require(count(*) = 8 AND min(available) >= 0
-    AND max(available) FILTER (WHERE name = 'Gulf Investment Group (Citi Demo)') = 800000,
+    AND max(available) FILTER (WHERE name = 'Hyundai Motor Group') = 800000,
     'Shared group balances or the BD 800,000 race headroom did not reconcile.')
 FROM headroom;
 
 SELECT pg_temp.require((SELECT count(*) = 2 FROM seeded_facilities
     WHERE (name, owner_id, approved - used - reserved) IN (
-        ('Falcon Freight Services (Citi Demo)',15,700000),
-        ('Bahrain Gateway Warehousing (Citi Demo)',58,775000))),
+        ('Hyundai Motor Company',15,700000),
+        ('Kia Corporation',58,775000))),
     'The two approved RM race facility setups do not match.');
 
 SELECT pg_temp.require(NOT EXISTS (
