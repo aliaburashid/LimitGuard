@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from math import isfinite
 from pathlib import Path
 from typing import Literal
 import pickle
@@ -6,7 +7,10 @@ import joblib
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 
@@ -95,6 +99,16 @@ app = FastAPI(
     title="LimitGuard ML Risk Service",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, error: RequestValidationError):
+    # Validation details can include the rejected value. JSON cannot represent NaN or infinity.
+    details = jsonable_encoder(
+        error.errors(),
+        custom_encoder={float: lambda value: value if isfinite(value) else None},
+    )
+    return JSONResponse(status_code=422, content={"detail": details})
 
 
 # convert one financial ratio into its trained scoring value
