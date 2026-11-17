@@ -1,0 +1,493 @@
+package com.example.authservice.service;
+
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Async;
+
+// Handles emails sent by LimitGuard
+@Service
+public class EmailService {
+
+    // gives this service access to Springs email sender
+    @Autowired
+    private JavaMailSender mailSender;
+
+    // sends a code that the user enters on the registration screen
+    public void SendVerificationCodeEmail(String email, String code) {
+        sendEmailCode(email, code, "Your LimitGuard verification code", "Verify your work email",
+                "Enter this six-digit code on your LimitGuard registration screen:");
+    }
+
+    // sends the code needed before choosing a new password
+    public void SendPasswordResetCodeEmail(String email, String code) {
+        sendEmailCode(email, code, "Your LimitGuard password reset code", "Reset your password",
+                "Enter this six-digit code in LimitGuard to continue to the password reset form:");
+    }
+
+    // keeps the shared code email layout in one place
+    private void sendEmailCode(String email, String code, String subject, String heading, String explanation) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(email);
+            helper.setSubject(subject);
+            helper.setText("""
+                    <html><body style="font-family:Arial,sans-serif;background:#f4f6f8;padding:32px;color:#162236">
+                    <div style="max-width:520px;margin:auto;background:white;padding:36px;border-radius:12px">
+                    <h1>LimitGuard</h1><h2>%s</h2>
+                    <p>%s</p>
+                    <p style="font-size:36px;font-weight:bold;letter-spacing:10px;padding:20px;background:#f4f6f8">%s</p>
+                    <p>This code expires in 10 minutes and can only be used once.</p>
+                    <p>Never share this code. If you did not request it, you can ignore this email.</p>
+                    </div></body></html>
+                    """.formatted(heading, explanation, code), true);
+            mailSender.send(message);
+        } catch (MessagingException exception) {
+            throw new RuntimeException("Unable to create code email", exception);
+        }
+    }
+
+    public void SendVerificationEmail(String email, String token) {
+
+        // Create the verification link using the user's token
+        String verificationLink = "http://localhost:8080/api/auth/users/verify-email?token=" + token;
+
+        try {
+
+            // Create the email
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            // set who will receive the email
+            helper.setTo(email);
+
+            // set the email subject
+            helper.setSubject("Verify your LimitGuard account");
+
+            // set the email message
+            String emailMessage = """
+                    <html>
+                    <body style="margin: 0; padding: 0; background-color: #f4f6f8;
+                                 font-family: Arial, sans-serif;">
+
+                        <div style="max-width: 600px; margin: 40px auto;
+                                    background-color: white; padding: 40px;
+                                    border-radius: 10px;">
+
+                            <h1 style="color: #1f2937;">
+                                LimitGuard
+                            </h1>
+
+                            <h2 style="color: #1f2937;">
+                                Verify your email
+                            </h2>
+
+                            <p style="color: #4b5563;">
+                                Hi %s,
+                            </p>
+
+                            <p style="color: #4b5563; line-height: 1.6;">
+                                Thanks for registering to our LimitGuard App.
+                                Please verify your email by clicking the button below:
+                            </p>
+
+                            <div style="margin: 30px 0;">
+                                <a href="%s"
+                                   style="background-color: #1f2937;
+                                          color: white;
+                                          padding: 14px 24px;
+                                          text-decoration: none;
+                                          border-radius: 6px;
+                                          display: inline-block;">
+                                    Verify Email
+                                </a>
+                            </div>
+
+                            <p style="color: #6b7280; font-size: 14px;">
+                                This verification link expires in 24 hours.
+                            </p>
+
+                            <hr style="border: none;
+                                       border-top: 1px solid #e5e7eb;
+                                       margin: 30px 0;">
+
+                            <p style="color: #9ca3af; font-size: 12px;">
+                                LimitGuard - Credit Limit & Exposure Management
+                            </p>
+
+                        </div>
+
+                    </body>
+                    </html>
+                    """.formatted(email, verificationLink);
+
+            // true means the email message contains HTML
+            helper.setText(emailMessage, true);
+
+            // send the email
+            mailSender.send(message);
+
+        } catch (MessagingException exception) {
+            throw new RuntimeException("Unable to create verification email");
+        }
+    }
+
+
+    // Sends the password-reset link to the users email
+    public void SendPasswordResetEmail(String email, String token) {
+
+        try {
+
+            // create a new email
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper =  new MimeMessageHelper(message, true);
+
+            // set who receives the email
+            helper.setTo(email);
+
+            // set the email subject
+            helper.setSubject("Reset your LimitGuard password");
+
+            // set the email message
+            String emailMessage = """
+                <html>
+                <body style="margin: 0; padding: 0; background-color: #f4f6f8;
+                             font-family: Arial, sans-serif;">
+
+                    <div style="max-width: 600px; margin: 40px auto;
+                                background-color: white; padding: 40px;
+                                border-radius: 10px;">
+
+                        <h1 style="color: #1f2937;">
+                            LimitGuard
+                        </h1>
+
+                        <h2 style="color: #1f2937;">
+                            Reset your password
+                        </h2>
+
+                        <p style="color: #4b5563;">
+                            Hi %s,
+                        </p>
+
+                        <p style="color: #4b5563; line-height: 1.6;">
+                            We received a request to reset your
+                            LimitGuard password.
+                            Use the password-reset token below to
+                            set a new password:
+                        </p>
+
+                        <div style="margin: 30px 0;
+                                    background-color: #f4f6f8;
+                                    padding: 16px;
+                                    border-radius: 6px;
+                                    word-break: break-all;">
+
+                            <strong style="color: #1f2937;">
+                                %s
+                            </strong>
+
+                        </div>
+
+                        <p style="color: #6b7280; font-size: 14px;">
+                            This password-reset token expires in 1 hour.
+                        </p>
+
+                        <p style="color: #6b7280; font-size: 14px;">
+                            If you did not request a password reset,
+                            you can safely ignore this email.
+                        </p>
+
+                        <hr style="border: none;
+                                   border-top: 1px solid #e5e7eb;
+                                   margin: 30px 0;">
+
+                        <p style="color: #9ca3af; font-size: 12px;">
+                            LimitGuard - Credit Limit & Exposure Management
+                        </p>
+
+                    </div>
+
+                </body>
+                </html>
+                """.formatted(email, token);
+
+            // add the HTML content to the email
+            // true means the email message contains HTML
+            helper.setText(emailMessage, true);
+
+            // send the email
+            mailSender.send(message);
+
+        } catch (MessagingException exception) {
+            throw new RuntimeException("Unable to send password reset email");
+        }
+    }
+
+
+    // Sends an email when a credit request is approved
+    @Async("notificationExecutor")
+    public void SendCreditRequestApprovedEmail(String email, Long creditRequestId) {
+
+        // Shows which background thread is sending this approval email
+        System.out.println(
+                "APPROVAL EMAIL | Thread: " + Thread.currentThread().getName()
+                        + " | Request ID: " + creditRequestId
+        );
+
+        try {
+            // create a new email
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper =
+                    new MimeMessageHelper(message, true, "UTF-8");
+
+            // set who receives the email
+            helper.setTo(email);
+
+            // set the email subject
+            helper.setSubject("Your LimitGuard credit request was approved");
+
+            // set the email message
+
+            String emailMessage = """
+                <html>
+                <body style="margin: 0; padding: 0; background-color: #f4f6f8;
+                             font-family: Arial, sans-serif;">
+            
+                    <div style="max-width: 600px; margin: 40px auto;
+                                background-color: white; padding: 40px;
+                                border-radius: 10px;">
+            
+                        <h1 style="color: #1f2937;">
+                            LimitGuard
+                        </h1>
+            
+                        <hr style="border: none; border-top: 1px solid #e5e7eb;
+                                   margin: 24px 0;">
+            
+                        <p style="color: #15803d; font-weight: bold;">
+                            &#10003; Request approved
+                        </p>
+            
+                        <h2 style="color: #1f2937;">
+                            Credit request approved
+                        </h2>
+            
+                        <p style="color: #4b5563; line-height: 1.6;">
+                            Your credit request <strong>#%s</strong> has been
+                            approved by a Risk Officer.
+                        </p>
+            
+                        <div style="background-color: #f0fdf4; padding: 20px;
+                                    border-radius: 6px; margin: 24px 0;">
+            
+                            <p style="color: #166534; font-weight: bold; margin-top: 0;">
+                                Credit capacity reserved
+                            </p>
+            
+                            <p style="color: #166534; line-height: 1.6; margin-bottom: 0;">
+                                The requested credit capacity has now been reserved.
+                            </p>
+                        </div>
+            
+                        <hr style="border: none; border-top: 1px solid #e5e7eb;
+                                   margin: 30px 0;">
+            
+                        <p style="color: #9ca3af; font-size: 12px;">
+                            LimitGuard - Credit Limit &amp; Exposure Management
+                        </p>
+            
+                    </div>
+                </body>
+                </html>
+                """.formatted(creditRequestId);
+
+
+            // true means the email message contains HTML
+            helper.setText(emailMessage, true);
+
+            // send the email
+            mailSender.send(message);
+
+        } catch (MessagingException exception) {
+            throw new RuntimeException(
+                    "Unable to send credit request approval email"
+            );
+        }
+    }
+
+
+    // Sends an email when a credit request is rejected
+    @Async("notificationExecutor")
+    public void SendCreditRequestRejectedEmail(String email, Long creditRequestId, String reason) {
+
+        // Shows which background thread is sending this rejection email.
+        System.out.println(
+                "REJECTION EMAIL | Thread: " + Thread.currentThread().getName()
+                        + " | Request ID: " + creditRequestId
+        );
+
+        try {
+
+            // create a new email
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper =
+                    new MimeMessageHelper(message, true, "UTF-8");
+
+            // set who receives the email
+            helper.setTo(email);
+
+            // set the email subject
+            helper.setSubject("Your LimitGuard credit request was rejected");
+
+            // set the email message
+
+            String emailMessage = """
+                <html>
+                <body style="margin: 0; padding: 0; background-color: #f4f6f8;
+                             font-family: Arial, sans-serif;">
+            
+                    <div style="max-width: 600px; margin: 40px auto;
+                                background-color: white; padding: 40px;
+                                border-radius: 10px;">
+            
+                        <h1 style="color: #1f2937;">
+                            LimitGuard
+                        </h1>
+            
+                        <hr style="border: none; border-top: 1px solid #e5e7eb;
+                                   margin: 24px 0;">
+            
+                        <p style="color: #b91c1c; font-weight: bold;">
+                            &#10005; Request rejected
+                        </p>
+            
+                        <h2 style="color: #1f2937;">
+                            Credit request rejected
+                        </h2>
+            
+                        <p style="color: #4b5563; line-height: 1.6;">
+                            Your credit request <strong>#%s</strong> has been
+                            rejected by a Risk Officer.
+                        </p>
+            
+                        <div style="background-color: #fef2f2; padding: 20px;
+                                    border-radius: 6px; margin: 24px 0;">
+            
+                            <p style="color: #991b1b; font-weight: bold; margin-top: 0;">
+                                Reason for rejection
+                            </p>
+            
+                            <p style="color: #991b1b; line-height: 1.6; margin-bottom: 0;">
+                                %s
+                            </p>
+                        </div>
+            
+                        <hr style="border: none; border-top: 1px solid #e5e7eb;
+                                   margin: 30px 0;">
+            
+                        <p style="color: #9ca3af; font-size: 12px;">
+                            LimitGuard - Credit Limit &amp; Exposure Management
+                        </p>
+            
+                    </div>
+                </body>
+                </html>
+                """.formatted(creditRequestId, reason);
+
+            // true means the email message contains HTML
+            helper.setText(emailMessage, true);
+
+            // send the email
+            mailSender.send(message);
+
+        } catch (MessagingException exception) {
+            throw new RuntimeException(
+                    "Unable to send credit request rejection email"
+            );
+        }
+    }
+
+    // Sends an email when a reserved credit request expires
+    // @Async runs the email task on a background thread
+    // so the expiry scheduler does not wait for the email to be sent
+    @Async("notificationExecutor")
+    public void SendCreditRequestExpiredEmail(String email, Long creditRequestId) {
+
+        // Shows which background thread is sending the expiry email
+        System.out.println(
+                "EXPIRY EMAIL | Thread: " + Thread.currentThread().getName()
+                        + " | Request ID: " + creditRequestId
+        );
+
+        try {
+
+            // create a new email
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper =
+                    new MimeMessageHelper(message, true, "UTF-8");
+
+            // set who receives the email
+            helper.setTo(email);
+
+            // set the email subject
+            helper.setSubject("Your LimitGuard credit reservation has expired");
+
+            // set the email message
+            String emailMessage = """
+            <html>
+            <body style="margin: 0; padding: 0; background-color: #f4f6f8;
+                         font-family: Arial, sans-serif;">
+
+                <div style="max-width: 600px; margin: 40px auto;
+                            background-color: white; padding: 40px;
+                            border-radius: 10px;">
+
+                    <h1 style="color: #1f2937;">
+                        LimitGuard
+                    </h1>
+
+                    <h2 style="color: #1f2937;">
+                        Credit reservation expired
+                    </h2>
+
+                    <p style="color: #4b5563; line-height: 1.6;">
+                        The reserved credit capacity for your credit request #%s
+                        has expired.
+                    </p>
+
+                    <p style="color: #4b5563; line-height: 1.6;">
+                        The capacity is no longer reserved for this request.
+                    </p>
+
+                    <hr style="border: none;
+                               border-top: 1px solid #e5e7eb;
+                               margin: 30px 0;">
+
+                    <p style="color: #9ca3af; font-size: 12px;">
+                        LimitGuard - Credit Limit & Exposure Management
+                    </p>
+
+                </div>
+
+            </body>
+            </html>
+            """.formatted(creditRequestId);
+
+            // true means the email message contains HTML
+            helper.setText(emailMessage, true);
+
+            // send the email
+            mailSender.send(message);
+
+        } catch (MessagingException exception) {
+            throw new RuntimeException(
+                    "Unable to send credit request expiry email"
+            );
+        }
+    }
+}

@@ -35,7 +35,7 @@ public class AuditLog {
     private Long entityId;
 
     // extra information about what happened
-    @Column
+    @Column(columnDefinition = "text")
     private String details;
 
     // the user who performed the action
