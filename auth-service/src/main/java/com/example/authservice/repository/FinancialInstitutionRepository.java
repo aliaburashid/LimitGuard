@@ -3,7 +3,9 @@ package com.example.authservice.repository;
 import com.example.authservice.model.FinancialInstitution;
 import com.example.authservice.enums.FinancialInstitutionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
+import java.util.Collection;
 import java.util.List;
 
 // Allows us to access and manage financial institutions in the database
@@ -14,4 +16,7 @@ public interface FinancialInstitutionRepository extends JpaRepository<FinancialI
 
     // checks if a financial institution with this name already exists
     boolean existsByName(String name);
+
+    @Query("select institution from FinancialInstitution institution where lower(trim(institution.name)) in :names")
+    List<FinancialInstitution> findByNormalizedNames(Collection<String> names);
 }
