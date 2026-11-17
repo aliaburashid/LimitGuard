@@ -1,0 +1,22 @@
+package com.example.creditservice.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.time.LocalDateTime;
+
+@AllArgsConstructor
+@Getter
+@Setter
+public class AuditLogResponse {
+    private Long id;
+    private String action;
+    private String entityType;
+    private Long entityId;
+    private String details;
+    private Long actorId;
+    private String actorName;
+    private LocalDateTime createdAt;
+}
