@@ -1,0 +1,82 @@
+package com.example.creditservice.service;
+
+import com.example.creditservice.exception.GroupCreditLimitNotFoundException;
+import com.example.creditservice.model.*;
+import com.example.creditservice.repository.CorporateGroupMembershipRepository;
+import com.example.creditservice.repository.CreditLimitRepository;
+import com.example.creditservice.repository.GroupCreditLimitRepository;
+import com.example.creditservice.security.InstitutionAccessService;
+import com.example.creditservice.security.CatalogAccessService;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class GroupExposureBreakdownTest {
+
+    @Mock InstitutionAccessService institutionAccess;
+    @Mock GroupCreditLimitRepository groupLimits;
+    @Mock CatalogAccessService catalogAccess;
+    @Mock CorporateGroupMembershipRepository memberships;
+    @Mock CreditLimitRepository creditLimits;
+    @InjectMocks GroupCreditLimitService service;
+
+    @Test
+    void separatesSharedLimitFromMemberFacilitiesInTheCurrentInstitution() {
+        when(institutionAccess.getCurrentInstitutionId()).thenReturn(3L);
+        GroupCreditLimit shared = new GroupCreditLimit();
+        shared.setAmount(new BigDecimal("1000"));
+        when(groupLimits.findByFinancialInstitutionIdAndCorporateGroupId(3L, 4L)).thenReturn(Optional.of(shared));
+
+        Counterparty first = new Counterparty();
+        first.setId(10L);
+        Counterparty second = new Counterparty();
+        second.setId(11L);
+        CorporateGroupMembership firstMember = new CorporateGroupMembership();
+        firstMember.setCounterparty(first);
+        CorporateGroupMembership secondMember = new CorporateGroupMembership();
+        secondMember.setCounterparty(second);
+        when(memberships.findByCorporateGroupId(4L)).thenReturn(List.of(firstMember, secondMember));
+        when(creditLimits.findByFinancialInstitutionIdAndCounterpartyIdIn(3L, List.of(10L, 11L)))
+                .thenReturn(List.of(
+                        facility(50L, first, "800", "150", "75"),
+                        facility(51L, second, "900", "225", "125")
+                ));
+
+        var exposure = service.getGroupExposureBreakdown(4L);
+        assertEquals(new BigDecimal("1000"), exposure.getLimitAmount());
+        assertEquals(new BigDecimal("375"), exposure.getUsedAmount());
+        assertEquals(new BigDecimal("200"), exposure.getReservedAmount());
+        assertEquals(new BigDecimal("425"), exposure.getAvailableHeadroom());
+        assertEquals(List.of(50L, 51L), exposure.getFacilities().stream().map(facility -> facility.getCreditLimitId()).toList());
+        assertEquals(new BigDecimal("575"), exposure.getFacilities().get(0).getAvailableHeadroom());
+    }
+
+    @Test
+    void doesNotReadFacilitiesWhenTheInstitutionHasNoSharedLimit() {
+        when(institutionAccess.getCurrentInstitutionId()).thenReturn(8L);
+        when(groupLimits.findByFinancialInstitutionIdAndCorporateGroupId(8L, 4L)).thenReturn(Optional.empty());
+
+        assertThrows(GroupCreditLimitNotFoundException.class, () -> service.getGroupExposureBreakdown(4L));
+        verifyNoInteractions(catalogAccess, memberships, creditLimits);
+    }
+
+    private CreditLimit facility(Long id, Counterparty company, String limit, String used, String reserved) {
+        CreditLimit facility = new CreditLimit();
+        facility.setId(id);
+        facility.setCounterparty(company);
+        facility.setLimitAmount(new BigDecimal(limit));
+        facility.setUsedAmount(new BigDecimal(used));
+        facility.setReservedAmount(new BigDecimal(reserved));
+        return facility;
+    }
+}
