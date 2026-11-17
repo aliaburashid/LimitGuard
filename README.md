@@ -6,7 +6,22 @@
 
 LimitGuard was built as a Java/Spring Boot software engineering project. It is designed to make an unfamiliar banking process understandable through clear business rules, secure APIs, and an interactive dashboard.
 
-> **Project scope:** LimitGuard is an educational, fictional simulation inspired by common banking risk-and-control concepts. It is not affiliated with any institution's internal credit policies. All demo banks, companies, users, and transactions are fictional.
+> **Project scope:** LimitGuard is an educational, fictional simulation inspired by common banking risk-and-control concepts. It is not affiliated with any institution's internal credit policies. Demo users, transactions, and financial data are synthetic. Some demo institution names are real.
+
+## Initialize a fresh PostgreSQL database
+
+Run from the repository root with a PostgreSQL role that can create a database. Use your normal PostgreSQL authentication setup.
+
+```sh
+export DB_USERNAME='your_local_database_role'
+export LIMITGUARD_NEW_DB='limitguard_fresh'
+
+createdb --host=127.0.0.1 --port=5432 --username="$DB_USERNAME" "$LIMITGUARD_NEW_DB" &&
+  psql -X --host=127.0.0.1 --port=5432 --username="$DB_USERNAME" \
+    --dbname="$LIMITGUARD_NEW_DB" --set=ON_ERROR_STOP=1 --file=database/schema.sql
+```
+
+After initialization succeeds, set `DB_URL` to `jdbc:postgresql://127.0.0.1:5432/limitguard_fresh` for Auth, Credit, and Activity. Supply `DB_USERNAME` and `DB_PASSWORD` through the service environment as required. The [shared PostgreSQL bootstrap guide](docs/DATABASE_BOOTSTRAP.md) lists the service startup commands and schema checks. All three services keep Hibernate in `validate` mode.
 
 ## The idea, in plain English
 
@@ -99,40 +114,33 @@ The current demonstration rule uses a value threshold to route larger requests f
 | API documentation | Springdoc OpenAPI / Swagger UI |
 | Testing | JUnit, Spring test tooling, Vitest, Playwright |
 | Developer tools | IntelliJ IDEA, pgAdmin, Postman, Git, GitHub, Jira |
-| Notifications | Spring Mail / SMTP, Server-Sent Events |
+| Notifications | PostgreSQL outbox, Kafka, Server-Sent Events, optional Spring Mail / SMTP |
 | Risk analytics | Python FastAPI inference integration, Java parallel assessment service |
 | Concurrency | Spring transactions, JPA pessimistic database locks, configured executors |
 
 ## Architecture
 
-LimitGuard follows a **layered architecture**, separating responsibilities so that the code is easier to understand, test, and maintain.
+The React client talks to the API Gateway. Auth, Credit, and Activity share one PostgreSQL database and the `public` schema.
 
 ```text
-React frontend / Postman / Swagger UI
-                 |
-             REST API
-                 |
-          Controllers + DTOs
-                 |
-        Services (business rules)
-                 |
-        Repositories (Spring Data JPA)
-                 |
-            PostgreSQL
+React / Vite → API Gateway
+                ├─ Auth → PostgreSQL
+                ├─ Credit → PostgreSQL + Python ML
+                └─ Activity → SSE stream back to React
 
-Cross-cutting: Spring Security, validation, exception handling,
-audit logging, email notifications, and SSE events.
+Credit transaction → PostgreSQL notification outbox → Kafka → Activity
+                                                               ├─ SSE
+                                                               └─ Optional email queue → SMTP
 ```
 
-- **Controllers** receive HTTP requests and return API responses.
-- **DTOs** define what data enters or leaves the API.
-- **Services** apply business rules, such as checking headroom or blocking frozen counterparties.
-- **Repositories** read and write database records.
-- **Entities** represent the persisted banking data.
+- **Auth** handles accounts, JWTs, SSO, institution data, and profile pictures.
+- **Credit** owns banking workflows, limits, exposure, and parallel ML assessments. It checks the caller's authorization with Auth. The Python service performs experimental inference through `POST /predict`.
+- **Activity** checks subscriptions with Auth, consumes Kafka notifications, and delivers institution-scoped SSE. Its email consumer and delivery worker are separately configurable and disabled by default.
+- **PostgreSQL** stores banking records, the notification outbox, and email delivery records. Auth and Credit save audit records directly to the shared `audit_logs` table. Kafka carries notifications.
 
 ### Entity relationship diagram (ERD)
 
-The current JPA model contains **12 entities**: FinancialInstitution, User, Counterparty, CreditLimit, CreditRequest, ApprovalDecision, AuditLog, UserToken, CorporateGroup, CorporateGroupMembership, GroupCreditLimit, and CounterpartyFinancialProfile. The linked diagram below may need updating to reflect the new Unit 3 entities.
+The original diagram is a historical reference. See the [current schema inventory](docs/DATABASE_BOOTSTRAP.md#schema-inventory) for the shared database layout.
 
 **[View the LimitGuard ERD on dbdiagram.io](https://dbdiagram.io/d/6abcbefa0f25a52d014bf6d3)**
 
@@ -148,81 +156,90 @@ Authorization is checked in the backend. Hiding a button in the frontend is **no
 
 ## Running the project locally
 
-### Prerequisites
+### 1. Prepare dependencies and service configuration
 
-- JDK 17
-- PostgreSQL
-- Node.js and npm
-- Maven Wrapper (included in the repository)
-- A local PostgreSQL database named `limitguard`, or an equivalent configured database
+Install JDK 17, PostgreSQL, Kafka, Node.js with npm, and Python with virtual-environment support. Each Java module includes a Maven wrapper. Use a local PostgreSQL database initialized with the [fresh-database procedure above](#initialize-a-fresh-postgresql-database), or an existing initialized development database. A fresh schema contains no accounts or demo data.
 
-### 1. Configure development environment variables
+Start PostgreSQL and Kafka first. For a schema-only smoke test, follow the bootstrap guide instead of starting the normal notification and scheduling processes. Credit and Activity use `KAFKA_BOOTSTRAP_SERVERS` (default `localhost:9092`). On a fresh local broker, create `credit-request-events` once using the Kafka CLI:
 
-The development profile reads database and email credentials from environment variables. Set these in your IntelliJ Run Configuration or your local shell; **never commit real secrets**.
-
-| Variable | Purpose |
-| --- | --- |
-| `DB_URL` | JDBC PostgreSQL URL; defaults to `jdbc:postgresql://localhost:5432/limitguard` |
-| `DB_USERNAME` | PostgreSQL username; defaults to `postgres` |
-| `DB_PASSWORD` | PostgreSQL password |
-| `GMAIL_USERNAME` | Sender email address for SMTP |
-| `GMAIL_APP_PASSWORD` | Gmail app password for SMTP authentication |
-| `LIMITGUARD_DEMO_PASSWORD` | Password for fictional demo accounts created by the development seeder |
-
-Also inspect `src/main/resources/application-dev.properties` and the project's security configuration for any additional required JWT or local configuration values. The demo password should be supplied through the environment, not written into Java code.
-
-### 2. Start the backend
-
-On macOS/Linux:
-
-```bash
-./mvnw spring-boot:run
+```sh
+kafka-topics.sh --bootstrap-server "${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}" \
+  --create --if-not-exists --topic credit-request-events --partitions 1 --replication-factor 1
 ```
 
-On Windows:
+Supply secrets through each service's run configuration or shell environment. In separate terminals, make sure the variables are available to each process.
 
-```powershell
-.\mvnw.cmd spring-boot:run
-```
+- **Auth, Credit, Activity:** `DB_URL` (default `jdbc:postgresql://localhost:5432/limitguard`), `DB_USERNAME` (default `postgres`), and `DB_PASSWORD`. All three use Hibernate `validate`.
+- **Auth and Credit:** use the same `JWT_SECRET`. **Auth, Credit, and Activity** must share the same `INTERNAL_SERVICE_KEY`. Credit and Activity call Auth on port 8081 by default.
+- **Auth SMTP:** Auth needs a mail sender to start. The command below points it at a loopback SMTP sink on port 1025. If testing registration or password recovery, start the sink first. For an explicitly configured Gmail test, Auth's `dev` profile reads `GMAIL_USERNAME` and `GMAIL_APP_PASSWORD`. Configure `PROFILE_PICTURE_DIRECTORY` if images are stored outside the checkout.
+- **Activity email:** keep `ACTIVITY_EMAIL_CONSUMER_ENABLED` and `ACTIVITY_EMAIL_DELIVERY_ENABLED` false during ordinary startup. The sample command scopes empty Gmail values to Activity with email disabled. Before enabling email separately, configure SMTP and the shared `ACTIVITY_NOTIFICATION_RECIPIENT_KEY`, and review the email consumer group's offsets and pending queue. The email group defaults to `limitguard-activity-email-v1` and uses `latest` when no usable offset exists.
 
-The application uses the `dev` profile by default in the current local configuration. The backend runs on `http://localhost:8080` unless you change its port.
+### 2. Start the services
 
-In the `dev` profile, Spring initializes the individual facility snapshot table and records the first observation on startup. The collector targets midnight UTC and retries hourly if that day's capture has not committed. The timestamp reflects the actual observation time. Days missed while the backend is offline remain gaps. The Relationship Manager chart needs two recorded observations in the manager's own facility scope.
+Run each line in a separate terminal from the repository root and wait for startup before moving to the next dependent service. **Port 8080 belongs to the API Gateway.** The root Maven module is the original monolith.
+
+1. Start Auth on **8081**.
+
+   ```sh
+   (cd auth-service && SPRING_MAIL_HOST=127.0.0.1 SPRING_MAIL_PORT=1025 ./mvnw spring-boot:run)
+   ```
+
+2. Start the ML API on **8000** for individual and group predictions. Credit can start before ML, but predictions require it. Check `GET /health` for `modelLoaded: true` before running assessments.
+
+   ```sh
+   cd ml-service
+   python3 -m venv .venv
+   .venv/bin/python -m pip install -r requirements.txt
+   .venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000
+   ```
+
+3. Start Credit on **8082**, then Activity on **8083**. Credit's checked-in configuration enables the outbox relay, reservation expiry, and exposure snapshots. The scheduler scans reservations every 60 seconds. Snapshot capture runs on startup and is attempted hourly on UTC boundaries. Use the [bootstrap guide's smoke-test commands](docs/DATABASE_BOOTSTRAP.md#verify-service-startup) for schema validation with background jobs disabled.
+
+   ```sh
+   (cd credit-service && ./mvnw spring-boot:run)
+   ```
+
+   ```sh
+   (cd activity-service && ACTIVITY_EMAIL_CONSUMER_ENABLED=false ACTIVITY_EMAIL_DELIVERY_ENABLED=false \
+     GMAIL_USERNAME= GMAIL_APP_PASSWORD= ./mvnw spring-boot:run)
+   ```
+
+4. Start the Gateway on **8080** after its downstream services are ready.
+
+   ```sh
+   (cd api-gateway && ./mvnw spring-boot:run)
+   ```
+
+On Windows, run the commands from the respective module directories using `.\mvnw.cmd`, set environment variables in PowerShell, and use `.venv\Scripts\python.exe` for the ML commands.
 
 ### 3. Start the frontend
 
-In a separate terminal:
-
-```bash
+```sh
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Open **http://127.0.0.1:5173**.
+Open [LimitGuard locally](http://127.0.0.1:5173). The browser uses relative `/api` URLs and Vite proxies them to `http://localhost:8080` by default. For another local Gateway address set `API_PROXY_TARGET` before starting Vite. If using SSO, open the public frontend origin configured by Auth’s `limitguard.sso.frontend-url` so the provider callback and exchange use the same browser session.
 
 ### 4. Explore the API
 
-Once the backend is running, open:
+- [Auth Swagger UI](http://localhost:8081/swagger-ui/index.html) and [Auth OpenAPI JSON](http://localhost:8081/v3/api-docs)
+- [Credit Swagger UI](http://localhost:8082/swagger-ui/index.html) and [Credit OpenAPI JSON](http://localhost:8082/v3/api-docs)
+- [Activity SSE API reference](docs/ACTIVITY_SSE.md) for `GET /api/credit-requests/events`
 
-**[Swagger UI — local development](http://localhost:8080/swagger-ui/index.html#/)**
-
-> The Swagger URL is a localhost address. It only works on a computer where the LimitGuard backend is running; it is not a publicly hosted demo.
+Gateway routes Auth users, SSO and institution paths to Auth, and the banking APIs to Credit. The exact SSE `GET` route has priority over Credit's broader request route. Gateway leaves Auth's internal routes and service-local Swagger endpoints unexposed.
 
 ### 5. Run tests
 
-```bash
-./mvnw test
+Run Maven tests from the service module you are testing. Check database-backed test prerequisites before running a suite. In particular, `CreditRequestConcurrencyIntegrationTest` uses `CREDIT_EXPIRY_TEST_JDBC_URL` pointing to a dedicated loopback PostgreSQL database named `limitguard_expiry_test` on a non-default port. It creates and drops its test schema on that database.
+
+```sh
+(cd credit-service && ./mvnw -Dtest=GroupExposureBreakdownTest test)
+(cd frontend && npm test)
 ```
 
-```bash
-cd frontend
-npm test
-npm run build
-npm run test:browser
-```
-
-Browser tests may require the Playwright browser dependencies and their configured test environment. The README does not imply every command has been rerun against the latest frontend changes.
+Run `npm run test:browser` from `frontend` against a configured safe test environment. The root `./mvnw test` runs the monolith suite.
 
 ## API overview
 
@@ -234,6 +251,7 @@ Some representative backend routes:
 | `POST` | `/api/auth/users/login` | Authenticate |
 | `GET` | `/api/auth/users/profile` | Read current user's profile |
 | `POST` | `/api/credit-requests` | Submit a credit request |
+| `GET` | `/api/credit-requests/events` | Subscribe to [Activity SSE](docs/ACTIVITY_SSE.md) |
 | `GET` | `/api/credit-requests/my` | List permitted personal requests |
 | `GET` | `/api/credit-requests/pending` | View requests awaiting review |
 | `GET` | `/api/credit-requests/{creditRequestId}/review` | View a request's approval context |
@@ -275,7 +293,7 @@ These are potential next steps, **not claims about features already delivered**:
 - **More intuitive selection:** searchable counterparty and credit-limit pickers with names rather than internal IDs.
 - **More comprehensive testing:** cross-institution security tests, concurrency tests for simultaneous reservations, and end-to-end approval scenarios.
 - **Advanced risk controls:** configurable approval thresholds, expiry policies, and exposure warnings.
-- **Deployment:** containerised development and a secure hosted demo with secrets managed outside source control.
+- **Deployment:** Docker packaging, CI/CD automation, and AWS hosting are future work. The current runbook starts the services directly on the local machine.
 
 ## References and learning resources
 
@@ -301,7 +319,7 @@ This repository is a portfolio/learning project using fictional demonstration da
 
 ## Unit 3: Concurrency, connected counterparties and risk analytics
 
-Unit 3 extends the original Unit 2 application rather than replacing it. The key business problem is that **two employees can act on the same credit request or shared credit capacity at nearly the same time**. A banking system must not approve a request twice, reserve the same headroom twice, or let different subsidiaries collectively exceed their group's approved limit.
+Unit 3 introduced concurrency and risk analytics in the original application. Credit Service now owns those workflows. The key business problem is that **two employees can act on the same credit request or shared credit capacity at nearly the same time**. A banking system must not approve a request twice, reserve the same headroom twice, or let different subsidiaries collectively exceed their group's approved limit.
 
 For a full explanation, including transaction sequences and presenter walkthroughs, see **[Concurrency & demonstration scenarios](docs/CONCURRENCY.md)**.
 
@@ -315,7 +333,7 @@ For a full explanation, including transaction sequences and presenter walkthroug
 | ML predictions | Java ML service → Python FastAPI model | Provide additional risk context for authorized company assessments |
 | Parallel group assessments | `ParallelRiskAssessmentService` using an executor | Assess multiple subsidiaries without requiring sequential external calls |
 | Thread-safe decisions | `@Transactional` and pessimistic JPA row locks | Serialize competing decisions and exposure changes |
-| Async notifications | Spring async notification executor and SSE | Notify relevant sessions after state changes without tying email work to the main request |
+| Async notifications | PostgreSQL outbox, Kafka, and Activity SSE or optional SMTP | Notify relevant sessions after state changes without tying email work to the main request |
 | Frontend | React dashboard, risk analytics, group views and notifications | Make banking and concurrency workflows observable |
 
 **Model scope:** The current ZIP contains 12 JPA entities. `GroupExposureSnapshot` and `GroupLimitBreach` were discussed in design notes but are **not present as JPA entities** in this version; do not describe them as implemented.
@@ -342,28 +360,30 @@ Other important scenarios include approval versus rejection, simultaneous reserv
 
 `CounterpartyFinancialProfile` stores six inputs: return on assets, profit margin, fixed asset turnover, debt-to-total-capital percentage, interest coverage, and total debt-to-EBITDA. The Java ML integration sends authorized company inputs to the Python FastAPI prediction endpoint. A parallel assessment service coordinates multiple predictions and reports per-company success or failure.
 
-**Interpretation caution:** The model's positive-class probability should not be presented as a verified probability of default until the underlying model's class mapping is confirmed. Prediction output is decision support, not automatic credit approval.
+**Experimental decision support.** The current class-1 probability is not a verified probability of default. The supplied artifacts identify class 1 numerically but do not define its business outcome or prediction horizon. Risk Officers can use the output as additional context. Credit decisions continue to follow the existing banking rules.
+
+- **Unreachable risk bands.** The fitted logistic regression and its numeric scoring bins produce class-1 probabilities from approximately **1.7344% to 5.5645%** for accepted inputs. The current thresholds start `MEDIUM_RISK` at **40%** and `HIGH_RISK` at **70%**, so every successful prediction returns `LOW_RISK`. Step 8 reproduced this for all 59 Citi and six GIB synthetic demo profiles. A `LOW_RISK` label under these thresholds does not establish low credit risk.
+- **Missing training provenance.** The original dataset, label definitions, training pipeline, validation splits, and evaluation results were not recovered. The saved artifacts reproduce inference, but the available evidence does not establish accuracy, calibration, or performance on actual credit outcomes. The synthetic demo profiles exercise inference and have no observed outcomes for evaluation.
+- **Unsupported negative ratios.** The scoring bins do not cover negative EBITDA-to-interest coverage, or debt-to-EBITDA values at or below the lowest bin boundary of −0.001. Inputs outside the scoring bins return HTTP 422. This can prevent scoring financially distressed companies even when their ratios are meaningful. Some negative ratios, such as return on assets and net profit margin, do have supported bins.
+
+**Future model improvements**
+
+1. Define the credit outcome, prediction horizon, observation date, ratio units, and accounting conventions. Obtain suitably labelled credit-risk data with observed outcomes and enough follow-up for that horizon, including distressed borrowers.
+2. Build a reproducible training pipeline with versioned data, code, and artifacts. Fit preprocessing on training data only, define how to handle negative or undefined ratios, and use borrower-aware, out-of-time splits where the data supports them.
+3. Evaluate ranking and probability quality on held-out outcomes. Report metrics such as PR-AUC, ROC-AUC, Brier score, and a calibration curve. If calibration is needed, fit it on separate validation data and verify it on the untouched test set.
+4. Select and validate risk thresholds against observed event rates, review capacity, and the cost of missed events. Verify sample sizes and uncertainty in each band on the final test set before releasing new cutoffs. The synthetic demo distribution should not determine thresholds.
+
+This version retains the existing experimental model. Retraining, replacement, and benchmarking are deferred while end-to-end application testing takes priority.
 
 ### Asynchronous emails and SSE
 
-Approval and rejection trigger notification work after successful banking state changes. Email sending is asynchronous; SSE events support real-time frontend refresh and toasts. A committed approval and an SSE event **do not prove** an email reached the inbox. SMTP acceptance and actual receipt require separate live verification.
+Credit records notification events in its transaction. The relay publishes committed events to Kafka, and Activity sends SSE updates or queues supported emails when enabled. A committed decision, Kafka publication, SSE delivery, SMTP acceptance, and inbox receipt are separate checks. See the [notification verification steps](docs/CONCURRENCY.md#9-asynchronous-email-and-sse).
 
-### Demonstration data and current verification status
+### Demonstration data
 
-The separate demo tooling and practice/final UI controls remain removed. The approved minimal seed was executed once against the existing `limitguard` database, after a verified backup. Exactly two facilities and four requests were added, and all 599 pre-existing rows were preserved. Automatic seeding stays disabled; the seed components have no startup runner or application event hook.
-
-Prepared presentation records:
-
-- Pending request **405**, BD 600,000 on facility **1**: two Risk Officers approving the same request.
-- Pending request **406**, BD 600,000 on facility **1**: approval versus rejection.
-- Falcon Freight facility **79** (USED history **403**) and Bahrain Gateway facility **80** (USED history **404**): different subsidiaries sharing **BD 800,000** headroom in Gulf Investment Group **3**, shared limit **2**.
-- Existing RESERVED request **165**, BD 15,000: a separate cancellation by its owner, main RM 15, after rechecking its status.
-
-The older Gulf Aviation/Pearl/Arabian/Digital Services proposal was not executed. See [the seed record](SEED_PLAN.md) for actual IDs and balances. Request #402 expires at the stored time **2026-10-30 09:37:07.643964**; its expiry changes group headroom, so refresh and check the starting capacity immediately before the live RM race.
+The [seed record](SEED_PLAN.md) describes the original Unit 3 fixtures and historical identifiers. For current microservice demonstrations, recheck request eligibility and balances before any operation. Auth and Credit demo seeding require an explicit demo profile and opt-in flags. The fresh-database schema initialization is separate from demo seeding.
 
 The **Limits & exposure** page now provides Corporate Group Management: Admin/RO group creation, existing-company membership and shared-limit forms, with individual and group capacities. RMs can submit requests from company rows. Success, rejection and SSE notifications trigger capacity refresh. All mutations require explicit form submission and existing backend authorization. Facility details without permitted request history can be loaded by ID inside the page.
-
-Validation: **54 backend tests**, **31 frontend unit tests**, production build/lint and **27 mocked browser tests** passed. The browser suite includes two separate RM sessions and group management without Postman. Read-only live API checks confirmed the seeded balances, untouched pending requests and four successful ML results. PostgreSQL concurrency integration tests and inbox email delivery were not newly verified; the prepared requests were not consumed during verification.
 
 ### Unit 3 API, testing and documentation
 
