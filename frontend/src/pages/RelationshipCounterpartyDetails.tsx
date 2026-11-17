@@ -1,3 +1,4 @@
+import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
 import { CompanyLogo } from "../components/CompanyLogo";
 import {
   ArrowLeft,
@@ -171,7 +172,11 @@ export function RelationshipCounterpartyDetails({
       <header className="rm-overview-header rm-counterparty-identity">
         <div>
           <div className="rm-counterparty-title">
-            <CompanyLogo name={company.name} large />
+            <CompanyLogo
+              name={company.name}
+              domain={counterpartyLogoDomain(company.name)}
+              large
+            />
             <h1>{company.name}</h1>
             <Badge status={company.status} />
           </div>

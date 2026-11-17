@@ -1,3 +1,4 @@
+import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
 import { CompanyLogo } from "../components/CompanyLogo";
 import { ArrowUpRight, Search, SlidersHorizontal } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useState } from "react";
@@ -444,7 +445,10 @@ export function RelationshipCounterparties({
                                 className="table-link rm-directory-company"
                                 onClick={() => setDetailId(company.id)}
                               >
-                                <CompanyLogo name={company.name} />
+                                <CompanyLogo
+                                  name={company.name}
+                                  domain={counterpartyLogoDomain(company.name)}
+                                />
                                 <span>{company.name}</span>
                               </button>
                             </th>

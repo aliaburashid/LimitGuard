@@ -1,12 +1,13 @@
 import { Plus, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import {
   allPages,
+  facilityDirectory,
   groupPortfolio,
   memberships,
-  requestDirectory,
 } from "../api/portfolio";
+import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
 import { useAuth } from "../context/Auth";
 import type {
   CorporateGroup,
@@ -19,6 +20,7 @@ import { money } from "../utils/format";
 import { CreateRequest, type RequestCompany } from "./CreateRequest";
 import type { RelationshipPortfolio } from "../hooks/useRelationshipPortfolio";
 import { ExposureHeadroomBar, groupHeadroom } from "./ExposureHeadroomBar";
+import { CompanyLogo } from "./CompanyLogo";
 import { GroupPanel } from "./GroupPanel";
 import { Badge, Empty, ErrorBox, Loading, Modal } from "./ui";
 
@@ -49,7 +51,6 @@ export function CorporateGroupManagement({
   const [members, setMembers] = useState<Membership[]>([]);
   const [limits, setLimits] = useState<GroupExposure[]>([]);
   const [facilities, setFacilities] = useState<Record<number, Exposure>>({});
-  const known = useRef(new Map<number, number>());
   const [selectedId, setSelectedId] = useState(
     initialGroup ? String(initialGroup.id) : "",
   );
@@ -65,10 +66,6 @@ export function CorporateGroupManagement({
   const [requesting, setRequesting] = useState<RequestCompany | null>(null);
   useEffect(() => {
     if (!resolvedFacility) return;
-    known.current.set(
-      resolvedFacility.creditLimitId,
-      resolvedFacility.counterpartyId,
-    );
     setFacilities((old) => ({
       ...old,
       [resolvedFacility.counterpartyId]: resolvedFacility,
@@ -79,29 +76,25 @@ export function CorporateGroupManagement({
     setLoading(true);
     setError("");
     setFacilityError("");
-    const history =
-      user?.role === "ADMIN" || hasFacilityDirectory
-        ? Promise.resolve([])
-        : requestDirectory(user?.role === "RISK_OFFICER", c.signal).catch(
-            (e) => {
-              if (!c.signal.aborted) setFacilityError(e.message);
-              return [];
-            },
-          );
     void Promise.all([
       allPages<CorporateGroup>("/corporate-groups", c.signal),
       allPages<Counterparty>("/counterparties", c.signal),
       memberships(c.signal),
       groupPortfolio(c.signal),
-      history,
+      hasFacilityDirectory
+        ? Promise.resolve([])
+        : facilityDirectory(c.signal).catch((e) => {
+            if (!c.signal.aborted) setFacilityError(e.message);
+            return [];
+          }),
     ])
       .then(
-        async ([
+        ([
           directory,
           counterparties,
           membership,
           sharedLimits,
-          requests,
+          directoryFacilities,
         ]) => {
           if (c.signal.aborted) return;
           if (!Array.isArray(membership))
@@ -119,36 +112,14 @@ export function CorporateGroupManagement({
                   sharedLimits[0]?.corporateGroupId ?? directory[0]?.id ?? "",
                 ),
           );
-          requests.forEach((r) =>
-            known.current.set(r.creditLimitId, r.counterpartyId),
+          setFacilities(
+            Object.fromEntries(
+              directoryFacilities.map((facility) => [
+                facility.counterpartyId,
+                facility,
+              ]),
+            ),
           );
-          const exposures = await Promise.allSettled(
-            [...known.current].map(async ([id, company]) => {
-              const value = await api<Exposure>(
-                `/credit-limits/${id}/exposure`,
-                "GET",
-                undefined,
-                c.signal,
-              );
-              if (
-                value.creditLimitId !== id ||
-                value.counterpartyId !== company
-              )
-                throw new Error("Facility details did not match the company.");
-              return value;
-            }),
-          );
-          if (c.signal.aborted) return;
-          const values: Record<number, Exposure> = {};
-          exposures.forEach((value) => {
-            if (value.status === "fulfilled")
-              values[value.value.counterpartyId] = value.value;
-          });
-          setFacilities(values);
-          if (exposures.some((x) => x.status === "rejected"))
-            setFacilityError(
-              "Some individual facilities could not be refreshed. Use Find facility to check their details.",
-            );
           setUpdated(new Date().toLocaleTimeString("en-GB"));
         },
       )
@@ -307,9 +278,19 @@ export function CorporateGroupManagement({
                         return (
                           <tr key={m.id}>
                             <td>
-                              <strong>
-                                {company?.name ??
-                                  `Company #${m.counterpartyId}`}
+                              <strong className="company-brand">
+                                {company && (
+                                  <CompanyLogo
+                                    name={company.name}
+                                    domain={counterpartyLogoDomain(
+                                      company.name,
+                                    )}
+                                  />
+                                )}
+                                <span>
+                                  {company?.name ??
+                                    `Company #${m.counterpartyId}`}
+                                </span>
                               </strong>
                               {company && <Badge status={company.status} />}
                               {facility && (
@@ -370,10 +351,8 @@ export function CorporateGroupManagement({
               )}
               <p className="small muted">
                 Group totals include used and reserved exposure across all
-                members at your institution.{" "}
-                {hasFacilityDirectory
-                  ? "Individual balances come from the institution’s facility directory."
-                  : "Facility details use permitted request history and verified lookups."}
+                members at your institution. Individual balances come from the
+                institution’s facility directory.
               </p>
             </>
           )}
