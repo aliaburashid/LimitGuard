@@ -64,7 +64,7 @@ class CitiPortfolioSeederIntegrationTest {
             assertPortfolio(jdbc);
             assertThat(count(jdbc, "SELECT count(*) FROM counterparties")).isEqualTo(59);
             assertThat(count(jdbc, "SELECT count(*) FROM corporate_groups")).isEqualTo(10);
-            assertThat(count(jdbc, "SELECT count(*) FROM corporate_group_memberships")).isEqualTo(30);
+            assertThat(count(jdbc, "SELECT count(*) FROM corporate_group_memberships")).isEqualTo(31);
             assertThat(count(jdbc, "SELECT count(*) FROM credit_limits WHERE used_amount <> 0 OR reserved_amount <> 0")).isZero();
             assertThat(count(jdbc, "SELECT count(*) FROM credit_requests")).isZero();
             assertThat(count(jdbc, "SELECT count(*) FROM notification_outbox")).isZero();
@@ -203,14 +203,27 @@ class CitiPortfolioSeederIntegrationTest {
                 p.fixed_asset_turnover,p.debt_to_total_capital_percent,p.interest_coverage,p.total_debt_to_ebitda)=6
             """)).isEqualTo(59);
         assertThat(count(jdbc, "SELECT count(*) FROM group_credit_limits WHERE financial_institution_id=5")).isEqualTo(10);
+        assertThat(jdbc.queryForList("""
+            SELECT g.name || ':' || count(l.id)
+            FROM group_credit_limits gl
+            JOIN corporate_groups g ON g.id=gl.corporate_group_id
+            LEFT JOIN corporate_group_memberships m ON m.corporate_group_id=g.id
+            LEFT JOIN credit_limits l ON l.counterparty_id=m.counterparty_id AND l.financial_institution_id=5
+            WHERE gl.financial_institution_id=5
+            GROUP BY g.id, g.name
+            """, String.class)).containsExactlyInAnyOrder(
+                "Alphabet:3", "Amazon:4", "Microsoft:3", "Volkswagen Group:3",
+                "Berkshire Hathaway:3", "The Walt Disney Company:3", "PepsiCo:3",
+                "Hyundai Motor Group:3", "Tata Group:4", "Lufthansa Group:2");
+
         assertThat(count(jdbc, """
             SELECT count(*) FROM credit_limits l JOIN corporate_group_memberships m ON m.counterparty_id=l.counterparty_id
             WHERE l.financial_institution_id=5
-            """)).isEqualTo(30);
+            """)).isEqualTo(31);
         assertThat(count(jdbc, """
             SELECT count(*) FROM counterparties WHERE
-                (name IN ('Pearl Coast Shipping Co.','Harbor Quay Equipment W.L.L. (fictional)') AND status='FROZEN')
-                OR (name='North Quay Services W.L.L. (fictional)' AND status='CLOSED')
+                (name IN ('Titan Company Limited','Emirates') AND status='FROZEN')
+                OR (name='Delta Air Lines, Inc.' AND status='CLOSED')
             """)).isEqualTo(3);
     }
 

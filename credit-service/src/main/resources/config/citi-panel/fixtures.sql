@@ -8,7 +8,7 @@ INSERT INTO seed_groups VALUES
     ('Berkshire Hathaway', 5000000),
     ('The Walt Disney Company', 4300000),
     ('PepsiCo', 4400000),
-    ('Gulf Investment Group (Citi Demo)', 2000000);
+    ('Hyundai Motor Group', 2000000);
 
 CREATE TEMP TABLE seed_companies (
     name text PRIMARY KEY, group_name text REFERENCES seed_groups(name), status text NOT NULL,
@@ -16,12 +16,12 @@ CREATE TEMP TABLE seed_companies (
 );
 INSERT INTO seed_companies VALUES
     ('Google LLC', 'Alphabet', 'ACTIVE', 4200000, 1200000, 350000, 'A'),
-    ('XXVI Holdings Inc.', 'Alphabet', 'ACTIVE', 1800000, 450000, 150000, 'B'),
-    ('Alphabet Capital US LLC', 'Alphabet', 'ACTIVE', 1400000, 250000, 150000, 'B'),
+    ('Waymo LLC', 'Alphabet', 'ACTIVE', 1800000, 450000, 150000, 'B'),
+    ('Wing Aviation LLC', 'Alphabet', 'ACTIVE', 1400000, 250000, 150000, 'B'),
     ('Amazon Web Services, Inc.', 'Amazon', 'ACTIVE', 3100000, 1800000, 600000, 'A'),
     ('Amazon.com Services LLC', 'Amazon', 'ACTIVE', 1900000, 700000, 300000, 'B'),
-    ('Amazon Data Services, Inc.', 'Amazon', 'ACTIVE', 1600000, 550000, 200000, 'A'),
-    ('Amazon.com Sales, Inc.', 'Amazon', 'ACTIVE', 1500000, 400000, 150000, 'B'),
+    ('Twitch Interactive, Inc.', 'Amazon', 'ACTIVE', 1600000, 550000, 200000, 'A'),
+    ('Ring LLC', 'Amazon', 'ACTIVE', 1500000, 400000, 150000, 'B'),
     ('LinkedIn Corporation', 'Microsoft', 'ACTIVE', 2800000, 1000000, 350000, 'A'),
     ('Activision Blizzard, Inc.', 'Microsoft', 'ACTIVE', 2200000, 800000, 250000, 'B'),
     ('Microsoft Ireland Operations Limited', 'Microsoft', 'ACTIVE', 1800000, 450000, 150000, 'A'),
@@ -33,13 +33,13 @@ INSERT INTO seed_companies VALUES
     ('McLane Company, Inc.', 'Berkshire Hathaway', 'ACTIVE', 1800000, 400000, 200000, 'B'),
     ('ABC, Inc.', 'The Walt Disney Company', 'ACTIVE', 2200000, 1000000, 300000, 'B'),
     ('ESPN Enterprises, Inc.', 'The Walt Disney Company', 'ACTIVE', 2000000, 800000, 350000, 'A'),
-    ('Disney Consumer Products, Inc.', 'The Walt Disney Company', 'ACTIVE', 1500000, 500000, 250000, 'B'),
-    ('Pepsi-Cola Metropolitan Bottling Company, Inc.', 'PepsiCo', 'ACTIVE', 2600000, 1050000, 450000, 'A'),
+    ('Pixar Animation Studios', 'The Walt Disney Company', 'ACTIVE', 1500000, 500000, 250000, 'B'),
+    ('Frito-Lay North America, Inc.', 'PepsiCo', 'ACTIVE', 2600000, 1050000, 450000, 'A'),
     ('Sabra Dipping Company, LLC', 'PepsiCo', 'ACTIVE', 1300000, 450000, 200000, 'C'),
-    ('Quaker Manufacturing, LLC', 'PepsiCo', 'ACTIVE', 1800000, 650000, 250000, 'B'),
-    ('Falcon Freight Services (Citi Demo)', 'Gulf Investment Group (Citi Demo)', 'ACTIVE', 1000000, 300000, 0, 'C'),
-    ('Bahrain Gateway Warehousing (Citi Demo)', 'Gulf Investment Group (Citi Demo)', 'ACTIVE', 1000000, 225000, 0, 'B'),
-    ('Gulf Meridian Logistics W.L.L. (Citi Demo)', 'Gulf Investment Group (Citi Demo)', 'ACTIVE', 750000, 0, 675000, 'A'),
+    ('SodaStream International Ltd.', 'PepsiCo', 'ACTIVE', 1800000, 650000, 250000, 'B'),
+    ('Hyundai Motor Company', 'Hyundai Motor Group', 'ACTIVE', 1000000, 300000, 0, 'C'),
+    ('Kia Corporation', 'Hyundai Motor Group', 'ACTIVE', 1000000, 225000, 0, 'B'),
+    ('Hyundai Mobis Co., Ltd.', 'Hyundai Motor Group', 'ACTIVE', 750000, 0, 675000, 'A'),
     ('Apple Inc.', NULL, 'ACTIVE', 6200000, 1450000, 450000, NULL),
     ('Meta Platforms, Inc.', NULL, 'ACTIVE', 5000000, 2650000, 650000, NULL),
     ('Broadcom Inc.', NULL, 'ACTIVE', 4200000, 2300000, 600000, NULL),
@@ -55,9 +55,9 @@ INSERT INTO seed_companies VALUES
     ('ServiceNow, Inc.', NULL, 'ACTIVE', 3000000, 1550000, 400000, NULL),
     ('Airbnb, Inc.', NULL, 'ACTIVE', 2400000, 720000, 280000, NULL),
     ('Snowflake Inc.', NULL, 'ACTIVE', 2700000, 1800000, 550000, NULL),
-    ('Harbor Quay Equipment W.L.L. (fictional)', NULL, 'FROZEN', 900000, 150000, 0, NULL),
-    ('North Quay Services W.L.L. (fictional)', NULL, 'CLOSED', NULL, NULL, NULL, NULL),
-    ('Orchid Quay Trading W.L.L. (fictional)', NULL, 'ACTIVE', NULL, NULL, NULL, NULL),
+    ('Emirates', NULL, 'FROZEN', 900000, 150000, 0, NULL),
+    ('Delta Air Lines, Inc.', NULL, 'CLOSED', NULL, NULL, NULL, NULL),
+    ('United Parcel Service, Inc.', NULL, 'ACTIVE', NULL, NULL, NULL, NULL),
     ('Dell Technologies Inc.', NULL, 'ACTIVE', 3100000, 1480000, 320000, NULL),
     ('Intuit Inc.', NULL, 'ACTIVE', 2300000, 860000, 290000, NULL),
     ('CrowdStrike Holdings, Inc.', NULL, 'ACTIVE', 1800000, 720000, 240000, NULL);

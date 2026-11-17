@@ -92,34 +92,34 @@ public class Unit3ScenarioSeeder {
         long secondRm = findManager(SECOND_RM);
 
 
-        // Find Bahrain Trading Company's existing credit facility.
-        long bahrainTrading = findFacility(
-                "Bahrain Trading Company",
-                "Bahrain Holding Group"
+        // Find Lufthansa Technik AG's existing credit facility.
+        long lufthansaTechnikFacility = findFacility(
+                "Lufthansa Technik AG",
+                "Lufthansa Group"
         );
 
 
         // Define the four Unit 3 test requests.
         List<ScenarioRequest> scenarios = List.of(
 
-                // Historical used credit request for Falcon Freight.
+                // Historical used credit request for Tata Steel.
                 new ScenarioRequest(
                         PREFIX + "falcon-used",
                         findFacility(
-                                "Falcon Freight Services",
-                                "Gulf Investment Group"
+                                "Tata Steel Limited",
+                                "Tata Group"
                         ),
                         primaryRm,
                         300000,
                         true
                 ),
 
-                // Historical used credit request for Bahrain Gateway.
+                // Historical used credit request for Tata Consultancy Services.
                 new ScenarioRequest(
                         PREFIX + "gateway-used",
                         findFacility(
-                                "Bahrain Gateway Warehousing",
-                                "Gulf Investment Group"
+                                "Tata Consultancy Services Limited",
+                                "Tata Group"
                         ),
                         secondRm,
                         225000,
@@ -129,7 +129,7 @@ public class Unit3ScenarioSeeder {
                 // Pending request for testing two simultaneous approvals.
                 new ScenarioRequest(
                         PREFIX + "dual-approval",
-                        bahrainTrading,
+                        lufthansaTechnikFacility,
                         primaryRm,
                         600000,
                         false
@@ -138,7 +138,7 @@ public class Unit3ScenarioSeeder {
                 // Pending request for testing approval versus rejection.
                 new ScenarioRequest(
                         PREFIX + "approval-versus-rejection",
-                        bahrainTrading,
+                        lufthansaTechnikFacility,
                         primaryRm,
                         600000,
                         false
@@ -161,12 +161,12 @@ public class Unit3ScenarioSeeder {
         }
 
 
-        // Check that Bahrain Trading has enough available credit
+        // Check that Lufthansa Technik has enough available credit
         // for both pending approval demonstrations.
-        verifyHeadroom(bahrainTrading, 1200000);
+        verifyHeadroom(lufthansaTechnikFacility, 1200000);
 
-        // Check that Bahrain Holding Group has enough available headroom.
-        verifyGroupHeadroom(bahrainTrading, 1200000);
+        // Check that Lufthansa Group has enough available headroom.
+        verifyGroupHeadroom(lufthansaTechnikFacility, 1200000);
 
         // Check group headroom for the historical used requests.
         verifyGroupHeadroom(
