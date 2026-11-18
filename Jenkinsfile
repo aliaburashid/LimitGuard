@@ -88,9 +88,28 @@ pipeline {
                 ACTIVITY_NOTIFICATION_RECIPIENT_KEY = 'ci-test-only-activity-key'
                 GMAIL_USERNAME                      = 'ci-test@example.com'
                 GMAIL_APP_PASSWORD                  = 'ci-test-only'
+                // Temporary PostgreSQL started below, for tests that use the real database.
+                DB_URL                              = 'jdbc:postgresql://localhost:55439/limitguard'
+                DB_USERNAME                         = 'postgres'
                 DB_PASSWORD                         = 'ci-test-only'
             }
             stages {
+                stage('Test database') {
+                    steps {
+                        sh '''
+                            docker rm -f limitguard-ci-db >/dev/null 2>&1 || true
+                            docker run -d --name limitguard-ci-db -p 55439:5432 \
+                              -e POSTGRES_PASSWORD="$DB_PASSWORD" -e POSTGRES_DB=limitguard postgres:17
+                            # Wait until PostgreSQL accepts TCP connections (its first-start setup is finished).
+                            for i in $(seq 1 60); do
+                              docker exec limitguard-ci-db pg_isready -h 127.0.0.1 -U postgres -d limitguard >/dev/null 2>&1 && break
+                              sleep 2
+                            done
+                            docker exec -i limitguard-ci-db psql -U postgres -d limitguard -q -v ON_ERROR_STOP=1 < database/schema.sql >/dev/null
+                            echo "Test database ready on localhost:55439"
+                        '''
+                    }
+                }
                 stage('Auth Service') {
                     steps { dir('auth-service') { sh 'bash ./mvnw -B -ntp test' } }
                     post { always { junit allowEmptyResults: true, testResults: 'auth-service/target/surefire-reports/*.xml' } }
@@ -115,6 +134,12 @@ pipeline {
                     steps {
                         sh 'docker run --rm -e PYTHONDONTWRITEBYTECODE=1 -v "$WORKSPACE/ml-service:/app:ro" -w /app python:3.11-slim sh -c "pip install -q --no-cache-dir -r requirements.txt && python -m unittest -v test_main"'
                     }
+                }
+            }
+            post {
+                always {
+                    // Remove the temporary test database.
+                    sh 'docker rm -f limitguard-ci-db >/dev/null 2>&1 || true'
                 }
             }
         }
