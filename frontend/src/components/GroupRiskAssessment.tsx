@@ -2,12 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { BrainCircuit, RefreshCw } from "lucide-react";
 import { assessGroupRisk } from "../api/groupRisk";
 import type { CompanyRiskAssessment, GroupExposure } from "../types";
+import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
+import { CompanyLogo } from "./CompanyLogo";
 import { Badge, ErrorBox } from "./ui";
 
 export function GroupRiskAssessment({
   groups,
+  fixedGroup = false,
 }: {
-  groups: GroupExposure[] | null;
+  groups:
+    Pick<GroupExposure, "corporateGroupId" | "corporateGroupName">[] | null;
+  fixedGroup?: boolean;
 }) {
   const [groupId, setGroupId] = useState("");
   const [results, setResults] = useState<CompanyRiskAssessment[] | null>(null);
@@ -47,43 +52,44 @@ export function GroupRiskAssessment({
   }
   return (
     <section
-      className="panel group-assessment-panel"
-      aria-label="Parallel group risk assessment"
+      className={`panel group-assessment-panel${fixedGroup ? " ra-linked-group-assessment" : ""}`}
+      aria-label={
+        fixedGroup
+          ? "Company group risk assessment"
+          : "Parallel group risk assessment"
+      }
     >
-      <div className="section-head">
-        <div>
-          <span className="eyebrow">PORTFOLIO RISK</span>
-          <h2>Parallel group assessment</h2>
-          <p className="muted">
-            Assess saved financial profiles for your institution’s group
-            companies.
-          </p>
+      {!fixedGroup && (
+        <div className="section-head">
+          <h2>Portfolio group assessment</h2>
+          <BrainCircuit size={20} aria-hidden="true" />
         </div>
-        <BrainCircuit size={22} aria-hidden="true" />
-      </div>
+      )}
       <div className="group-assessment-controls">
-        <label className="field">
-          <span>Corporate group to assess</span>
-          <select
-            value={groupId}
-            disabled={busy || !groups?.length}
-            onChange={(e) => {
-              setGroupId(e.target.value);
-              setResults(null);
-              setError("");
-              setReceived("");
-            }}
-          >
-            <option value="">
-              {groups ? "Select a corporate group" : "Loading groups…"}
-            </option>
-            {groups?.map((g) => (
-              <option key={g.corporateGroupId} value={g.corporateGroupId}>
-                {g.corporateGroupName}
+        {!fixedGroup && (
+          <label className="field">
+            <span>Corporate group to assess</span>
+            <select
+              value={groupId}
+              disabled={busy || !groups?.length}
+              onChange={(e) => {
+                setGroupId(e.target.value);
+                setResults(null);
+                setError("");
+                setReceived("");
+              }}
+            >
+              <option value="">
+                {groups ? "Select a corporate group" : "Loading groups…"}
               </option>
-            ))}
-          </select>
-        </label>
+              {groups?.map((g) => (
+                <option key={g.corporateGroupId} value={g.corporateGroupId}>
+                  {g.corporateGroupName}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           className="primary"
           disabled={!groupId || busy}
@@ -124,8 +130,13 @@ export function GroupRiskAssessment({
                   {results.map((r) => (
                     <tr key={r.counterpartyId}>
                       <td>
-                        {r.counterpartyName}
-                        <small>Company #{r.counterpartyId}</small>
+                        <span className="company-brand">
+                          <CompanyLogo
+                            name={r.counterpartyName}
+                            domain={counterpartyLogoDomain(r.counterpartyName)}
+                          />
+                          {r.counterpartyName}
+                        </span>
                       </td>
                       <td>
                         {r.successful ? (
@@ -148,8 +159,7 @@ export function GroupRiskAssessment({
             </div>
           )}
           <p className="small muted">
-            Results use the saved financial profiles. Batch execution time and
-            worker threads are recorded in the Spring Boot console.
+            Results are advisory and use saved financial profiles.
           </p>
         </>
       )}

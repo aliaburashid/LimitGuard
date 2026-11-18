@@ -1,3 +1,4 @@
+import { RiskCounterparties } from "./pages/RiskCounterparties";
 import { institutionLogoDomain } from "./config/verifiedLogoDomains";
 import { CompanyLogo } from "./components/CompanyLogo";
 import { readWorkspaceState, saveWorkspaceState } from "./utils/workspaceState";
@@ -337,7 +338,9 @@ function WorkspaceApp() {
     );
   const allowed = nav.filter((n) => n.roles.includes(user.role));
   const valid = page === "profile" || allowed.some((n) => n.id === page);
-  const groupDirectory = relationshipManager && page === "corporate-groups";
+  const groupDirectory =
+    (relationshipManager || user.role === "RISK_OFFICER") &&
+    page === "corporate-groups";
   const facilityDirectory = page === "facilities";
   const active =
     groupDirectory || facilityDirectory
@@ -593,6 +596,19 @@ function WorkspaceApp() {
                       navigate("requests");
                       setRequestCompany({ id, name });
                     }}
+                  />
+                ) : user.role === "RISK_OFFICER" ? (
+                  <RiskCounterparties
+                    version={version}
+                    selection={selection}
+                    groupView={groupDirectory}
+                    facilitiesView={facilityDirectory}
+                    facilitySelection={
+                      facilityDirectory ? selection?.id : undefined
+                    }
+                    changeView={(facilities) =>
+                      navigate(facilities ? "facilities" : "counterparties")
+                    }
                   />
                 ) : (
                   <Counterparties

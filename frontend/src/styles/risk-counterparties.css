@@ -1,0 +1,85 @@
+.ro-counterparties {
+  min-width: 0;
+}
+.ro-counterparties .page-heading h1 {
+  margin: 0;
+}
+.ro-counterparties .rm-relationship-tabs {
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.ro-counterparties .rm-group-card,
+.ro-counterparties .rm-group-member {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ro-counterparties .company-brand {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ro-counterparties .company-logo {
+  flex-shrink: 0;
+}
+.ro-counterparties .ro-member-preview {
+  display: grid;
+  gap: 10px;
+}
+.ro-counterparties .ro-member-preview .company-brand {
+  font-size: 12px;
+}
+.ro-record-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.ro-named-selection {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0;
+}
+.ro-financial-ratios {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.ro-financial-ratios > div {
+  min-width: 0;
+}
+.ro-financial-ratios dt {
+  color: var(--rm-muted);
+  font-size: 12px;
+}
+.ro-financial-ratios dd {
+  margin: 6px 0 0;
+  color: var(--rm-navy);
+  font-weight: 650;
+}
+.ro-record-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 24px;
+}
+.ro-record-meta dd {
+  margin: 0;
+}
+@media (max-width: 700px) {
+  .ro-named-selection {
+    grid-template-columns: 1fr;
+  }
+  .ro-financial-ratios {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ro-counterparties .page-heading {
+    align-items: flex-start;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+}
+
+.ro-counterparties .rm-headroom + button {
+  margin-top: 16px;
+}
