@@ -1,50 +1,28 @@
 import {
   ArrowRight,
   ArrowUpRight,
-  AlertTriangle,
-  Building2,
   Clock3,
-  Layers3,
   ShieldCheck,
   Wallet,
 } from "lucide-react";
 import { usePortfolio } from "../hooks/usePortfolio";
-import { useAuth } from "../context/Auth";
-import {
-  ChartCard,
-  DataNote,
-  ExposureDonut,
-  GroupComparison,
-} from "../components/AnalyticsCharts";
+import { ChartCard } from "../components/AnalyticsCharts";
+import { CompanyLogo, CorporateGroupLogo } from "../components/CompanyLogo";
+import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
 import { Badge, Empty, ErrorBox, Loading } from "../components/ui";
-import {
-  bhd,
-  compact,
-  exposureTotals,
-  percent,
-  weightedGroupUtilization,
-} from "../analytics/metrics";
-import { date, label, money, requestReference } from "../utils/format";
-const statuses = [
-  "PENDING_APPROVAL",
-  "RESERVED",
-  "USED",
-  "REJECTED",
-  "EXPIRED",
-  "CANCELLED",
-];
+import { bhd, compact, exposureTotals, percent } from "../analytics/metrics";
+import { date, money, requestReference } from "../utils/format";
+
 export function RiskOverview({
   version,
   navigate,
   assess,
 }: {
   version: number;
-  navigate: (page: string) => void;
+  navigate: (page: string, recordId?: number, status?: string) => void;
   assess: (id: number) => void;
 }) {
-  const { user } = useAuth();
-  const { requests, groups, facilities, members, errors, refreshing } =
-    usePortfolio(version);
+  const { requests, groups, facilities, errors } = usePortfolio(version);
   const pending = requests?.filter((r) => r.status === "PENDING_APPROVAL");
   const priorities = pending
     ? [...pending]
@@ -53,308 +31,237 @@ export function RiskOverview({
             Number(b.amount) - Number(a.amount) ||
             a.createdAt.localeCompare(b.createdAt),
         )
-        .slice(0, 4)
+        .slice(0, 3)
     : null;
   const totals = facilities ? exposureTotals(facilities) : null;
   const committed = totals
     ? Number(totals.usedAmount) + Number(totals.reservedAmount)
     : null;
-  const groupUtilization = groups ? weightedGroupUtilization(groups) : null;
-  const restricted =
-    facilities?.filter((f) => f.status && f.status !== "ACTIVE") ?? [];
-  const unavailable =
-    members && groups
-      ? new Set(
-          members
-            .filter(
-              (m) =>
-                !groups.some(
-                  (g) => g.corporateGroupId === m.corporateGroupId,
-                ) &&
-                facilities?.some((f) => f.counterpartyId === m.counterpartyId),
-            )
-            .map((m) => m.corporateGroupId),
-        ).size
-      : 0;
-  const belowThreshold =
-    pending?.filter((r) => Number(r.amount) <= 500000) ?? [];
-  const topGroup = groups?.length
-    ? [...groups].sort((a, b) => b.exposure - a.exposure)[0]
+  // Show recorded updates, not inferred approvals or a fabricated event history.
+  const recent = requests
+    ? requests
+        .filter((r) =>
+          ["RESERVED", "USED", "REJECTED", "EXPIRED", "CANCELLED"].includes(
+            r.status,
+          ),
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime() ||
+            b.id - a.id,
+        )
+        .slice(0, 4)
     : null;
-  const totalGroupExposure =
-    groups?.reduce((sum, g) => sum + g.exposure, 0) ?? 0;
+  const rankedGroups = groups
+    ? [...groups]
+        .sort(
+          (a, b) =>
+            (percent(Number(b.exposure), Number(b.amount)) ?? -1) -
+              (percent(Number(a.exposure), Number(a.amount)) ?? -1) ||
+            Number(b.exposure) - Number(a.exposure),
+        )
+        .slice(0, 5)
+    : null;
+  const hasErrors = errors.length > 0;
+
   return (
-    <div className="risk-overview">
-      <div className="analytics-page-heading">
+    <div className="risk-overview ro-overview">
+      <header className="ro-overview-heading">
         <div>
-          <div className="page-kicker">
-            Risk management <span>/</span> Portfolio overview
-          </div>
-          <h1>Credit oversight</h1>
-          <p>Exposure, capacity and decisions. One clear view.</p>
+          <h1>Credit Portfolio Overview</h1>
         </div>
-        <div className="heading-actions">
-          <span className="institution-pill">
-            <Building2 size={14} />
-            {user?.financialInstitution.name}
-          </span>
-          <button className="primary" onClick={() => navigate("approvals")}>
-            Open approval queue
-            <ArrowUpRight size={15} />
-          </button>
-        </div>
-      </div>
-      <div className="portfolio-scope">
-        <span className="scope-dot" />
-        <span>
-          Institution view · {facilities?.length ?? "—"} observed facilities ·{" "}
-          {groups?.length ?? "—"} configured group limits
-        </span>
-        <span>{refreshing ? "Refreshing…" : "Current API snapshot"}</span>
-      </div>
-      {!!errors.length && <ErrorBox message={[...new Set(errors)].join(" ")} />}
-      <div className="overview-kpis">
+        <button className="primary" onClick={() => navigate("approvals")}>
+          Open approval queue <ArrowUpRight size={16} />
+        </button>
+      </header>
+      {hasErrors && <ErrorBox message={[...new Set(errors)].join(" ")} />}
+      <div className="overview-kpis ro-kpis">
         <div className="overview-kpi">
           <div>
             <span>Pending approvals</span>
-            <Clock3 size={16} />
+            <Clock3 size={17} />
           </div>
           <strong>{pending?.length ?? "—"}</strong>
           <p>
             {pending
               ? `${money(pending.reduce((s, r) => s + Number(r.amount), 0))} awaiting decision`
-              : "Loading request register"}
+              : "Loading requests…"}
           </p>
         </div>
         <div className="overview-kpi">
           <div>
             <span>Committed exposure</span>
-            <Wallet size={16} />
+            <Wallet size={17} />
           </div>
           <strong title={committed !== null ? bhd(committed) : undefined}>
             <small>BHD</small> {committed !== null ? compact(committed) : "—"}
           </strong>
-          <p>Used + reserved · observed facilities</p>
+          <p>Used and reserved credit</p>
         </div>
         <div className="overview-kpi">
           <div>
             <span>Available headroom</span>
-            <ShieldCheck size={16} />
+            <ShieldCheck size={17} />
           </div>
           <strong title={totals ? bhd(totals.availableHeadroom) : undefined}>
             <small>BHD</small>{" "}
             {totals ? compact(totals.availableHeadroom) : "—"}
           </strong>
-          <p>Individual facility capacity</p>
-        </div>
-        <div className="overview-kpi">
-          <div>
-            <span>Group utilization</span>
-            <Layers3 size={16} />
-          </div>
-          <strong>
-            {groupUtilization !== null ? groupUtilization.toFixed(1) : "—"}
-            <small>%</small>
-          </strong>
-          <p>Exposure / combined group limits</p>
+          <p>Remaining individual facility capacity</p>
         </div>
       </div>
-      <div className="overview-analytics-grid">
+      <div className="ro-overview-grid">
         <ChartCard
-          title="Credit exposure composition"
-          subtitle="Used, reserved and remaining individual capacity"
-          action={<span className="chart-unit">BHD</span>}
+          title="Corporate group exposure"
+          subtitle="Top five by utilization"
+          className="ro-group-exposure"
+          action={
+            <button
+              className="text-button"
+              onClick={() => navigate("corporate-groups")}
+            >
+              View all groups <ArrowRight size={14} />
+            </button>
+          }
         >
-          {totals ? (
-            <ExposureDonut data={totals} />
-          ) : !facilities && !errors.length ? (
+          {rankedGroups?.length ? (
+            <div
+              className="ro-group-chart"
+              role="group"
+              aria-label="Corporate group utilization"
+            >
+              {rankedGroups.map((g) => {
+                const value = percent(Number(g.exposure), Number(g.amount));
+                const description = `${g.corporateGroupName}: ${value === null ? "utilization unavailable" : `${value.toFixed(1)}% utilized`}. Committed ${bhd(g.exposure)}; approved limit ${bhd(Number(g.amount))}.`;
+                return (
+                  <button
+                    key={g.corporateGroupId}
+                    className="ro-group-row"
+                    onClick={() => navigate("facilities")}
+                    aria-label={description}
+                    title={description}
+                  >
+                    <CorporateGroupLogo name={g.corporateGroupName} />
+                    <span className="ro-group-bar-label">
+                      <strong>{g.corporateGroupName}</strong>
+                      <span className="ro-group-track" aria-hidden="true">
+                        <span
+                          style={{
+                            width: `${Math.min(100, Math.max(0, value ?? 0))}%`,
+                          }}
+                        />
+                      </span>
+                    </span>
+                    <span
+                      className={`ro-group-value${value !== null && value >= 85 ? " ro-elevated" : ""}`}
+                    >
+                      {value === null ? "—" : `${value.toFixed(1)}%`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : !groups && !hasErrors ? (
             <Loading />
           ) : (
-            <Empty title="No facility exposure available">
-              Inspect requests to view company facilities.
-            </Empty>
-          )}
-          <div className="chart-footer">
-            <span>Approved facility capacity</span>
-            <strong>{totals ? bhd(totals.limitAmount) : "—"}</strong>
-          </div>
-        </ChartCard>
-        <ChartCard
-          title="Corporate group utilization"
-          subtitle="Committed exposure against each approved group limit"
-        >
-          {groups?.length ? (
-            <GroupComparison
-              groups={groups}
-              onSelect={() => navigate("facilities")}
-            />
-          ) : !groups && !errors.length ? (
-            <Loading />
-          ) : (
-            <Empty title="No group limits configured">
-              Group utilization is unavailable until this institution has a
-              group limit.
+            <Empty title="No group exposure available">
+              Configured group limits will appear here.
             </Empty>
           )}
         </ChartCard>
-      </div>
-      <div className="overview-bottom-grid">
         <ChartCard
           title="Pending decisions"
           subtitle="Highest requested amounts first"
+          className="ro-pending"
           action={
             <button
               className="text-button"
               onClick={() => navigate("approvals")}
             >
-              View queue
-              <ArrowRight size={14} />
+              View queue <ArrowRight size={14} />
             </button>
           }
         >
-          <div className="compact-approval-list">
-            {priorities?.length ? (
-              priorities.map((r) => (
-                <button key={r.id} onClick={() => assess(r.id)}>
-                  <span className="company-mark">
-                    {r.counterpartyName
-                      .split(" ")
-                      .slice(0, 2)
-                      .map((s) => s[0])
-                      .join("")}
+          {priorities?.length ? (
+            <div className="ro-decision-list">
+              {priorities.map((r) => (
+                <button
+                  key={r.id}
+                  className="ro-decision"
+                  onClick={() => assess(r.id)}
+                  aria-label={`Review ${r.counterpartyName}, ${requestReference(r.id)}, ${money(r.amount)}`}
+                >
+                  <CompanyLogo
+                    name={r.counterpartyName}
+                    domain={counterpartyLogoDomain(r.counterpartyName)}
+                  />
+                  <span className="ro-decision-company">
+                    <strong>{r.counterpartyName}</strong>
+                    <small>{requestReference(r.id)}</small>
                   </span>
-                  <span>
-                    <strong title={r.counterpartyName}>
-                      {r.counterpartyName}
-                    </strong>
-                    <small>
-                      {requestReference(r.id)} · {date(r.createdAt)}
-                    </small>
-                  </span>
-                  <span className="preview-amount">
+                  <span className="ro-decision-amount">
                     <strong>{money(r.amount)}</strong>
                     <small>
-                      Assess risk <ArrowUpRight size={11} />
+                      Review <ArrowUpRight size={12} />
                     </small>
                   </span>
                 </button>
-              ))
-            ) : priorities ? (
-              <Empty title="Your approval queue is clear" />
-            ) : (
-              <Loading />
-            )}
-          </div>
-        </ChartCard>
-        <ChartCard
-          title="Portfolio watch"
-          subtitle="Concentration and data signals"
-        >
-          <div className="portfolio-watch">
-            {topGroup && (
-              <div className="watch-insight">
-                <span className="watch-icon">
-                  <Layers3 size={17} />
-                </span>
-                <div>
-                  <strong>
-                    {percent(topGroup.exposure, totalGroupExposure)?.toFixed(
-                      1,
-                    ) ?? "0"}
-                    % group concentration
-                  </strong>
-                  <p>{topGroup.corporateGroupName}</p>
-                  <small>
-                    Largest share of configured-group committed exposure
-                  </small>
-                </div>
-              </div>
-            )}
-            {unavailable > 0 && (
-              <div className="watch-insight">
-                <span className="watch-icon neutral">
-                  <Building2 size={17} />
-                </span>
-                <div>
-                  <strong>
-                    {unavailable} group limit{unavailable === 1 ? "" : "s"} not
-                    configured
-                  </strong>
-                  <p>
-                    Group headroom is unavailable for these observed
-                    relationships.
-                  </p>
-                </div>
-              </div>
-            )}
-            {belowThreshold.length > 0 && (
-              <button
-                className="watch-insight watch-link"
-                onClick={() => assess(belowThreshold[0].id)}
-              >
-                <span className="watch-icon warning">
-                  <AlertTriangle size={17} />
-                </span>
-                <span>
-                  <strong>
-                    {belowThreshold.length} pending request
-                    {belowThreshold.length === 1 ? "" : "s"} below the current
-                    threshold
-                  </strong>
-                  <p>Review existing record history before deciding.</p>
-                </span>
-                <ArrowUpRight size={14} />
-              </button>
-            )}
-            {restricted.length > 0 && (
-              <div className="watch-insight">
-                <span className="watch-icon warning">
-                  <AlertTriangle size={17} />
-                </span>
-                <div>
-                  <strong>
-                    {restricted.length} restricted counterpart
-                    {restricted.length === 1 ? "y" : "ies"}
-                  </strong>
-                  <p>
-                    Frozen or closed counterparties in the observed facilities.
-                  </p>
-                </div>
-              </div>
-            )}
-            {!topGroup &&
-              !unavailable &&
-              !belowThreshold.length &&
-              !restricted.length && (
-                <DataNote>
-                  No concentration or restriction signals are available in the
-                  current scope.
-                </DataNote>
-              )}
-          </div>
+              ))}
+            </div>
+          ) : priorities ? (
+            <Empty title="No pending approvals">
+              No requests are awaiting a decision.
+            </Empty>
+          ) : hasErrors ? (
+            <Empty title="Pending decisions unavailable">
+              Refresh the workspace to try again.
+            </Empty>
+          ) : (
+            <Loading />
+          )}
         </ChartCard>
       </div>
-      <div
-        className="request-status-summary"
-        aria-label="Request status breakdown"
-      >
-        <span>Request register</span>
-        {statuses.map((status) => (
-          <button key={status} onClick={() => navigate("approvals")}>
-            <Badge status={status} />
-            <strong>
-              {requests?.filter((r) => r.status === status).length ?? "—"}
-            </strong>
-            <span className="sr-only">{label(status)} requests</span>
+      <ChartCard
+        title="Recent credit activity"
+        className="ro-recent-activity"
+        action={
+          <button
+            className="text-button"
+            onClick={() => navigate("approvals", undefined, "ALL")}
+          >
+            View all <ArrowRight size={14} />
           </button>
-        ))}
-      </div>
-      <p className="analytics-scope-footnote">
-        Facility totals cover limits discovered from this institution’s requests
-        from request history. The API has no complete individual-limit
-        directory. Group figures cover all configured limits; individual and
-        group capacity are separate controls.
-      </p>
+        }
+      >
+        {recent?.length ? (
+          <div className="ro-activity-list">
+            {recent.map((r) => (
+              <article key={r.id} className="ro-activity-row">
+                <CompanyLogo
+                  name={r.counterpartyName}
+                  domain={counterpartyLogoDomain(r.counterpartyName)}
+                />
+                <div className="ro-activity-company">
+                  <strong>{r.counterpartyName}</strong>
+                  <small>{requestReference(r.id)}</small>
+                </div>
+                <time dateTime={r.updatedAt}>{date(r.updatedAt)}</time>
+                <Badge status={r.status} />
+              </article>
+            ))}
+          </div>
+        ) : recent ? (
+          <Empty title="No recent credit activity">
+            Completed credit updates will appear here.
+          </Empty>
+        ) : hasErrors ? (
+          <Empty title="Recent activity unavailable">
+            Refresh the workspace to try again.
+          </Empty>
+        ) : (
+          <Loading />
+        )}
+      </ChartCard>
     </div>
   );
 }

@@ -80,6 +80,13 @@ async function setup(
           : data.requests,
       );
     else if (path === "/counterparties") response = paged(data.counterparties);
+    else if (path === "/corporate-groups")
+      response = paged(
+        data.groups.map((g) => ({
+          id: g.corporateGroupId,
+          name: g.corporateGroupName,
+        })),
+      );
     else if (path === "/corporate-group-memberships")
       response = data.memberships;
     else if (path === "/group-credit-limits")
@@ -156,7 +163,7 @@ async function setup(
   await page.getByLabel("Password", { exact: true }).fill("ui-fixture-only");
   await page.getByRole("button", { name: "Sign in securely" }).click();
   await expect(
-    page.getByRole("heading", { name: "Credit oversight" }),
+    page.getByRole("heading", { name: "Credit Portfolio Overview" }),
   ).toBeVisible();
   return {
     data,
@@ -188,16 +195,16 @@ test("Overview and full-page analytics render responsive real-value charts at de
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   const { selected } = await setup(page);
-  await expect(page.locator(".overview-kpi")).toHaveCount(4);
+  await expect(page.locator(".overview-kpi")).toHaveCount(3);
   await expect(
     page.getByRole("group", {
       name: "Credit exposure composition chart",
       exact: true,
     }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(
     page.getByRole("group", {
-      name: "Corporate group exposure against approved credit limits",
+      name: "Corporate group utilization",
       exact: true,
     }),
   ).toBeVisible();
@@ -231,8 +238,8 @@ test("Overview and full-page analytics render responsive real-value charts at de
     page.getByText("Received locally", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("group", {
-      name: "Company contributions to committed group exposure",
+    page.getByRole("region", {
+      name: "Company group risk assessment",
       exact: true,
     }),
   ).toBeVisible();
@@ -249,6 +256,12 @@ test("Overview and full-page analytics render responsive real-value charts at de
       )
       .toBe(true);
     await expect(
+      page.getByRole("region", { name: "Credit decision" }),
+    ).toHaveCSS("position", "static");
+    await page
+      .getByRole("button", { name: "Approve & Reserve", exact: true })
+      .scrollIntoViewIfNeeded();
+    await expect(
       page.getByRole("button", { name: "Approve & Reserve", exact: true }),
     ).toBeInViewport();
     await page.mouse.move(5, 5);
@@ -256,21 +269,31 @@ test("Overview and full-page analytics render responsive real-value charts at de
   expect(errors).toEqual([]);
 });
 
-test("Chart tooltips show monetary data and group ordering is interactive", async ({
+test("Compact group exposure bars show ranked utilization and retain financial details", async ({
   page,
 }) => {
   await setup(page);
   const chart = page.getByRole("group", {
-    name: "Corporate group exposure against approved credit limits",
+    name: "Corporate group utilization",
     exact: true,
   });
-  await chart.locator(".recharts-bar-rectangle").first().hover();
-  await expect(chart.locator(".recharts-tooltip-wrapper")).toContainText("BHD");
-  await page.getByLabel("Group chart order").selectOption("exposure");
-  await expect(page.getByLabel("Group chart order")).toHaveValue("exposure");
-  const used = page.getByRole("button", { name: /Used: BHD/ });
-  await used.focus();
-  await expect(used).toBeFocused();
+  await expect(chart.locator(".ro-group-row")).toHaveCount(5);
+  await expect(chart.locator(".ro-group-row").first()).toHaveAttribute(
+    "aria-label",
+    /% utilized\. Committed BHD .*approved limit BHD/,
+  );
+  const percentages = await chart.locator(".ro-group-value").allTextContents();
+  expect(percentages.map(parseFloat)).toEqual(
+    percentages.map(parseFloat).sort((a, b) => b - a),
+  );
+  await page
+    .getByRole("button", { name: "View all groups", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("group", { name: "Counterparty views" })
+      .getByRole("button", { name: "Corporate Groups", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("An unconfigured group is neutral and the historical 80k request is not silently repaired", async ({
@@ -284,11 +307,13 @@ test("An unconfigured group is neutral and the historical 80k request is not sil
   await expect(
     page.getByText(/This existing pending request is below the current/),
   ).toBeVisible();
-  await expect(page.locator(".company-summary")).toContainText("BHD 80,000.00");
-  await expect(page.locator(".company-summary")).toContainText(
-    "BHD 275,000.00",
+  await expect(page.locator(".ra-company-header")).toContainText(
+    "BHD 80,000.00",
   );
-  await expect(page.locator(".company-summary")).toContainText(
+  await expect(page.locator(".ra-capacity-card")).toContainText(
+    "BHD 725,000.00",
+  );
+  await expect(page.locator(".ra-company-header")).not.toContainText(
     "BHD 725,000.00",
   );
   await expect(page.locator(".capacity-values")).toContainText("BHD 75,000.00");
@@ -321,7 +346,7 @@ test("Rejection requires a reason and confirmation and refreshes the actual stat
   expect((await mutation).postDataJSON()).toEqual({
     reason: "Insufficient debt service capacity.",
   });
-  await expect(page.locator(".company-status")).toContainText("Rejected");
+  await expect(page.locator(".ra-badges")).toContainText("Rejected");
   await expect(
     page.getByRole("button", { name: "Approve & Reserve", exact: true }),
   ).toBeDisabled();
@@ -383,9 +408,16 @@ test("Group assessment uses one selected-group POST and displays independent suc
   )?.corporateGroupId;
   const group = data.groups.find((g) => g.corporateGroupId !== requestGroup)!;
   await page
+    .getByText("Other portfolio group assessments", { exact: true })
+    .click();
+  await page
     .getByLabel("Corporate group to assess")
     .selectOption(String(group.corporateGroupId));
   await page
+    .getByRole("region", {
+      name: "Parallel group risk assessment",
+      exact: true,
+    })
     .getByRole("button", { name: "Run group assessment", exact: true })
     .click();
   const section = page.getByRole("region", {
@@ -423,6 +455,13 @@ test("A group assessment API failure offers retry without inventing results", as
   );
   await assess(page, selected.id);
   await page
+    .getByText("Other portfolio group assessments", { exact: true })
+    .click();
+  await page
+    .getByRole("region", {
+      name: "Parallel group risk assessment",
+      exact: true,
+    })
     .getByRole("button", { name: "Run group assessment", exact: true })
     .click();
   const section = page.getByRole("region", {
@@ -433,6 +472,388 @@ test("A group assessment API failure offers retry without inventing results", as
   );
   await expect(section.getByRole("table")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Run group assessment", exact: true }),
+    page
+      .getByRole("region", {
+        name: "Parallel group risk assessment",
+        exact: true,
+      })
+      .getByRole("button", { name: "Run group assessment", exact: true }),
   ).toBeEnabled();
 });
+
+test("Overview keeps three priority requests and no redundant widgets", async ({
+  page,
+}) => {
+  const { data, selected } = await setup(page);
+  data.requests.push({
+    ...selected,
+    id: 9999,
+    amount: 1000000,
+    counterpartyName: "Visa Inc.",
+  });
+  await page
+    .getByRole("button", { name: "Refresh workspace", exact: true })
+    .click();
+  const decisions = page.locator(".ro-decision");
+  await expect(decisions).toHaveCount(3);
+  await expect(decisions.first()).toContainText("Visa Inc.");
+  await expect(decisions.first().locator(".company-logo")).toBeVisible();
+  await expect(page.locator(".ro-decision-amount").first()).toContainText(
+    "BD 1,000,000",
+  );
+  await expect(page.locator(".request-status-summary")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Portfolio watch", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", {
+      name: "Credit exposure composition",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Risk alerts", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator(".ro-overview-scope")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Recent credit activity", exact: true }),
+  ).toBeVisible();
+  await decisions.first().click();
+  await expect(
+    page.getByRole("heading", { name: "Risk Analytics", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Select credit request for assessment"),
+  ).toHaveValue("9999");
+});
+
+test("Recent activity uses the four latest recorded updates without duplicating pending decisions", async ({
+  page,
+}) => {
+  const { data, selected } = await setup(page);
+  ["RESERVED", "REJECTED", "USED", "CANCELLED", "EXPIRED"].forEach(
+    (status, index) => {
+      data.requests.push({
+        ...selected,
+        id: 9100 + index,
+        status,
+        updatedAt: `2026-11-18T00:0${index}:00`,
+        counterpartyName: "Visa Inc.",
+      });
+    },
+  );
+  await page
+    .getByRole("button", { name: "Refresh workspace", exact: true })
+    .click();
+  const activity = page.locator(".ro-activity-row");
+  await expect(activity).toHaveCount(4);
+  await expect(activity.first()).toContainText("CR-009104");
+  await expect(activity.last()).toContainText("CR-009101");
+  await expect(activity.first().locator("time")).toHaveAttribute(
+    "datetime",
+    "2026-11-18T00:04:00",
+  );
+  await expect(activity.first().locator(".company-logo")).toBeVisible();
+  await expect(activity.first()).toContainText("Expired");
+  await expect(activity.last()).toContainText("Rejected");
+  await expect(
+    activity.getByText("Pending approval", { exact: true }),
+  ).toHaveCount(0);
+  const pendingRefs = await page
+    .locator(".ro-decision-company small")
+    .allTextContents();
+  const recentText = await page.locator(".ro-activity-list").innerText();
+  pendingRefs.forEach((reference) =>
+    expect(recentText).not.toContain(reference),
+  );
+  await page.getByRole("button", { name: "View all", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Approval queue", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("combobox", { name: "Status", exact: true }),
+  ).toHaveValue("");
+  await page
+    .getByRole("textbox", { name: "Search requests", exact: true })
+    .fill("9104");
+  await expect(page.getByRole("main")).toContainText("CR-009104");
+});
+
+test("Recent credit activity shows an honest empty state when only pending requests exist", async ({
+  page,
+}) => {
+  const { data } = await setup(page);
+  data.requests = data.requests.filter(
+    (request) => request.status === "PENDING_APPROVAL",
+  );
+  await page
+    .getByRole("button", { name: "Refresh workspace", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "No recent credit activity",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".ro-activity-row")).toHaveCount(0);
+  await expect(page.locator(".ro-decision")).toHaveCount(3);
+});
+
+test("Assessment uses one financial section, scoped group results and compact activity", async ({
+  page,
+}) => {
+  const { data, selected } = await setup(page);
+  for (let i = 0; i < 6; i++)
+    data.requests.push({
+      ...selected,
+      id: 9200 + i,
+      status: "USED",
+      createdAt: `2026-11-01T10:0${i}:00`,
+    });
+  await page
+    .getByRole("button", { name: "Refresh workspace", exact: true })
+    .click();
+  await assess(page, selected.id);
+  const header = page.getByRole("region", {
+    name: "Company and request summary",
+  });
+  await expect(header).toContainText(selected.counterpartyName);
+  await expect(header.locator(".company-logo")).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { name: "Financial Health", exact: true }),
+  ).toHaveCount(1);
+  await expect(page.locator(".ra-financial-categories dl > div")).toHaveCount(
+    6,
+  );
+  const profile = data.profiles.find(
+    (p) => p.counterpartyId === selected.counterpartyId,
+  )!;
+  await expect(
+    page.getByRole("region", { name: "Profitability", exact: true }),
+  ).toContainText(`${profile.returnOnAssets}%`);
+  await expect(
+    page.getByRole("region", { name: "Capital Structure", exact: true }),
+  ).toContainText(`${profile.debtToTotalCapitalPercent}%`);
+  await expect(
+    page.locator(
+      ".group-history-grid, .financial-analytics-grid, .assessment-summary-values",
+    ),
+  ).toHaveCount(0);
+  await expect(page.locator(".ra-recent-card .ra-activity-row")).toHaveCount(3);
+  await expect(page.locator(".ra-recent-card")).not.toContainText(
+    `CR-${String(selected.id).padStart(6, "0")}`,
+  );
+  await page
+    .getByRole("button", { name: "View complete history", exact: true })
+    .click();
+  await expect(page.locator(".ra-recent-card .ra-activity-row")).toHaveCount(
+    data.requests.filter((r) => r.counterpartyId === selected.counterpartyId)
+      .length,
+  );
+  await page.getByRole("button", { name: "Show less", exact: true }).click();
+  const membership = data.memberships.find(
+    (m) => m.counterpartyId === selected.counterpartyId,
+  )!;
+  let requestedGroup = "";
+  await page.route("**/api/corporate-groups/*/risk-assessment", (route) => {
+    requestedGroup = new URL(route.request().url()).pathname;
+    return route.fulfill({ json: [] });
+  });
+  await page
+    .getByRole("region", { name: "Company group risk assessment", exact: true })
+    .getByRole("button", { name: "Run group assessment", exact: true })
+    .click();
+  await expect
+    .poll(() => requestedGroup)
+    .toBe(
+      `/api/corporate-groups/${membership.corporateGroupId}/risk-assessment`,
+    );
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Company group risk assessment",
+        exact: true,
+      })
+      .getByRole("combobox"),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel("Select credit request for assessment"),
+  ).toHaveValue(String(selected.id));
+  await page
+    .getByRole("button", { name: "Run risk prediction", exact: true })
+    .click();
+  for (const width of [1440, 1280, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    ).toBe(true);
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.screenshot({
+      path: `/private/tmp/lg-risk-analytics-${width}.png`,
+      fullPage: true,
+    });
+  }
+});
+
+test("Standalone assessment omits the empty group card and maker cannot decide", async ({
+  page,
+}) => {
+  const { data, selected } = await setup(page);
+  data.memberships = data.memberships.filter(
+    (m) => m.counterpartyId !== selected.counterpartyId,
+  );
+  selected.requesterId = 3;
+  await page
+    .getByRole("button", { name: "Refresh workspace", exact: true })
+    .click();
+  await assess(page, selected.id);
+  await expect(
+    page.getByRole("region", { name: "Company and request summary" }),
+  ).toContainText("Standalone company");
+  await expect(page.locator(".ra-company-group")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Approve & Reserve", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Reject Request", exact: true }),
+  ).toBeDisabled();
+});
+
+test("Prediction loading, failure, retry and invalid probabilities never fabricate results", async ({
+  page,
+}) => {
+  const { selected } = await setup(page);
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let attempt = 0;
+  await page.route("**/api/counterparties/*/risk-prediction", async (route) => {
+    attempt++;
+    if (attempt === 1) {
+      await gate;
+      return route.fulfill({ status: 503, json: { message: "Unavailable" } });
+    }
+    return route.fulfill({
+      json: {
+        probability: attempt === 2 ? null : 0.019891539834388967,
+        riskLevel: "LOW_RISK",
+        modelVersion: "financial-risk-model-sklearn-1.6.1",
+      },
+    });
+  });
+  await assess(page, selected.id);
+  await page
+    .getByRole("button", { name: "Run risk prediction", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Running model…", exact: true }),
+  ).toBeDisabled();
+  await expect(page.locator(".probability-plot")).toHaveAttribute(
+    "data-risk",
+    "unavailable",
+  );
+  await expect(page.locator(".probability-center strong")).toHaveText("—");
+  release();
+  await expect(page.locator(".ra-model-card").getByRole("alert")).toContainText(
+    "could not complete",
+  );
+  await page
+    .getByRole("button", { name: "Run risk prediction", exact: true })
+    .click();
+  await expect(page.locator(".ra-model-card").getByRole("alert")).toContainText(
+    "unsupported prediction",
+  );
+  await expect(
+    page.getByRole("group", { name: "Model not yet run", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Run risk prediction", exact: true })
+    .click();
+  await expect(
+    page.getByRole("group", {
+      name: "Class 1 probability: 1.99 percent",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".ra-model-card")).toContainText(
+    "not a verified probability of default",
+  );
+});
+
+for (const [classification, tone, color] of [
+  ["LOW_RISK", "low", "rgb(20, 125, 104)"],
+  ["MEDIUM_RISK", "medium", "rgb(156, 107, 33)"],
+  ["HIGH_RISK", "high", "rgb(169, 80, 93)"],
+] as const) {
+  test(`ML gauge uses returned ${classification} styling without changing probability`, async ({
+    page,
+  }) => {
+    const { selected } = await setup(page);
+    const probability = 0.019891539834388967;
+    // Identical probabilities prove that color follows the API classification, not a frontend threshold.
+    await page.route("**/api/counterparties/*/risk-prediction", (route) =>
+      route.fulfill({
+        json: {
+          probability,
+          riskLevel: classification,
+          modelVersion: "fixture-model-version",
+        },
+      }),
+    );
+    await assess(page, selected.id);
+    await page
+      .getByRole("button", { name: "Run risk prediction", exact: true })
+      .click();
+    const gauge = page.getByRole("group", {
+      name: "Class 1 probability: 1.99 percent",
+      exact: true,
+    });
+    await expect(gauge).toHaveAttribute("data-risk", tone);
+    await expect(gauge).toHaveAttribute(
+      "data-probability",
+      String(probability),
+    );
+    await expect(gauge).toHaveAttribute(
+      "title",
+      `Model-returned class-1 probability: ${probability}`,
+    );
+    await expect(gauge.locator(".probability-center strong")).toHaveText(
+      "1.99%",
+    );
+    await expect(gauge.locator(".probability-center strong")).toHaveCSS(
+      "color",
+      color,
+    );
+    const badge = page.locator(
+      `.ra-model-output .badge.${classification.toLowerCase()}`,
+    );
+    await expect(badge).toBeVisible();
+    const badgeStyle = await badge.evaluate((node) => ({
+      background: getComputedStyle(node).backgroundColor,
+      border: getComputedStyle(node).borderColor,
+    }));
+    expect(badgeStyle.background).not.toBe("rgba(0, 0, 0, 0)");
+    expect(badgeStyle.border).not.toBe("rgba(0, 0, 0, 0)");
+    await expect(page.locator(".ra-model-card")).toContainText(
+      "not a verified probability of default",
+    );
+    await expect(page.locator(".ra-model-metadata")).toContainText(
+      "fixture-model-version",
+    );
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await expect(gauge).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+      ).toBe(true);
+      await page
+        .locator(".ra-model-card")
+        .screenshot({ path: `/private/tmp/lg-ml-card-${tone}-${width}.png` });
+    }
+  });
+}

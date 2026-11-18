@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -372,35 +372,103 @@ export function ProbabilityGauge({
   probability: number | null;
   risk: string | null;
 }) {
-  const color =
-    risk === "HIGH_RISK"
-      ? CHART_COLORS.red
+  const gradientId = useId().replace(/:/g, "");
+  // Color follows the returned classification, never a locally inferred threshold.
+  const tone =
+    risk === "LOW_RISK"
+      ? "low"
       : risk === "MEDIUM_RISK"
-        ? CHART_COLORS.amber
-        : CHART_COLORS.green;
-  const data =
-    probability === null
-      ? [{ name: "Not run", value: 1, fill: "#e8edf2" }]
-      : [
-          { name: "Class 1 probability", value: probability, fill: color },
-          {
-            name: "Remaining probability",
-            value: 1 - probability,
-            fill: "#e8edf2",
-          },
-        ];
+        ? "medium"
+        : risk === "HIGH_RISK"
+          ? "high"
+          : "unavailable";
+  const available =
+    probability !== null &&
+    Number.isFinite(probability) &&
+    probability >= 0 &&
+    probability <= 1 &&
+    tone !== "unavailable";
+  const palette = {
+    low: {
+      color: "#147d68",
+      highlight: "#36b99c",
+      track: "#c1e8dc",
+      fade: "#e1f3ec",
+    },
+    medium: {
+      color: "#9c6b21",
+      highlight: "#d6aa54",
+      track: "#efdfb7",
+      fade: "#faf1dc",
+    },
+    high: {
+      color: "#a9505d",
+      highlight: "#cf8a94",
+      track: "#eac9ce",
+      fade: "#f7e8eb",
+    },
+    unavailable: {
+      color: "#8391a2",
+      highlight: "#b9c5d1",
+      track: "#e4ebf1",
+      fade: "#f2f5f8",
+    },
+  }[available ? tone : "unavailable"];
+  const data = !available
+    ? [{ name: "Not run", value: 1, fill: `url(#${gradientId}-track)` }]
+    : [
+        {
+          name: "Class 1 probability",
+          value: probability,
+          fill: `url(#${gradientId}-value)`,
+        },
+        {
+          name: "Remaining probability",
+          value: 1 - probability,
+          fill: `url(#${gradientId}-track)`,
+        },
+      ];
   return (
     <div
       className="probability-plot"
+      data-risk={available ? tone : "unavailable"}
+      data-probability={available ? probability : undefined}
+      title={
+        available
+          ? `Model-returned class-1 probability: ${probability}`
+          : "No current model result"
+      }
       role="group"
       aria-label={
-        probability === null
+        !available
           ? "Model not yet run"
           : `Class 1 probability: ${(probability * 100).toFixed(2)} percent`
       }
     >
       <ResponsiveContainer width="100%" height="100%">
         <PieChart accessibilityLayer>
+          <defs>
+            <linearGradient
+              id={`${gradientId}-value`}
+              x1="0"
+              y1="0"
+              x2="1"
+              y2="1"
+            >
+              <stop offset="0%" stopColor={palette.highlight} />
+              <stop offset="100%" stopColor={palette.color} />
+            </linearGradient>
+            <linearGradient
+              id={`${gradientId}-track`}
+              x1="0"
+              y1="0"
+              x2="1"
+              y2="1"
+            >
+              <stop offset="0%" stopColor={palette.track} />
+              <stop offset="100%" stopColor={palette.fade} />
+            </linearGradient>
+          </defs>
           <Pie
             data={data}
             dataKey="value"
@@ -416,7 +484,7 @@ export function ProbabilityGauge({
               <Cell key={p.name} fill={p.fill} />
             ))}
           </Pie>
-          {probability !== null && (
+          {available && (
             <Tooltip
               formatter={(v) => `${(Number(v) * 100).toFixed(2)}%`}
               contentStyle={tooltipStyle}
@@ -427,8 +495,8 @@ export function ProbabilityGauge({
         </PieChart>
       </ResponsiveContainer>
       <div className="probability-center">
-        <strong style={{ color: probability === null ? "#8391a2" : color }}>
-          {probability === null ? "—" : (probability * 100).toFixed(2)}
+        <strong style={{ color: palette.color }}>
+          {!available ? "—" : (probability * 100).toFixed(2)}
           {probability !== null && <small>%</small>}
         </strong>
         <span>Class 1 probability</span>
