@@ -92,6 +92,13 @@ pipeline {
                 DB_URL                              = 'jdbc:postgresql://localhost:55439/limitguard'
                 DB_USERNAME                         = 'postgres'
                 DB_PASSWORD                         = 'ci-test-only'
+                // No Kafka in CI: keep the credit service's background jobs off while testing.
+                // (The expiry Cucumber test switches expiry back on in its own settings.)
+                LIMITGUARD_NOTIFICATION_RELAY_ENABLED   = 'false'
+                LIMITGUARD_CREDIT_REQUEST_EXPIRY_ENABLED = 'false'
+                LIMITGUARD_EXPOSURE_SNAPSHOTS_ENABLED   = 'false'
+                // Testcontainers' cleanup container (Ryuk) often fails with Docker Desktop.
+                TESTCONTAINERS_RYUK_DISABLED        = 'true'
             }
             stages {
                 stage('Test database') {
@@ -115,7 +122,19 @@ pipeline {
                     post { always { junit allowEmptyResults: true, testResults: 'auth-service/target/surefire-reports/*.xml' } }
                 }
                 stage('Credit Service') {
-                    steps { dir('credit-service') { sh 'bash ./mvnw -B -ntp test' } }
+                    steps {
+                        dir('credit-service') {
+                            sh '''
+                                # The Cucumber expiry test starts PostgreSQL with Testcontainers.
+                                # Point it at Docker Desktop when the standard socket is not there.
+                                if [ ! -S /var/run/docker.sock ] && [ -S "$HOME/.docker/run/docker.sock" ]; then
+                                  export DOCKER_HOST="unix://$HOME/.docker/run/docker.sock"
+                                  export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+                                fi
+                                bash ./mvnw -B -ntp test
+                            '''
+                        }
+                    }
                     post { always { junit allowEmptyResults: true, testResults: 'credit-service/target/surefire-reports/*.xml' } }
                 }
                 stage('Activity Service') {
