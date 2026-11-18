@@ -46,3 +46,11 @@ __pycache__/
 
 # Local work sign-in configuration (may contain provider secrets)
 /sso.local.yml
+
+# Local environment variables and secrets
+# prevents local environment file from being committed
+.env
+# ignores other local environment files
+.env.*
+# allows example configuration files to be committed
+!.env.example

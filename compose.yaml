@@ -1,0 +1,141 @@
+services:
+
+  # ==========================================
+  # 1. POSTGRESQL DATABASE
+  # ==========================================
+
+  # PostgreSQL database for the Docker environment
+  postgres:
+    # Use the official PostgreSQL 17 image
+    image: postgres:17
+
+    # Give the container a recognizable name
+    container_name: limitguard-compose-postgres
+
+    # Configure the database created at startup
+    environment:
+      POSTGRES_DB: limitguard
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+    # Store database data in a separate Docker volume
+    volumes:
+      - limitguard_compose_postgres_data:/var/lib/postgresql/data
+
+      # Initialize the database using our existing schema.sql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+    # Check whether PostgreSQL is ready for connections
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d limitguard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    # Restart if the container stops unexpectedly
+    restart: unless-stopped
+
+  # ==========================================
+  # 2. APACHE KAFKA
+  # ==========================================
+
+  # Kafka message broker for communication between microservices
+  kafka:
+    # Use the official Apache Kafka image
+    image: apache/kafka:3.9.1
+
+    # Give the container a recognizable name
+    container_name: limitguard-compose-kafka
+
+    # Configure Kafka to run without ZooKeeper (KRaft mode)
+    environment:
+      # Unique identifier for this Kafka broker
+      KAFKA_NODE_ID: 1
+
+      # Kafka acts as both broker and controller
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      # Kafka listens for internal connections on port 9092
+      # Port 9093 is used for controller communication
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+
+      # Other Docker services connect using kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+
+      # Configure communication protocols
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Single-node Kafka controller configuration
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+
+      # Allow Kafka to operate with one broker
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      # Automatically create topics when requested
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+    # Store Kafka data in a separate Docker volume
+    volumes:
+      - limitguard_compose_kafka_data:/var/lib/kafka/data
+
+    # Restart Kafka if the container stops unexpectedly
+    restart: unless-stopped
+
+
+  # ==========================================
+  # 3. AUTH SERVICE
+  # ==========================================
+
+  # Handles user registration, login, and authentication
+  auth-service:
+    # Use the Docker image we built earlier
+    image: limitguard-auth:local
+
+    # Give the container a recognizable name
+    container_name: limitguard-compose-auth
+
+    # Environment variables used by Spring Boot
+    environment:
+      # Connect to our isolated Docker PostgreSQL database
+      DB_URL: jdbc:postgresql://postgres:5432/limitguard
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      # Authentication settings
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+
+      # Shared secret for communication between services
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+
+      # Store uploaded profile pictures inside the container
+      PROFILE_PICTURE_DIRECTORY: /app/uploads/profile-pictures
+
+    # Wait until PostgreSQL passes its health check
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # Store uploaded profile pictures in a persistent volume
+    volumes:
+      - limitguard_compose_profile_pictures:/app/uploads/profile-pictures
+
+    # Restart if the service stops unexpectedly
+    restart: unless-stopped
+
+
+
+# ==========================================
+# PERSISTENT DOCKER VOLUMES
+# ==========================================
+
+# Docker manages these volumes independently
+# of your existing local PostgreSQL database
+volumes:
+  limitguard_compose_postgres_data:
+  limitguard_compose_kafka_data:
+  limitguard_compose_profile_pictures:
