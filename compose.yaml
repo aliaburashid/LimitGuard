@@ -35,6 +35,7 @@ services:
     # Restart if the container stops unexpectedly
     restart: unless-stopped
 
+
   # ==========================================
   # 2. APACHE KAFKA
   # ==========================================
@@ -103,7 +104,7 @@ services:
       # Connect to our isolated Docker PostgreSQL database
       DB_URL: jdbc:postgresql://postgres:5432/limitguard
       DB_USERNAME: postgres
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
 
       # Authentication settings
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
@@ -111,6 +112,16 @@ services:
 
       # Shared secret for communication between services
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+
+      # Gmail SMTP configuration
+      GMAIL_USERNAME: ${GMAIL_USERNAME:?Set GMAIL_USERNAME in .env}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:?Set GMAIL_APP_PASSWORD in .env}
+
+      # Shared key for Activity Service notification recipients
+      ACTIVITY_NOTIFICATION_RECIPIENT_KEY: ${ACTIVITY_NOTIFICATION_RECIPIENT_KEY:?Set ACTIVITY_NOTIFICATION_RECIPIENT_KEY in .env}
+
+      # Enable development email configuration
+      SPRING_PROFILES_ACTIVE: dev
 
       # Store uploaded profile pictures inside the container
       PROFILE_PICTURE_DIRECTORY: /app/uploads/profile-pictures
@@ -127,6 +138,183 @@ services:
     # Restart if the service stops unexpectedly
     restart: unless-stopped
 
+  # ==========================================
+  # 4. CREDIT SERVICE
+  # ==========================================
+
+  # Handles credit limits, requests, approvals, and counterparties
+  credit-service:
+    image: limitguard-credit:local
+
+    container_name: limitguard-compose-credit
+
+    environment:
+      # Connect to the isolated Docker PostgreSQL database
+      DB_URL: jdbc:postgresql://postgres:5432/limitguard
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+      # Authentication settings
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+
+      # Shared secret for internal communication
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+
+      # Connect to Kafka inside Docker
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+      # ------------------------------------------
+      # ML SERVICE CONNECTION
+      # ------------------------------------------
+
+      # Connect to the Python FastAPI ML Service
+      ML_SERVICE_URL: http://ml-service:8000
+
+      # ------------------------------------------
+      # AUTH SERVICE CONNECTION
+      # ------------------------------------------
+
+      # Connect to Auth Service inside Docker
+      AUTH_SERVICE_URL: http://auth-service:8081
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      ml-service:
+        condition: service_started
+
+    restart: unless-stopped
+
+  # ==========================================
+  # 5. ACTIVITY SERVICE
+  # ==========================================
+
+  # Handles activity events and email notifications
+  activity-service:
+    image: limitguard-activity:local
+
+    container_name: limitguard-compose-activity
+
+    environment:
+      # Connect to the isolated Docker PostgreSQL database
+      DB_URL: jdbc:postgresql://postgres:5432/limitguard
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+      # Kafka configuration
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ACTIVITY_KAFKA_GROUP_ID: limitguard-activity-service
+
+      # Communication with Auth Service
+      AUTH_SERVICE_URL: http://auth-service:8081
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+
+      # Enable email event processing
+      ACTIVITY_EMAIL_CONSUMER_ENABLED: "true"
+      ACTIVITY_EMAIL_DELIVERY_ENABLED: "true"
+      ACTIVITY_EMAIL_KAFKA_GROUP_ID: limitguard-activity-email-v1
+
+      # Gmail SMTP configuration
+      GMAIL_USERNAME: ${GMAIL_USERNAME:?Set GMAIL_USERNAME in .env}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:?Set GMAIL_APP_PASSWORD in .env}
+
+      # Notification recipient authentication
+      ACTIVITY_NOTIFICATION_RECIPIENT_KEY: ${ACTIVITY_NOTIFICATION_RECIPIENT_KEY:?Set ACTIVITY_NOTIFICATION_RECIPIENT_KEY in .env}
+
+      # SMTP security
+      ACTIVITY_SMTP_AUTH: "true"
+      ACTIVITY_SMTP_STARTTLS: "true"
+
+    # Wait for PostgreSQL and start after Kafka and Auth Service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      auth-service:
+        condition: service_started
+
+    restart: unless-stopped
+
+  # ==========================================
+  # 6. API GATEWAY
+  # ==========================================
+
+  # Routes frontend requests to backend services
+  api-gateway:
+    image: limitguard-gateway:local
+
+    container_name: limitguard-compose-gateway
+
+    environment:
+      # Spring Boot server port
+      SERVER_PORT: 8080
+
+      # Backend service addresses inside Docker
+      AUTH_SERVICE_URL: http://auth-service:8081
+      CREDIT_SERVICE_URL: http://credit-service:8082
+      ACTIVITY_SERVICE_URL: http://activity-service:8083
+
+    # Expose API Gateway to your Mac
+    ports:
+      - "8080:8080"
+
+    # Start after the backend services
+    depends_on:
+      - auth-service
+      - credit-service
+      - activity-service
+
+    restart: unless-stopped
+
+  # ==========================================
+  # 7. ML SERVICE
+  # ==========================================
+
+  # Handles machine learning predictions using FastAPI
+  ml-service:
+    # Use the Docker image we built earlier
+    image: limitguard-ml:local
+
+    # Give the container a recognizable name
+    container_name: limitguard-compose-ml
+
+    # FastAPI listens on port 8000 inside Docker
+    # Other Docker services can access it using http://ml-service:8000
+    expose:
+      - "8000"
+
+    # Restart if the service stops unexpectedly
+    restart: unless-stopped
+
+
+  # ==========================================
+  # 8. REACT FRONTEND
+  # ==========================================
+
+  # Serves the React application using Nginx
+  frontend:
+    # Use the Docker image we built earlier
+    image: limitguard-frontend:local
+
+    # Give the container a recognizable name
+    container_name: limitguard-compose-frontend
+
+    # Map port 5180 on our Mac to port 80 inside Docker
+    ports:
+      - "5180:80"
+
+    # Start after API Gateway
+    depends_on:
+      - api-gateway
+
+    # Restart if the container stops unexpectedly
+    restart: unless-stopped
 
 
 # ==========================================
