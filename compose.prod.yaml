@@ -1,0 +1,171 @@
+# LimitGuard production stack for one EC2 instance.
+#
+# - Images come from Amazon ECR (built and pushed by the Jenkinsfile).
+# - PostgreSQL is Amazon RDS (no database container here).
+# - Kafka runs as a container on the same instance.
+#
+# Jenkins copies it to the server as /opt/limitguard/compose.yaml and writes
+# /opt/limitguard/.env from its "limitguard-env" secret file credential.
+#
+# Required variables (from .env or the deploy script):
+#   REGISTRY   e.g. 123456789012.dkr.ecr.me-south-1.amazonaws.com
+#   IMAGE_TAG  e.g. a1b2c3d (git commit) or latest
+
+name: limitguard
+
+x-java-limits: &java-limits
+  # One t3.large has 8 GB for everything, so cap each JVM.
+  JAVA_TOOL_OPTIONS: "-Xms128m -Xmx512m -XX:+UseSerialGC"
+
+services:
+
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: limitguard-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    restart: unless-stopped
+
+  auth-service:
+    image: ${REGISTRY:?Set REGISTRY}/limitguard/auth:${IMAGE_TAG:-latest}
+    container_name: limitguard-auth
+    environment:
+      <<: *java-limits
+      DB_URL: jdbc:postgresql://${DB_HOST:?Set DB_HOST in .env}:5432/limitguard?sslmode=require
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+      GMAIL_USERNAME: ${GMAIL_USERNAME:?Set GMAIL_USERNAME in .env}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:?Set GMAIL_APP_PASSWORD in .env}
+      ACTIVITY_NOTIFICATION_RECIPIENT_KEY: ${ACTIVITY_NOTIFICATION_RECIPIENT_KEY:?Set ACTIVITY_NOTIFICATION_RECIPIENT_KEY in .env}
+      # Demo seeding is a safety net: it only adds missing demo banks/users.
+      SPRING_PROFILES_ACTIVE: dev,demo
+      LIMITGUARD_SEED_DEMO_ENABLED: ${LIMITGUARD_SEED_DEMO_ENABLED:-true}
+      LIMITGUARD_SEED_DEMO_PROVISION_CITI: "true"
+      LIMITGUARD_DEMO_PASSWORD: ${LIMITGUARD_DEMO_PASSWORD:?Set LIMITGUARD_DEMO_PASSWORD in .env}
+      PROFILE_PICTURE_DIRECTORY: /app/uploads/profile-pictures
+    volumes:
+      - ./uploads:/app/uploads/profile-pictures
+    # Healthy only after startup seeding finished (the startup filter returns 503 until then).
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8081 &&
+          printf 'GET /api/financial-institutions/directory HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          head -n 1 <&3 | grep -q ' 200'
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 90s
+    restart: unless-stopped
+
+  credit-service:
+    image: ${REGISTRY}/limitguard/credit:${IMAGE_TAG:-latest}
+    container_name: limitguard-credit
+    environment:
+      <<: *java-limits
+      DB_URL: jdbc:postgresql://${DB_HOST}:5432/limitguard?sslmode=require
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ML_SERVICE_URL: http://ml-service:8000
+      AUTH_SERVICE_URL: http://auth-service:8081
+      SPRING_PROFILES_ACTIVE: demo
+      LIMITGUARD_SEED_CITI_ENABLED: ${LIMITGUARD_SEED_DEMO_ENABLED:-true}
+      LIMITGUARD_SEED_GIB_ENABLED: ${LIMITGUARD_SEED_DEMO_ENABLED:-true}
+    depends_on:
+      kafka:
+        condition: service_started
+      auth-service:
+        condition: service_healthy
+      ml-service:
+        condition: service_started
+    restart: unless-stopped
+
+  activity-service:
+    image: ${REGISTRY}/limitguard/activity:${IMAGE_TAG:-latest}
+    container_name: limitguard-activity
+    environment:
+      <<: *java-limits
+      DB_URL: jdbc:postgresql://${DB_HOST}:5432/limitguard?sslmode=require
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ACTIVITY_KAFKA_GROUP_ID: limitguard-activity-service
+      AUTH_SERVICE_URL: http://auth-service:8081
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      ACTIVITY_EMAIL_CONSUMER_ENABLED: "true"
+      ACTIVITY_EMAIL_DELIVERY_ENABLED: "true"
+      ACTIVITY_EMAIL_KAFKA_GROUP_ID: limitguard-activity-email-v1
+      GMAIL_USERNAME: ${GMAIL_USERNAME}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
+      ACTIVITY_NOTIFICATION_RECIPIENT_KEY: ${ACTIVITY_NOTIFICATION_RECIPIENT_KEY}
+      ACTIVITY_SMTP_AUTH: "true"
+      ACTIVITY_SMTP_STARTTLS: "true"
+    depends_on:
+      kafka:
+        condition: service_started
+      auth-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-gateway:
+    image: ${REGISTRY}/limitguard/gateway:${IMAGE_TAG:-latest}
+    container_name: limitguard-gateway
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xms64m -Xmx256m -XX:+UseSerialGC"
+      SERVER_PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:8081
+      CREDIT_SERVICE_URL: http://credit-service:8082
+      ACTIVITY_SERVICE_URL: http://activity-service:8083
+    # Not published: the browser reaches it through the frontend's /api proxy.
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      credit-service:
+        condition: service_started
+      activity-service:
+        condition: service_started
+    restart: unless-stopped
+
+  ml-service:
+    image: ${REGISTRY}/limitguard/ml:${IMAGE_TAG:-latest}
+    container_name: limitguard-ml
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  frontend:
+    image: ${REGISTRY}/limitguard/frontend:${IMAGE_TAG:-latest}
+    container_name: limitguard-frontend
+    # The public entry point: http://<server-ip>/
+    ports:
+      - "80:80"
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+volumes:
+  kafka_data:

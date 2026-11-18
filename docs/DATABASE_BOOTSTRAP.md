@@ -79,3 +79,71 @@ psql -X --host=127.0.0.1 --port=5432 --username="$DB_USERNAME" \
 - **Activity:** `credit_request_email_deliveries` uses the event ID as its primary key, allowing the queue insert to deduplicate events. It checks supported email event types and defaults the delivery state to `PENDING`. Event references in the outbox and delivery queue, and institution/facility identifiers in historical snapshots, follow the existing schema without foreign keys.
 
 V001 defines the column types, defaults, relationship constraints, unique keys, and checks for existing status and event values. PostgreSQL creates the indexes backing the primary and unique keys. The reporting-date index brings the baseline to **33 indexes**, including those constraint indexes.
+
+
+## First institution and administrator (empty installations only)
+
+Schema initialization and account bootstrap are separate operations. After applying
+`database/schema.sql`, Auth can provision one initial institution and administrator.
+No public bootstrap endpoint exists. Existing registration and authorization are unchanged.
+
+Bootstrap is disabled by default. For one controlled Auth startup, supply these environment
+variables through a private deployment environment (never commit values or put passwords
+in command-line arguments):
+
+```ini
+AUTH_BOOTSTRAP_ENABLED=true
+AUTH_BOOTSTRAP_INSTITUTION_NAME=<initial institution name>
+AUTH_BOOTSTRAP_ADMIN_FIRST_NAME=<first name>
+AUTH_BOOTSTRAP_ADMIN_LAST_NAME=<last name>
+AUTH_BOOTSTRAP_ADMIN_EMAIL=<operator-controlled email>
+AUTH_BOOTSTRAP_ADMIN_PASSWORD=<strong unique password>
+```
+
+The password must meet normal registration requirements: at least eight characters,
+including uppercase, lowercase, a digit, and a special character; at most 72 UTF-8 bytes.
+Auth uses its existing BCrypt encoder. The initial administrator is ACTIVE and verified;
+the deployment operator is responsible for verifying this initial identity. Public users
+still follow the normal email verification flow. No bootstrap emails or notifications are sent.
+
+Both `users` and `financial_institutions` must be empty. Bootstrap takes exclusive PostgreSQL
+table locks before checking counts, blocking concurrent inserts until the transaction ends.
+Both records commit together; failure rolls back both. Repeating bootstrap against populated
+tables fails startup rather than updating credentials. Lock acquisition has a 15-second timeout.
+Do not combine bootstrap with demo seeding. IDs are generated, never forced to Citi ID 5.
+The existing Citi/GIB demo prerequisites remain a separate concern.
+
+During enabled bootstrap, Auth rejects all HTTP requests with 503 until ApplicationReadyEvent,
+after startup runners complete successfully. Compose waits for Auth's HTTP health check before
+starting the Gateway. An already-running Gateway also receives 503 while Auth is initializing.
+Rebuild the Auth image before using this functionality (`docker compose up --build`).
+Do not expose the application to users until this controlled first startup succeeds.
+
+**Immediately after success:** disable `AUTH_BOOTSTRAP_ENABLED`, remove all bootstrap credential
+variables from the deployment environment, and recreate the Auth container with that clean
+environment. A simple container restart retains the old environment and will fail the populated
+DB guard. Java cannot erase Docker's launch environment, and immutable JVM strings cannot be
+reliably zeroed. Bootstrap never logs credentials, stores only a BCrypt hash, and does not retain
+plaintext in application fields; container recreation is required to remove deployment-level
+plaintext. Docker administrators can inspect container environments, so restrict daemon access.
+For AWS, inject the one-time password using Secrets Manager/SSM and remove that task configuration
+after initialization. Do not embed it in an image, tracked .env file, or task definition plaintext.
+
+This does not create RM/RO users, facilities, requests, or demo portfolios. Use existing authorized
+administration and registration workflows afterward. Registration requires working verification
+SMTP; prefer a local SMTP sink for Docker testing. Do not enable real notification delivery as
+part of bootstrap.
+
+### Isolated bootstrap regression tests
+
+`InitialAdminBootstrapIntegrationTest` requires a disposable PostgreSQL database named
+`auth_bootstrap_test`, bound to a loopback port, initialized with `database/schema.sql`.
+Never point it at development data: tests delete records and add a temporary test constraint.
+Supply `AUTH_BOOTSTRAP_TEST_JDBC_URL` and `AUTH_BOOTSTRAP_TEST_DB_PASSWORD` privately, then run:
+
+```sh
+cd auth-service
+./mvnw -Dtest=InitialAdminBootstrapIntegrationTest test
+```
+
+The test refuses other database names/hosts and is skipped when its test URL is absent.

@@ -154,6 +154,43 @@ The original diagram is a historical reference. See the [current schema inventor
 
 Authorization is checked in the backend. Hiding a button in the frontend is **not** considered a security control.
 
+## Running with Docker (demo data seeded automatically)
+
+1. Make sure `.env` exists next to `compose.yaml` with `POSTGRES_PASSWORD`, `JWT_SECRET`,
+   `INTERNAL_SERVICE_KEY`, `GMAIL_USERNAME`, `GMAIL_APP_PASSWORD`,
+   `ACTIVITY_NOTIFICATION_RECIPIENT_KEY`, `LIMITGUARD_DEMO_PASSWORD`,
+   `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD`.
+2. Build and start everything:
+
+   ```sh
+   docker compose up --build -d
+   ```
+
+3. On the first start (empty database volume) everything is loaded automatically:
+   - **PostgreSQL** runs `database/schema.sql`, which creates the tables and loads the full
+     demo data: all banks and users (with their real passwords), Citi/GIB and other portfolios, credit requests (pending, reserved,
+     used, ...), decisions, exposure history, audit logs and notifications.
+   - **Profile pictures** come from the project's `uploads/` folder.
+   - **Auth and Credit seeders** then run as a safety net. They only add demo records that are
+     missing, so on this data set they change nothing.
+
+   Database init scripts run only on an empty volume. To reload the data, run
+   `docker compose down -v && docker compose up --build -d`.
+
+4. Open the app at <http://localhost:5180> (API Gateway: <http://localhost:8085>,
+   pgAdmin: <http://localhost:5050>) and sign in with your usual accounts and passwords.
+   Any demo account that the seeders had to create uses `LIMITGUARD_DEMO_PASSWORD`.
+
+Company logos load from Brandfetch: put your public Logo API client ID in `.env` as
+`VITE_BRANDFETCH_CLIENT_ID=...` and rebuild the frontend
+(`docker compose up --build -d frontend`). Without it, logos show initials.
+
+Check seeding with `docker compose logs auth-service credit-service`.
+
+## Deploying to AWS (Jenkins + ECR + EC2 + RDS)
+
+See [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) for the CI/CD pipeline (`Jenkinsfile`) and the AWS setup scripts in `deploy/aws/`.
+
 ## Running the project locally
 
 ### 1. Prepare dependencies and service configuration

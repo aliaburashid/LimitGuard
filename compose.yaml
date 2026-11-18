@@ -1,0 +1,411 @@
+services:
+
+  # ==========================================
+  # 1. POSTGRESQL DATABASE
+  # ==========================================
+
+  # PostgreSQL database for the Docker environment
+  postgres:
+    # Use the official PostgreSQL 17 image
+    image: postgres:17
+
+    # Give the container a recognizable name
+    container_name: limitguard-compose-postgres
+
+    # Configure the database created at startup
+    environment:
+      POSTGRES_DB: limitguard
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+    # Store database data in a separate Docker volume
+    volumes:
+      - limitguard_compose_postgres_data:/var/lib/postgresql/data
+
+      # Create the tables and load the full demo data (database/schema.sql).
+      # Runs only when the volume is empty; use "docker compose down -v" to reload it.
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+    # Check whether PostgreSQL is ready for connections
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d limitguard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    # Restart if the container stops unexpectedly
+    restart: unless-stopped
+
+
+  # ==========================================
+  # 2. APACHE KAFKA
+  # ==========================================
+
+  # Kafka message broker for communication between microservices
+  kafka:
+    # Use the official Apache Kafka image
+    image: apache/kafka:3.9.1
+
+    # Give the container a recognizable name
+    container_name: limitguard-compose-kafka
+
+    # Configure Kafka to run without ZooKeeper (KRaft mode)
+    environment:
+      # Unique identifier for this Kafka broker
+      KAFKA_NODE_ID: 1
+
+      # Kafka acts as both broker and controller
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      # Kafka listens for internal connections on port 9092
+      # Port 9093 is used for controller communication
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+
+      # Other Docker services connect using kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+
+      # Configure communication protocols
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Single-node Kafka controller configuration
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+
+      # Allow Kafka to operate with one broker
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      # Automatically create topics when requested
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+    # Store Kafka data in a separate Docker volume
+    volumes:
+      - limitguard_compose_kafka_data:/var/lib/kafka/data
+
+    # Restart Kafka if the container stops unexpectedly
+    restart: unless-stopped
+
+
+  # ==========================================
+  # 3. AUTH SERVICE
+  # ==========================================
+
+  # Handles user registration, login, and authentication
+  auth-service:
+    # Built from ./auth-service (docker compose up --build)
+    image: limitguard-auth:local
+    build: ./auth-service
+
+    # Give the container a recognizable name
+    container_name: limitguard-compose-auth
+
+    # Environment variables used by Spring Boot
+    environment:
+      # Connect to our isolated Docker PostgreSQL database
+      DB_URL: jdbc:postgresql://postgres:5432/limitguard
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+      # Demo data: on startup create Citi (ID 5), Gulf International Bank and
+      # their eight demo users if they are missing. Safe to run on every restart.
+      LIMITGUARD_SEED_DEMO_ENABLED: ${LIMITGUARD_SEED_DEMO_ENABLED:-true}
+      LIMITGUARD_SEED_DEMO_PROVISION_CITI: "true"
+      LIMITGUARD_DEMO_PASSWORD: ${LIMITGUARD_DEMO_PASSWORD:?Set LIMITGUARD_DEMO_PASSWORD in .env}
+
+      # Authentication settings
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+
+      # Shared secret for communication between services
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+
+      # Gmail SMTP configuration
+      GMAIL_USERNAME: ${GMAIL_USERNAME:?Set GMAIL_USERNAME in .env}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:?Set GMAIL_APP_PASSWORD in .env}
+
+      # Shared key for Activity Service notification recipients
+      ACTIVITY_NOTIFICATION_RECIPIENT_KEY: ${ACTIVITY_NOTIFICATION_RECIPIENT_KEY:?Set ACTIVITY_NOTIFICATION_RECIPIENT_KEY in .env}
+
+      # Explicit first-install opt-in. Remove credentials and recreate Auth after bootstrap.
+      AUTH_BOOTSTRAP_ENABLED: ${AUTH_BOOTSTRAP_ENABLED:-false}
+      AUTH_BOOTSTRAP_INSTITUTION_NAME: ${AUTH_BOOTSTRAP_INSTITUTION_NAME:-}
+      AUTH_BOOTSTRAP_ADMIN_FIRST_NAME: ${AUTH_BOOTSTRAP_ADMIN_FIRST_NAME:-}
+      AUTH_BOOTSTRAP_ADMIN_LAST_NAME: ${AUTH_BOOTSTRAP_ADMIN_LAST_NAME:-}
+      AUTH_BOOTSTRAP_ADMIN_EMAIL: ${AUTH_BOOTSTRAP_ADMIN_EMAIL:-}
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-}
+
+      # dev = development email settings, demo = enables the demo data seeder
+      SPRING_PROFILES_ACTIVE: dev,demo
+
+      # Store uploaded profile pictures inside the container
+      PROFILE_PICTURE_DIRECTORY: /app/uploads/profile-pictures
+
+    # Wait until PostgreSQL passes its health check
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # Healthy only after demo seeding has finished: the startup filter returns
+    # 503 until all startup runners succeed. The image has no curl, so bash's
+    # /dev/tcp sends a plain HTTP request to a public endpoint.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8081 &&
+          printf 'GET /api/financial-institutions/directory HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          head -n 1 <&3 | grep -q ' 200'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+    # Use the project's uploads folder, which holds the existing profile pictures
+    # referenced by the demo data. New uploads are saved there too.
+    volumes:
+      - ./uploads:/app/uploads/profile-pictures
+
+    # Restart if the service stops unexpectedly
+    restart: unless-stopped
+
+  # ==========================================
+  # 4. CREDIT SERVICE
+  # ==========================================
+
+  # Handles credit limits, requests, approvals, and counterparties
+  credit-service:
+    image: limitguard-credit:local
+    build: ./credit-service
+
+    container_name: limitguard-compose-credit
+
+    environment:
+      # Connect to the isolated Docker PostgreSQL database
+      DB_URL: jdbc:postgresql://postgres:5432/limitguard
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+      # Authentication settings
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+
+      # Shared secret for internal communication
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+
+      # Connect to Kafka inside Docker
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+      # ------------------------------------------
+      # ML SERVICE CONNECTION
+      # ------------------------------------------
+
+      # Connect to the Python FastAPI ML Service
+      ML_SERVICE_URL: http://ml-service:8000
+
+      # ------------------------------------------
+      # AUTH SERVICE CONNECTION
+      # ------------------------------------------
+
+      # Connect to Auth Service inside Docker
+      AUTH_SERVICE_URL: http://auth-service:8081
+
+      # ------------------------------------------
+      # DEMO DATA
+      # ------------------------------------------
+
+      # Seed the Citi portfolio (59 companies, 10 groups) and the GIB portfolio
+      # (6 companies, 13 credit requests) on startup. Existing rows are kept.
+      SPRING_PROFILES_ACTIVE: demo
+      LIMITGUARD_SEED_CITI_ENABLED: ${LIMITGUARD_SEED_DEMO_ENABLED:-true}
+      LIMITGUARD_SEED_GIB_ENABLED: ${LIMITGUARD_SEED_DEMO_ENABLED:-true}
+
+    # Credit seeding needs the banks and users that Auth creates,
+    # so wait until Auth reports healthy (seeding finished).
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      auth-service:
+        condition: service_healthy
+      ml-service:
+        condition: service_started
+
+    restart: unless-stopped
+
+  # ==========================================
+  # 5. ACTIVITY SERVICE
+  # ==========================================
+
+  # Handles activity events and email notifications
+  activity-service:
+    image: limitguard-activity:local
+    build: ./activity-service
+
+    container_name: limitguard-compose-activity
+
+    environment:
+      # Connect to the isolated Docker PostgreSQL database
+      DB_URL: jdbc:postgresql://postgres:5432/limitguard
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+      # Kafka configuration
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ACTIVITY_KAFKA_GROUP_ID: limitguard-activity-service
+
+      # Communication with Auth Service
+      AUTH_SERVICE_URL: http://auth-service:8081
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+
+      # Enable email event processing
+      ACTIVITY_EMAIL_CONSUMER_ENABLED: "true"
+      ACTIVITY_EMAIL_DELIVERY_ENABLED: "true"
+      ACTIVITY_EMAIL_KAFKA_GROUP_ID: limitguard-activity-email-v1
+
+      # Gmail SMTP configuration
+      GMAIL_USERNAME: ${GMAIL_USERNAME:?Set GMAIL_USERNAME in .env}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:?Set GMAIL_APP_PASSWORD in .env}
+
+      # Notification recipient authentication
+      ACTIVITY_NOTIFICATION_RECIPIENT_KEY: ${ACTIVITY_NOTIFICATION_RECIPIENT_KEY:?Set ACTIVITY_NOTIFICATION_RECIPIENT_KEY in .env}
+
+      # SMTP security
+      ACTIVITY_SMTP_AUTH: "true"
+      ACTIVITY_SMTP_STARTTLS: "true"
+
+    # Wait for PostgreSQL and start after Kafka and Auth Service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      auth-service:
+        condition: service_started
+
+    restart: unless-stopped
+
+  # ==========================================
+  # 6. API GATEWAY
+  # ==========================================
+
+  # Routes frontend requests to backend services
+  api-gateway:
+    image: limitguard-gateway:local
+    build: ./api-gateway
+
+    container_name: limitguard-compose-gateway
+
+    environment:
+      # Spring Boot server port
+      SERVER_PORT: 8080
+
+      # Backend service addresses inside Docker
+      AUTH_SERVICE_URL: http://auth-service:8081
+      CREDIT_SERVICE_URL: http://credit-service:8082
+      ACTIVITY_SERVICE_URL: http://activity-service:8083
+
+    # Expose API Gateway to your Mac
+    ports:
+      - "8085:8080"
+
+    # Start after the backend services
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      credit-service:
+        condition: service_started
+      activity-service:
+        condition: service_started
+
+    restart: unless-stopped
+
+  # ==========================================
+  # 7. ML SERVICE
+  # ==========================================
+
+  # Handles machine learning predictions using FastAPI
+  ml-service:
+    # Use the Docker image we built earlier
+    image: limitguard-ml:local
+    build: ./ml-service
+
+    # Give the container a recognizable name
+    container_name: limitguard-compose-ml
+
+    # FastAPI listens on port 8000 inside Docker
+    # Other Docker services can access it using http://ml-service:8000
+    expose:
+      - "8000"
+
+    # Restart if the service stops unexpectedly
+    restart: unless-stopped
+
+
+  # ==========================================
+  # 8. REACT FRONTEND
+  # ==========================================
+
+  # Serves the React application using Nginx
+  frontend:
+    # Use the Docker image we built earlier
+    image: limitguard-frontend:local
+    build:
+      context: ./frontend
+      args:
+        # Public Brandfetch Logo API client ID, baked in at build time
+        VITE_BRANDFETCH_CLIENT_ID: ${VITE_BRANDFETCH_CLIENT_ID:-}
+
+    # Give the container a recognizable name
+    container_name: limitguard-compose-frontend
+
+    # Map port 5180 on our Mac to port 80 inside Docker
+    ports:
+      - "5180:80"
+
+    # Start after API Gateway
+    depends_on:
+      - api-gateway
+
+    # Restart if the container stops unexpectedly
+    restart: unless-stopped
+
+  # ==========================================
+  # 9. PGADMIN 4
+  # ==========================================
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: limitguard-compose-pgadmin
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?Set PGADMIN_DEFAULT_EMAIL in .env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?Set PGADMIN_DEFAULT_PASSWORD in .env}
+
+    ports:
+      - "5050:80"
+
+    volumes:
+      - limitguard_compose_pgadmin_data:/var/lib/pgadmin
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+
+# ==========================================
+# PERSISTENT DOCKER VOLUMES
+# ==========================================
+
+# Docker manages these volumes independently
+# of your existing local PostgreSQL database
+volumes:
+  limitguard_compose_postgres_data:
+  limitguard_compose_kafka_data:
+  limitguard_compose_pgadmin_data:
