@@ -14,8 +14,8 @@ WHERE NOT EXISTS (
 CREATE TEMP TABLE citi_seed_catalog ON COMMIT DROP AS
 SELECT c.id AS company_id, g.id AS group_id, s.name,
        coalesce(s.approved, CASE s.name
-           WHEN 'North Quay Services W.L.L. (fictional)' THEN 10000
-           WHEN 'Orchid Quay Trading W.L.L. (fictional)' THEN 50000 END) AS capacity,
+           WHEN 'Delta Air Lines, Inc.' THEN 10000
+           WHEN 'United Parcel Service, Inc.' THEN 50000 END) AS capacity,
        coalesce(p.roa, n.roa) AS roa, coalesce(p.margin, n.margin) AS margin,
        coalesce(p.turnover, n.turnover) AS turnover,
        coalesce(p.debt_to_capital, n.debt_to_capital) AS debt_to_capital,

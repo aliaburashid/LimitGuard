@@ -351,6 +351,22 @@ function groupServer() {
       .getByRole("navigation", { name: "Main navigation" })
       .getByRole("button", { name: "Counterparties", exact: true })
       .click();
+    if (role === "RISK_OFFICER") {
+      await page
+        .getByRole("group", { name: "Counterparty views" })
+        .getByRole("button", { name: "Corporate Groups", exact: true })
+        .click();
+      await page
+        .getByRole("button", {
+          name: "View members of Gulf Investment Group",
+          exact: true,
+        })
+        .click();
+      await expect(
+        page.getByRole("heading", { name: "Member companies", exact: true }),
+      ).toBeVisible();
+      return { page, context };
+    }
     await page.getByRole("button", { name: "Facilities & Groups" }).click();
     await expect(
       page.getByRole("heading", { name: "Credit exposure", exact: true }),
@@ -385,6 +401,11 @@ for (const role of ["ADMIN", "RISK_OFFICER"] as const) {
     const server = groupServer();
     const { page, context } = await server.login(browser, role);
     expect(server.writes).toHaveLength(0);
+    if (role === "RISK_OFFICER")
+      await page
+        .getByRole("group", { name: "Counterparty views" })
+        .getByRole("button", { name: "Corporate Groups", exact: true })
+        .click();
     await page
       .getByRole("button", { name: "Create corporate group", exact: true })
       .click();
@@ -394,9 +415,17 @@ for (const role of ["ADMIN", "RISK_OFFICER"] as const) {
     await page
       .getByRole("button", { name: "Confirm create corporate group" })
       .click();
-    await expect(
-      page.getByLabel("Corporate group", { exact: true }),
-    ).toHaveValue("12");
+    if (role === "RISK_OFFICER")
+      await page
+        .getByRole("button", {
+          name: "View members of Presentation Ventures",
+          exact: true,
+        })
+        .click();
+    else
+      await expect(
+        page.getByLabel("Corporate group", { exact: true }),
+      ).toHaveValue("12");
     await page
       .getByRole("button", { name: "Add company", exact: true })
       .click();
@@ -408,22 +437,49 @@ for (const role of ["ADMIN", "RISK_OFFICER"] as const) {
     await page.getByLabel("Existing company").selectOption("8");
     await page.getByRole("button", { name: "Confirm add company" }).click();
     await expect(
-      page
-        .getByRole("table")
-        .getByText("Unassigned Technology", { exact: true }),
+      role === "RISK_OFFICER"
+        ? page.getByRole("heading", {
+            name: "Unassigned Technology",
+            exact: true,
+          })
+        : page
+            .getByRole("table")
+            .getByText("Unassigned Technology", { exact: true }),
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Set shared limit", exact: true })
-      .click();
-    await page.getByLabel("Shared limit amount (BHD)").fill("800000");
-    await page
-      .getByRole("button", { name: "Confirm set shared limit" })
-      .click();
-    await expect(
-      page
-        .locator(".corporate-management .group-card")
-        .getByText("BD 800,000", { exact: true }),
-    ).toHaveCount(2);
+    if (role === "RISK_OFFICER") {
+      await page
+        .getByRole("button", { name: "View Credit Facilities", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Create shared limit", exact: true })
+        .click();
+      await page
+        .getByRole("dialog")
+        .getByLabel("Approved limit (BHD)")
+        .fill("800000");
+      await page
+        .getByRole("button", {
+          name: "Confirm create shared limit",
+          exact: true,
+        })
+        .click();
+      await expect(
+        page.getByRole("region", { name: "Corporate Group Shared Limits" }),
+      ).toContainText("BD 800,000");
+    } else {
+      await page
+        .getByRole("button", { name: "Set shared limit", exact: true })
+        .click();
+      await page.getByLabel("Shared limit amount (BHD)").fill("800000");
+      await page
+        .getByRole("button", { name: "Confirm set shared limit" })
+        .click();
+      await expect(
+        page
+          .locator(".corporate-management .group-card")
+          .getByText("BD 800,000", { exact: true }),
+      ).toHaveCount(2);
+    }
     expect(server.writes.map((x) => ({ path: x.path, body: x.body }))).toEqual([
       { path: "/corporate-groups", body: { name: "Presentation Ventures" } },
       {
@@ -445,12 +501,22 @@ test("Risk Officer sees every member's individual capacity and backend rejects a
 }) => {
   const server = groupServer();
   const { page, context } = await server.login(browser, "RISK_OFFICER");
-  const row = page
-    .getByRole("row")
-    .filter({ hasText: "Falcon Freight Services" });
-  await expect(row).toContainText("BD 1,000,000");
-  await expect(row).toContainText("BD 300,000");
-  await expect(row).toContainText("BD 700,000");
+  await expect(
+    page.getByRole("heading", { name: "Falcon Freight Services", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "View Credit Facilities", exact: true })
+    .click();
+  await page
+    .getByRole("region", { name: "Individual Credit Facilities" })
+    .getByLabel("Counterparty", { exact: true })
+    .selectOption("5");
+  const individual = page.getByRole("region", {
+    name: "Individual Credit Facilities",
+  });
+  await expect(individual).toContainText("BD 1,000,000");
+  await expect(individual).toContainText("BD 300,000");
+  await expect(individual).toContainText("BD 700,000");
   await page.setViewportSize({ width: 390, height: 844 });
   await expect
     .poll(() =>
@@ -461,7 +527,10 @@ test("Risk Officer sees every member's individual capacity and backend rejects a
   await page
     .getByRole("button", { name: "Update shared limit", exact: true })
     .click();
-  await page.getByLabel("Shared limit amount (BHD)").fill("1000000");
+  await page
+    .getByRole("dialog")
+    .getByLabel("Approved limit (BHD)")
+    .fill("1000000");
   await page
     .getByRole("button", { name: "Confirm update shared limit" })
     .click();
@@ -473,7 +542,7 @@ test("Risk Officer sees every member's individual capacity and backend rejects a
   await context.close();
 });
 
-test("Admin resolves a facility in the UI without requesting forbidden RO history", async ({
+test("Admin sees directory capacity and can verify facilities without requesting RO history", async ({
   browser,
 }) => {
   const server = groupServer();
@@ -481,7 +550,7 @@ test("Admin resolves a facility in the UI without requesting forbidden RO histor
   const row = page
     .getByRole("row")
     .filter({ hasText: "Falcon Freight Services" });
-  await expect(row).toContainText("Individual facility details are not loaded");
+  await expect(row).toContainText("BD 700,000");
   await page
     .getByRole("button", { name: "Find facility for Falcon Freight Services" })
     .click();
@@ -508,6 +577,10 @@ test("Duplicate group errors stay visible without fake success or extra records"
 }) => {
   const server = groupServer();
   const { page, context } = await server.login(browser, "RISK_OFFICER");
+  await page
+    .getByRole("group", { name: "Counterparty views" })
+    .getByRole("button", { name: "Corporate Groups", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Create corporate group", exact: true })
     .click();

@@ -1,3 +1,5 @@
+import { CompanyLogo } from "../components/CompanyLogo";
+import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
 import { ArrowRight } from "lucide-react";
 import {
   ExposureHeadroomBar,
@@ -56,7 +58,13 @@ export function CreditRequestDetails({
           <strong>{preciseMoney(Number(request.amount))}</strong>
           <Badge status={request.status} />
         </div>
-        <p className="credit-request-company">{request.counterpartyName}</p>
+        <p className="credit-request-company company-brand">
+          <CompanyLogo
+            name={request.counterpartyName}
+            domain={counterpartyLogoDomain(request.counterpartyName)}
+          />
+          <span>{request.counterpartyName}</span>
+        </p>
 
         <section className="credit-request-section">
           <h3>Request information</h3>

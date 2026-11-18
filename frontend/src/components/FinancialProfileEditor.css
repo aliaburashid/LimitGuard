@@ -1,0 +1,17 @@
+.financial-profile-editor .financial-profile-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+  border: 0;
+  padding: 0;
+  margin: 18px 0;
+  min-width: 0;
+}
+.financial-profile-editor .field {
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .financial-profile-editor .financial-profile-form {
+    grid-template-columns: 1fr;
+  }
+}
