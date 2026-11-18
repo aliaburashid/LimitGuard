@@ -1,3 +1,4 @@
+import { FinancialProfileEditor } from "../components/FinancialProfileEditor";
 import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
 import { CompanyLogo } from "../components/CompanyLogo";
 import { ArrowUpRight, Plus, Search } from "lucide-react";
@@ -37,6 +38,10 @@ export function Counterparties({
   const [data, setData] = useState<Page<Counterparty> | null>(null);
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<Counterparty | null>(null);
+  const [financialCompany, setFinancialCompany] = useState<Counterparty | null>(
+    null,
+  );
+  const [financialSuccess, setFinancialSuccess] = useState("");
   const [facilityCompany, setFacilityCompany] = useState<Counterparty | null>(
     null,
   );
@@ -174,7 +179,10 @@ export function Counterparties({
                         <td>
                           <button
                             className="table-link company-brand"
-                            onClick={() => setDetail(c)}
+                            onClick={() => {
+                              setFinancialSuccess("");
+                              setDetail(c);
+                            }}
                           >
                             <CompanyLogo
                               name={c.name}
@@ -192,7 +200,10 @@ export function Counterparties({
                         <td>
                           <button
                             className="icon-button"
-                            onClick={() => setDetail(c)}
+                            onClick={() => {
+                              setFinancialSuccess("");
+                              setDetail(c);
+                            }}
                             aria-label={`View ${c.name}`}
                           >
                             <ArrowUpRight size={18} />
@@ -228,6 +239,7 @@ export function Counterparties({
           }
           onClose={() => setDetail(null)}
         >
+          {financialSuccess && <p role="status">{financialSuccess}</p>}
           <div className="detail-meta">
             <Badge status={detail.status} />
             <span className="mono">CP-{detail.id}</span>
@@ -251,6 +263,15 @@ export function Counterparties({
           </div>
           {user?.role === "RISK_OFFICER" && (
             <div className="modal-actions">
+              <button
+                onClick={() => {
+                  setFinancialSuccess("");
+                  setFinancialCompany(detail);
+                  setDetail(null);
+                }}
+              >
+                Edit Financial Profile
+              </button>
               <button
                 onClick={() => {
                   setDetail(null);
@@ -289,6 +310,20 @@ export function Counterparties({
             </div>
           )}
         </Modal>
+      )}
+      {financialCompany && (
+        <FinancialProfileEditor
+          companyId={financialCompany.id}
+          close={() => {
+            setDetail(financialCompany);
+            setFinancialCompany(null);
+          }}
+          saved={() => {
+            setFinancialSuccess("Financial profile saved successfully.");
+            setDetail(financialCompany);
+            setFinancialCompany(null);
+          }}
+        />
       )}
     </>
   );

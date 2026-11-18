@@ -62,6 +62,7 @@ async function login(
         financialInstitution: { id: 3, name: "Test Institution" },
         profilePicturePath: null,
       };
+    else if (path.endsWith("/corporate-groups")) response = paged([]);
     else if (path.endsWith("/counterparties")) response = paged([counterparty]);
     else if (path.endsWith("/counterparties/12")) response = counterparty;
     else if (path.endsWith("/credit-requests/42")) response = requestState;
@@ -146,13 +147,16 @@ async function login(
       name:
         role === "RELATIONSHIP_MANAGER"
           ? "Portfolio Overview"
-          : "Credit oversight",
+          : role === "RISK_OFFICER"
+            ? "Credit Portfolio Overview"
+            : "Credit oversight",
     }),
   ).toBeVisible();
 }
-test("company and institution branding uses initials only", async ({
+test("failed company logos and unverified institutions retain initials", async ({
   page,
 }) => {
+  await page.route("https://cdn.brandfetch.io/**", (route) => route.abort());
   const brandingRequests: string[] = [];
   page.on("request", (request) => {
     if (new URL(request.url()).pathname.includes("/branding/"))
@@ -213,7 +217,9 @@ test("Risk Officer can review real contracts and confirm an approval", async ({
   await page.getByRole("button", { name: "Assess risk", exact: true }).click();
   await expect(page.getByRole("main")).toContainText("CR-000042");
   await expect(page.getByRole("main")).toContainText(counterparty.name);
-  await expect(page.getByRole("main")).toContainText("Test Institution");
+  await expect(page.locator(".institution-identity")).toContainText(
+    "Test Institution",
+  );
   await expect(page.getByRole("main")).toContainText("Test Requester");
   await expect(page.getByRole("main")).toContainText("BHD 750,000.00");
   await page.getByRole("button", { name: "Approve & reserve" }).click();
@@ -225,7 +231,9 @@ test("Risk Officer can review real contracts and confirm an approval", async ({
   );
   await page.getByRole("button", { name: "Confirm approve request" }).click();
   await requestPromise;
-  await expect(page.getByRole("status")).toContainText("Operation completed");
+  await expect(page.locator(".decision-outcome")).toContainText(
+    "Operation completed",
+  );
 });
 test("RM sees request creation and no risk or admin actions", async ({
   page,
@@ -1369,10 +1377,14 @@ test("Risk Officer legacy facility links open scoped exposure and management con
 }) => {
   await login(page, "RISK_OFFICER", undefined, "/limits-and-exposure/8");
   await expect(page).toHaveURL(/\/counterparties\?tab=facilities&facilityId=8/);
-  await expect(page.getByLabel("Credit-limit ID")).toHaveValue("8");
+  await expect(
+    page
+      .getByRole("region", { name: "Individual Credit Facilities" })
+      .getByLabel("Counterparty", { exact: true }),
+  ).toHaveValue("12");
   await expect(page.getByText("BD 750,000", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Update limit", exact: true }),
+    page.getByRole("button", { name: "Update credit facility", exact: true }),
   ).toBeVisible();
 });
 
@@ -1388,9 +1400,14 @@ test("Exposure lookup submits with keyboard and uses backend values", async ({
   await page
     .getByRole("button", { name: "Counterparties", exact: true })
     .click();
-  await page.getByRole("button", { name: "Facilities & Groups" }).click();
-  await page.getByLabel("Credit-limit ID").fill("8");
-  await page.getByLabel("Credit-limit ID").press("Enter");
+  await page
+    .getByRole("group", { name: "Counterparty views" })
+    .getByRole("button", { name: "Credit Facilities", exact: true })
+    .click();
+  await page
+    .getByRole("region", { name: "Individual Credit Facilities" })
+    .getByLabel("Counterparty", { exact: true })
+    .selectOption("12");
   await expect(page.getByText("62.5% utilized")).toBeVisible();
   await expect(page.getByText("BD 750,000", { exact: true })).toBeVisible();
   await page.screenshot({
@@ -2480,7 +2497,7 @@ test("A competing Risk Officer decision displays the backend conflict", async ({
     "no longer pending approval",
   );
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.locator(".decision-outcome")).toHaveCount(0);
 });
 
 test("Incoming decision toasts remain above an open risk review dialog", async ({
@@ -2517,4 +2534,171 @@ test("Incoming decision toasts remain above an open risk review dialog", async (
     );
   });
   expect(unoccluded).toBe(true);
+});
+
+test("RO company details save all seven financial-profile inputs", async ({
+  page,
+}) => {
+  let saved: Record<string, string> | null = null;
+  await login(page, "RISK_OFFICER", async () => {
+    await page.route("**/api/counterparties/12/financial-profile", (route) => {
+      if (route.request().method() === "PUT")
+        saved = route.request().postDataJSON();
+      return route.fulfill({
+        json: {
+          counterpartyId: 12,
+          counterpartyName: counterparty.name,
+          returnOnAssets: 8,
+          profitMargin: 12,
+          fixedAssetTurnover: 1.5,
+          debtToTotalCapitalPercent: 40,
+          interestCoverage: 3,
+          totalDebtToEbitda: 2,
+          financialYearEnd: "2025-12-31",
+          ...saved,
+        },
+      });
+    });
+  });
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Counterparties", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: `View ${counterparty.name}`, exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Edit name", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Edit Financial Profile", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByLabel("Return on assets (%)", { exact: true }),
+  ).toHaveValue("8");
+  await dialog.getByLabel("Profit margin (%)", { exact: true }).fill("13.5");
+  await dialog
+    .getByRole("button", { name: "Save financial profile", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Financial profile saved successfully.",
+  );
+  expect(saved).toEqual({
+    returnOnAssets: "8",
+    profitMargin: "13.5",
+    fixedAssetTurnover: "1.5",
+    debtToTotalCapitalPercent: "40",
+    interestCoverage: "3",
+    totalDebtToEbitda: "2",
+    financialYearEnd: "2025-12-31",
+  });
+  await expect(
+    page.getByRole("button", { name: "Edit name", exact: true }),
+  ).toBeVisible();
+});
+
+test("normal RO financial-profile editor preserves shared-record denials without saving", async ({
+  page,
+}) => {
+  await login(page, "RISK_OFFICER", async () => {
+    await page.route("**/api/counterparties/12/financial-profile", (route) =>
+      route.fulfill(
+        route.request().method() === "PUT"
+          ? { status: 403 }
+          : {
+              json: {
+                returnOnAssets: 8,
+                profitMargin: 12,
+                fixedAssetTurnover: 1.5,
+                debtToTotalCapitalPercent: 40,
+                interestCoverage: 3,
+                totalDebtToEbitda: 2,
+                financialYearEnd: "2025-12-31",
+              },
+            },
+      ),
+    );
+  });
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Counterparties", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: `View ${counterparty.name}`, exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Edit Financial Profile", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("button", { name: "Save financial profile", exact: true })
+    .click();
+  await expect(dialog).toContainText(
+    "Shared counterparty details cannot be changed by one institution.",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Save financial profile", exact: true }),
+  ).toBeDisabled();
+});
+
+test("RO minimal overview and aligned approval table remain responsive", async ({
+  page,
+}) => {
+  await login(page, "RISK_OFFICER");
+  await expect(
+    page.getByRole("heading", { name: "Credit Portfolio Overview" }),
+  ).toBeVisible();
+  await expect(page.locator(".overview-kpi")).toHaveCount(3);
+  await expect(
+    page.getByText("Recent credit activity", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Portfolio Watch", { exact: true })).toHaveCount(
+    0,
+  );
+  await page.screenshot({
+    path: "/private/tmp/lg5173-overview.png",
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: "Open approval queue", exact: true })
+    .click();
+  const card = page.locator(".request-queue-panel");
+  await expect(
+    card.getByRole("button", { name: "Assess risk", exact: true }),
+  ).toBeVisible();
+  for (const width of [1440, 1280, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const geometry = await card.evaluate((element) => {
+      const table = element.querySelector("table")!;
+      const footer = element.querySelector(".pager")!;
+      const bounds = element.getBoundingClientRect();
+      const footerBounds = footer.getBoundingClientRect();
+      const headers = [...table.querySelectorAll("thead th")];
+      const cells = [...table.querySelectorAll("tbody tr:first-child td")];
+      const scroll = element.querySelector(".risk-queue-scroll")!;
+      return {
+        aligned: headers.every(
+          (header, index) =>
+            Math.abs(
+              header.getBoundingClientRect().x -
+                cells[index].getBoundingClientRect().x,
+            ) < 1,
+        ),
+        contained:
+          footerBounds.x >= bounds.x && footerBounds.right <= bounds.right + 1,
+        pageOverflow:
+          document.documentElement.scrollWidth > window.innerWidth + 1,
+        localOverflow: scroll.scrollWidth > scroll.clientWidth + 1,
+      };
+    });
+    expect(geometry.aligned).toBe(true);
+    expect(geometry.contained).toBe(true);
+    expect(geometry.pageOverflow).toBe(false);
+    expect(geometry.localOverflow).toBe(width < 1000);
+    await page.screenshot({
+      path: `/private/tmp/lg5173-queue-${width}.png`,
+      fullPage: true,
+    });
+  }
 });

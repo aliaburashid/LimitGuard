@@ -1,3 +1,4 @@
+import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
 import { CompanyLogo } from "../components/CompanyLogo";
 import { ChevronRight } from "lucide-react";
 import { Badge } from "../components/ui";
@@ -59,7 +60,10 @@ export function PersonalRequestTable({
               </td>
               <td role="cell" className="rm-request-company-name">
                 <div className="company-brand">
-                  <CompanyLogo name={request.counterpartyName} />
+                  <CompanyLogo
+                    name={request.counterpartyName}
+                    domain={counterpartyLogoDomain(request.counterpartyName)}
+                  />
                   <span>{request.counterpartyName}</span>
                 </div>
               </td>

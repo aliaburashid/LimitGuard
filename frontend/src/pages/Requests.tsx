@@ -1,3 +1,4 @@
+import { counterpartyLogoDomain } from "../config/verifiedLogoDomains";
 import { CompanyLogo } from "../components/CompanyLogo";
 import { ArrowUpRight, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useId, useState } from "react";
@@ -44,7 +45,7 @@ export function Requests({
   const [lastResult, setLastResult] = useState("");
   const [creating, setCreating] = useState(false);
   const [status, setStatus] = useState(
-    approval ? "PENDING_APPROVAL" : initialStatus,
+    approval ? (initialStatus === "ALL" ? "" : "PENDING_APPROVAL") : initialStatus,
   );
   const [query, setQuery] = useState("");
   const [createdFrom, setCreatedFrom] = useState("");
@@ -436,8 +437,28 @@ export function Requests({
         ) : personal ? (
           <PersonalRequestTable requests={rows} openRequest={openRequest} />
         ) : (
-          <div className="table-scroll">
-            <table>
+          <div
+            className="table-scroll risk-queue-scroll"
+            tabIndex={0}
+            role="region"
+            aria-label="Credit request table"
+          >
+            <table className="risk-request-table">
+              <colgroup>
+                {[
+                  "reference",
+                  "company",
+                  "group",
+                  "capacity",
+                  "requester",
+                  "amount",
+                  "status",
+                  "created",
+                  "action",
+                ].map((column) => (
+                  <col key={column} className={`queue-col-${column}`} />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
                   <th>Request</th>
@@ -448,7 +469,7 @@ export function Requests({
                   <th>Amount</th>
                   <th>Status</th>
                   <th>Created</th>
-                  <th />
+                  <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -464,7 +485,10 @@ export function Requests({
                     </td>
                     <td>
                       <div className="company-brand">
-                        <CompanyLogo name={r.counterpartyName} />
+                        <CompanyLogo
+                          name={r.counterpartyName}
+                          domain={counterpartyLogoDomain(r.counterpartyName)}
+                        />
                         <div>
                           <strong>{r.counterpartyName}</strong>
                           <div className="small">
@@ -480,20 +504,30 @@ export function Requests({
                     </td>
                     <td className="numeric">
                       {capacities[r.creditLimitId] ? (
-                        <>
-                          {money(
-                            Number(capacities[r.creditLimitId].usedAmount) +
-                              Number(
-                                capacities[r.creditLimitId].reservedAmount,
-                              ),
-                          )}
-                          <div className="small">
-                            {money(
-                              capacities[r.creditLimitId].availableHeadroom,
-                            )}{" "}
-                            available
-                          </div>
-                        </>
+                        <div
+                          className="queue-capacity"
+                          aria-label="Individual facility exposure and headroom"
+                        >
+                          <span>
+                            <small>Exposure</small>
+                            <strong>
+                              {money(
+                                Number(capacities[r.creditLimitId].usedAmount) +
+                                  Number(
+                                    capacities[r.creditLimitId].reservedAmount,
+                                  ),
+                              )}
+                            </strong>
+                          </span>
+                          <span>
+                            <small>Headroom</small>
+                            <strong>
+                              {money(
+                                capacities[r.creditLimitId].availableHeadroom,
+                              )}
+                            </strong>
+                          </span>
+                        </div>
                       ) : (
                         "—"
                       )}
