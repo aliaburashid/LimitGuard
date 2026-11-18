@@ -1,7 +1,7 @@
 // LimitGuard CI/CD (Jenkins on a Mac): test -> build 6 images -> push to Amazon ECR -> deploy to EC2.
 //
 // Files used from the repository:
-//   Jenkinsfile, deploy/aws/compose.prod.yaml (the production stack), database/schema.sql (tables + data)
+//   Jenkinsfile, compose.prod.yaml (the production stack), database/schema.sql (tables + data)
 //
 // Jenkins configuration (Manage Jenkins):
 //   Plugins:      suggested plugins + "SSH Agent"
@@ -78,17 +78,17 @@ pipeline {
             }
         }
 
-    stage(‘Test’) {
+        stage('Test') {
             when { expression { params.RUN_TESTS } }
             // Fake values so the services can start inside the tests.
             // (On a laptop these came from the IDE; the real secrets stay in limitguard-env.)
             environment {
-                JWT_SECRET                          = ‘ci-test-only-jwt-signing-key-0123456789abcdef’
-                INTERNAL_SERVICE_KEY                = ‘ci-test-only-internal-service-key’
-                ACTIVITY_NOTIFICATION_RECIPIENT_KEY = ‘ci-test-only-activity-key’
-                GMAIL_USERNAME                      = ‘ci-test@example.com’
-                GMAIL_APP_PASSWORD                  = ‘ci-test-only’
-                DB_PASSWORD                         = ‘ci-test-only’
+                JWT_SECRET                          = 'ci-test-only-jwt-signing-key-0123456789abcdef'
+                INTERNAL_SERVICE_KEY                = 'ci-test-only-internal-service-key'
+                ACTIVITY_NOTIFICATION_RECIPIENT_KEY = 'ci-test-only-activity-key'
+                GMAIL_USERNAME                      = 'ci-test@example.com'
+                GMAIL_APP_PASSWORD                  = 'ci-test-only'
+                DB_PASSWORD                         = 'ci-test-only'
             }
             stages {
                 stage('Auth Service') {
