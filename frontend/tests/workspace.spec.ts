@@ -146,7 +146,9 @@ async function login(
       name:
         role === "RELATIONSHIP_MANAGER"
           ? "Portfolio Overview"
-          : "Credit oversight",
+          : role === "RISK_OFFICER"
+            ? "Credit Portfolio Overview"
+            : "Credit oversight",
     }),
   ).toBeVisible();
 }
@@ -2517,4 +2519,145 @@ test("Incoming decision toasts remain above an open risk review dialog", async (
     );
   });
   expect(unoccluded).toBe(true);
+});
+
+test("existing RO layout adds only a financial-profile editor and saves all seven inputs", async ({
+  page,
+}) => {
+  let saved: Record<string, string> | null = null;
+  await login(page, "RISK_OFFICER", async () => {
+    await page.route("**/api/counterparties/12/financial-profile", (route) => {
+      if (route.request().method() === "PUT")
+        saved = route.request().postDataJSON();
+      return route.fulfill({
+        json: {
+          counterpartyId: 12,
+          counterpartyName: counterparty.name,
+          returnOnAssets: 8,
+          profitMargin: 12,
+          fixedAssetTurnover: 1.5,
+          debtToTotalCapitalPercent: 40,
+          interestCoverage: 3,
+          totalDebtToEbitda: 2,
+          financialYearEnd: "2025-12-31",
+          ...saved,
+        },
+      });
+    });
+  });
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Counterparties", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: `View ${counterparty.name}`, exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Edit name", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Edit Financial Profile", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByLabel("Return on assets (%)", { exact: true }),
+  ).toHaveValue("8");
+  await dialog.getByLabel("Profit margin (%)", { exact: true }).fill("13.5");
+  await dialog
+    .getByRole("button", { name: "Save financial profile", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Financial profile saved successfully.",
+  );
+  expect(saved).toEqual({
+    returnOnAssets: "8",
+    profitMargin: "13.5",
+    fixedAssetTurnover: "1.5",
+    debtToTotalCapitalPercent: "40",
+    interestCoverage: "3",
+    totalDebtToEbitda: "2",
+    financialYearEnd: "2025-12-31",
+  });
+  await expect(
+    page.getByRole("button", { name: "Edit name", exact: true }),
+  ).toBeVisible();
+});
+
+test("normal RO financial-profile editor preserves shared-record denials without saving", async ({
+  page,
+}) => {
+  await login(page, "RISK_OFFICER", async () => {
+    await page.route("**/api/counterparties/12/financial-profile", (route) =>
+      route.fulfill(
+        route.request().method() === "PUT"
+          ? { status: 403 }
+          : {
+              json: {
+                returnOnAssets: 8,
+                profitMargin: 12,
+                fixedAssetTurnover: 1.5,
+                debtToTotalCapitalPercent: 40,
+                interestCoverage: 3,
+                totalDebtToEbitda: 2,
+                financialYearEnd: "2025-12-31",
+              },
+            },
+      ),
+    );
+  });
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Counterparties", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: `View ${counterparty.name}`, exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Edit Financial Profile", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("button", { name: "Save financial profile", exact: true })
+    .click();
+  await expect(dialog).toContainText(
+    "Shared counterparty details cannot be changed by one institution.",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Save financial profile", exact: true }),
+  ).toBeDisabled();
+});
+
+test("RO minimal overview and aligned approval table remain responsive", async ({ page }) => {
+  await login(page, "RISK_OFFICER");
+  await expect(page.getByRole("heading", { name: "Credit Portfolio Overview" })).toBeVisible();
+  await expect(page.locator(".overview-kpi")).toHaveCount(3);
+  await expect(page.getByText("Recent credit activity", { exact: true })).toBeVisible();
+  await expect(page.getByText("Portfolio Watch", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: "/private/tmp/lg5173-overview.png", fullPage: true });
+  await page.getByRole("button", { name: "Open approval queue", exact: true }).click();
+  const card = page.locator(".request-queue-panel");
+  await expect(card.getByRole("button", { name: "Assess risk", exact: true })).toBeVisible();
+  for (const width of [1440, 1280, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const geometry = await card.evaluate(element => {
+      const table = element.querySelector("table")!;
+      const footer = element.querySelector(".pager")!;
+      const bounds = element.getBoundingClientRect();
+      const footerBounds = footer.getBoundingClientRect();
+      const headers = [...table.querySelectorAll("thead th")];
+      const cells = [...table.querySelectorAll("tbody tr:first-child td")];
+      const scroll = element.querySelector(".risk-queue-scroll")!;
+      return {
+        aligned: headers.every((header, index) => Math.abs(header.getBoundingClientRect().x - cells[index].getBoundingClientRect().x) < 1),
+        contained: footerBounds.x >= bounds.x && footerBounds.right <= bounds.right + 1,
+        pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+        localOverflow: scroll.scrollWidth > scroll.clientWidth + 1,
+      };
+    });
+    expect(geometry.aligned).toBe(true);
+    expect(geometry.contained).toBe(true);
+    expect(geometry.pageOverflow).toBe(false);
+    expect(geometry.localOverflow).toBe(width < 1000);
+    await page.screenshot({ path: `/private/tmp/lg5173-queue-${width}.png`, fullPage: true });
+  }
 });

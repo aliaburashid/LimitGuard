@@ -46,6 +46,7 @@ import { useRelationshipPortfolio } from "./hooks/useRelationshipPortfolio";
 import "./styles/relationship-workspace.css";
 import "./styles/workspace-dark.css";
 import "./styles/workspace-controls.css";
+import "./styles/risk-workspace.css";
 const workspaceThemeKey = "limitguard.workspace.theme";
 
 const RiskAnalytics = lazy(() =>
@@ -346,7 +347,7 @@ function WorkspaceApp() {
         : "dashboard";
   return (
     <div
-      className={`app ${collapsed ? "collapsed" : ""}${relationshipManager ? " rm-workspace" : ""}`}
+      className={`app ${collapsed ? "collapsed" : ""}${user?.role === "RISK_OFFICER" ? " rm-workspace ro-workspace" : relationshipManager ? " rm-workspace" : ""}`}
       data-theme={darkMode ? "dark" : "light"}
     >
       <a href="#main" className="skip-link">
