@@ -54,3 +54,13 @@ __pycache__/
 .env.*
 # allows example configuration files to be committed
 !.env.example
+
+# Private keys
+*.pem
+
+# Environment secrets
+limitguard.env
+
+# Local backups
+*.bak
+backups/

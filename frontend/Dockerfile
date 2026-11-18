@@ -16,6 +16,12 @@ RUN npm ci
 # Copy the frontend source code and configuration
 COPY . .
 
+# Vite bakes VITE_* values into the bundle at build time, so the public
+# Brandfetch Logo API client ID must be passed as a build argument
+# (compose.yaml reads it from the root .env). Without it, logos fall back to initials.
+ARG VITE_BRANDFETCH_CLIENT_ID=""
+ENV VITE_BRANDFETCH_CLIENT_ID=$VITE_BRANDFETCH_CLIENT_ID
+
 # Build the production React application
 # Vite generates static files inside /app/dist
 RUN npm run build

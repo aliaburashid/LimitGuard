@@ -22,7 +22,8 @@ services:
     volumes:
       - limitguard_compose_postgres_data:/var/lib/postgresql/data
 
-      # Initialize the database using our existing schema.sql
+      # Create the tables and load the full demo data (database/schema.sql).
+      # Runs only when the volume is empty; use "docker compose down -v" to reload it.
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
 
     # Check whether PostgreSQL is ready for connections
@@ -93,8 +94,9 @@ services:
 
   # Handles user registration, login, and authentication
   auth-service:
-    # Use the Docker image we built earlier
+    # Built from ./auth-service (docker compose up --build)
     image: limitguard-auth:local
+    build: ./auth-service
 
     # Give the container a recognizable name
     container_name: limitguard-compose-auth
@@ -105,6 +107,12 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/limitguard
       DB_USERNAME: postgres
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+      # Demo data: on startup create Citi (ID 5), Gulf International Bank and
+      # their eight demo users if they are missing. Safe to run on every restart.
+      LIMITGUARD_SEED_DEMO_ENABLED: ${LIMITGUARD_SEED_DEMO_ENABLED:-true}
+      LIMITGUARD_SEED_DEMO_PROVISION_CITI: "true"
+      LIMITGUARD_DEMO_PASSWORD: ${LIMITGUARD_DEMO_PASSWORD:?Set LIMITGUARD_DEMO_PASSWORD in .env}
 
       # Authentication settings
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
@@ -120,8 +128,16 @@ services:
       # Shared key for Activity Service notification recipients
       ACTIVITY_NOTIFICATION_RECIPIENT_KEY: ${ACTIVITY_NOTIFICATION_RECIPIENT_KEY:?Set ACTIVITY_NOTIFICATION_RECIPIENT_KEY in .env}
 
-      # Enable development email configuration
-      SPRING_PROFILES_ACTIVE: dev
+      # Explicit first-install opt-in. Remove credentials and recreate Auth after bootstrap.
+      AUTH_BOOTSTRAP_ENABLED: ${AUTH_BOOTSTRAP_ENABLED:-false}
+      AUTH_BOOTSTRAP_INSTITUTION_NAME: ${AUTH_BOOTSTRAP_INSTITUTION_NAME:-}
+      AUTH_BOOTSTRAP_ADMIN_FIRST_NAME: ${AUTH_BOOTSTRAP_ADMIN_FIRST_NAME:-}
+      AUTH_BOOTSTRAP_ADMIN_LAST_NAME: ${AUTH_BOOTSTRAP_ADMIN_LAST_NAME:-}
+      AUTH_BOOTSTRAP_ADMIN_EMAIL: ${AUTH_BOOTSTRAP_ADMIN_EMAIL:-}
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-}
+
+      # dev = development email settings, demo = enables the demo data seeder
+      SPRING_PROFILES_ACTIVE: dev,demo
 
       # Store uploaded profile pictures inside the container
       PROFILE_PICTURE_DIRECTORY: /app/uploads/profile-pictures
@@ -131,9 +147,27 @@ services:
       postgres:
         condition: service_healthy
 
-    # Store uploaded profile pictures in a persistent volume
+    # Healthy only after demo seeding has finished: the startup filter returns
+    # 503 until all startup runners succeed. The image has no curl, so bash's
+    # /dev/tcp sends a plain HTTP request to a public endpoint.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8081 &&
+          printf 'GET /api/financial-institutions/directory HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          head -n 1 <&3 | grep -q ' 200'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+    # Use the project's uploads folder, which holds the existing profile pictures
+    # referenced by the demo data. New uploads are saved there too.
     volumes:
-      - limitguard_compose_profile_pictures:/app/uploads/profile-pictures
+      - ./uploads:/app/uploads/profile-pictures
 
     # Restart if the service stops unexpectedly
     restart: unless-stopped
@@ -145,6 +179,7 @@ services:
   # Handles credit limits, requests, approvals, and counterparties
   credit-service:
     image: limitguard-credit:local
+    build: ./credit-service
 
     container_name: limitguard-compose-credit
 
@@ -178,13 +213,25 @@ services:
       # Connect to Auth Service inside Docker
       AUTH_SERVICE_URL: http://auth-service:8081
 
+      # ------------------------------------------
+      # DEMO DATA
+      # ------------------------------------------
+
+      # Seed the Citi portfolio (59 companies, 10 groups) and the GIB portfolio
+      # (6 companies, 13 credit requests) on startup. Existing rows are kept.
+      SPRING_PROFILES_ACTIVE: demo
+      LIMITGUARD_SEED_CITI_ENABLED: ${LIMITGUARD_SEED_DEMO_ENABLED:-true}
+      LIMITGUARD_SEED_GIB_ENABLED: ${LIMITGUARD_SEED_DEMO_ENABLED:-true}
+
+    # Credit seeding needs the banks and users that Auth creates,
+    # so wait until Auth reports healthy (seeding finished).
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_started
       auth-service:
-        condition: service_started
+        condition: service_healthy
       ml-service:
         condition: service_started
 
@@ -197,6 +244,7 @@ services:
   # Handles activity events and email notifications
   activity-service:
     image: limitguard-activity:local
+    build: ./activity-service
 
     container_name: limitguard-compose-activity
 
@@ -248,6 +296,7 @@ services:
   # Routes frontend requests to backend services
   api-gateway:
     image: limitguard-gateway:local
+    build: ./api-gateway
 
     container_name: limitguard-compose-gateway
 
@@ -262,13 +311,16 @@ services:
 
     # Expose API Gateway to your Mac
     ports:
-      - "8080:8080"
+      - "8085:8080"
 
     # Start after the backend services
     depends_on:
-      - auth-service
-      - credit-service
-      - activity-service
+      auth-service:
+        condition: service_healthy
+      credit-service:
+        condition: service_started
+      activity-service:
+        condition: service_started
 
     restart: unless-stopped
 
@@ -280,6 +332,7 @@ services:
   ml-service:
     # Use the Docker image we built earlier
     image: limitguard-ml:local
+    build: ./ml-service
 
     # Give the container a recognizable name
     container_name: limitguard-compose-ml
@@ -301,6 +354,11 @@ services:
   frontend:
     # Use the Docker image we built earlier
     image: limitguard-frontend:local
+    build:
+      context: ./frontend
+      args:
+        # Public Brandfetch Logo API client ID, baked in at build time
+        VITE_BRANDFETCH_CLIENT_ID: ${VITE_BRANDFETCH_CLIENT_ID:-}
 
     # Give the container a recognizable name
     container_name: limitguard-compose-frontend
@@ -316,6 +374,30 @@ services:
     # Restart if the container stops unexpectedly
     restart: unless-stopped
 
+  # ==========================================
+  # 9. PGADMIN 4
+  # ==========================================
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: limitguard-compose-pgadmin
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?Set PGADMIN_DEFAULT_EMAIL in .env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?Set PGADMIN_DEFAULT_PASSWORD in .env}
+
+    ports:
+      - "5050:80"
+
+    volumes:
+      - limitguard_compose_pgadmin_data:/var/lib/pgadmin
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    restart: unless-stopped
+
 
 # ==========================================
 # PERSISTENT DOCKER VOLUMES
@@ -326,4 +408,4 @@ services:
 volumes:
   limitguard_compose_postgres_data:
   limitguard_compose_kafka_data:
-  limitguard_compose_profile_pictures:
+  limitguard_compose_pgadmin_data:
