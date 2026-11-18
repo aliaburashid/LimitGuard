@@ -98,18 +98,18 @@ class CreditExposureSnapshotIntegrationTest {
         var history = snapshots.findHistory(1L, 7L);
         assertEquals(1, history.size());
         var first = history.get(0);
-        assertFalse(first.capturedAt().isBefore(beforeCapture));
-        assertFalse(first.capturedAt().isAfter(Instant.now().plusSeconds(1)));
-        assertEquals(new BigDecimal("300000.75"), first.limitAmount());
-        assertEquals(new BigDecimal("30000.35"), first.usedAmount());
-        assertEquals(new BigDecimal("3000.50"), first.reservedAmount());
+        assertFalse(first.getCapturedAt().isBefore(beforeCapture));
+        assertFalse(first.getCapturedAt().isAfter(Instant.now().plusSeconds(1)));
+        assertEquals(new BigDecimal("300000.75"), first.getLimitAmount());
+        assertEquals(new BigDecimal("30000.35"), first.getUsedAmount());
+        assertEquals(new BigDecimal("3000.50"), first.getReservedAmount());
 
-        assertEquals(new BigDecimal("400000.00"), snapshots.findHistory(1L, 8L).get(0).limitAmount());
-        assertEquals(new BigDecimal("900000.00"), snapshots.findHistory(2L, 7L).get(0).limitAmount());
+        assertEquals(new BigDecimal("400000.00"), snapshots.findHistory(1L, 8L).get(0).getLimitAmount());
+        assertEquals(new BigDecimal("900000.00"), snapshots.findHistory(2L, 7L).get(0).getLimitAmount());
         assertTrue(snapshots.findHistory(2L, 8L).isEmpty());
-        assertEquals(new BigDecimal("300000.75"), snapshots.findHistory(1L, 7L, true).get(1).limitAmount());
-        assertEquals(new BigDecimal("400000.00"), snapshots.findHistory(1L, 8L, true).get(1).limitAmount());
-        assertEquals(new BigDecimal("900000.00"), snapshots.findHistory(2L, 7L, true).get(1).limitAmount());
+        assertEquals(new BigDecimal("300000.75"), snapshots.findHistory(1L, 7L, true).get(1).getLimitAmount());
+        assertEquals(new BigDecimal("400000.00"), snapshots.findHistory(1L, 8L, true).get(1).getLimitAmount());
+        assertEquals(new BigDecimal("900000.00"), snapshots.findHistory(2L, 7L, true).get(1).getLimitAmount());
         assertTrue(snapshots.findHistory(2L, 8L, true).isEmpty());
 
         jdbc.update("UPDATE credit_limits SET used_amount = 11111 WHERE id = 11");
@@ -136,9 +136,9 @@ class CreditExposureSnapshotIntegrationTest {
         assertEquals(3, snapshots.capture(false));
         var history = snapshots.findHistory(1L, 7L);
         assertEquals(2, history.size());
-        assertEquals(new BigDecimal("90000.00"), history.get(0).limitAmount());
-        assertEquals(new BigDecimal("300000.75"), history.get(1).limitAmount());
-        assertTrue(Duration.between(history.get(0).capturedAt(), history.get(1).capturedAt()).toDays() >= 3);
+        assertEquals(new BigDecimal("90000.00"), history.get(0).getLimitAmount());
+        assertEquals(new BigDecimal("300000.75"), history.get(1).getLimitAmount());
+        assertTrue(Duration.between(history.get(0).getCapturedAt(), history.get(1).getCapturedAt()).toDays() >= 3);
     }
 
     @Test
@@ -153,10 +153,10 @@ class CreditExposureSnapshotIntegrationTest {
         assertEquals(4, snapshots.capture(false));
         var history = snapshots.findHistory(1L, 7L);
         assertEquals(2, history.size());
-        assertTrue(history.get(0).synthetic());
-        assertFalse(history.get(1).synthetic());
-        assertFalse(snapshots.findHistory(1L, 8L).get(0).synthetic());
-        assertFalse(snapshots.findHistory(2L, 7L).get(0).synthetic());
+        assertTrue(history.get(0).isSynthetic());
+        assertFalse(history.get(1).isSynthetic());
+        assertFalse(snapshots.findHistory(1L, 8L).get(0).isSynthetic());
+        assertFalse(snapshots.findHistory(2L, 7L).get(0).isSynthetic());
     }
 
     @Test
@@ -201,10 +201,10 @@ class CreditExposureSnapshotIntegrationTest {
                 assertEquals(4, assertDoesNotThrow(() -> capture.get(10, TimeUnit.SECONDS)));
                 var trend = worker.submit(() -> snapshots.findHistory(1L, 7L, true));
                 var live = assertDoesNotThrow(() -> trend.get(10, TimeUnit.SECONDS)).get(1);
-                assertTrue(live.current());
-                assertEquals(new BigDecimal("30000.35"), live.usedAmount());
+                assertTrue(live.isCurrent());
+                assertEquals(new BigDecimal("30000.35"), live.getUsedAmount());
             });
-            assertEquals(new BigDecimal("70000.25"), snapshots.findHistory(1L, 7L, true).get(1).usedAmount());
+            assertEquals(new BigDecimal("70000.25"), snapshots.findHistory(1L, 7L, true).get(1).getUsedAmount());
         } finally {
             worker.shutdownNow();
         }

@@ -128,6 +128,7 @@ class ProfilePictureTest {
 
     @Test
     void rejectsInvalidFilesWithoutReplacingThePicture() throws Exception {
+        assertThat(upload(new byte[0], "image/png").statusCode()).isEqualTo(400);
         assertThat(upload(new byte[]{1, 2, 3}, "image/png").statusCode()).isEqualTo(400);
         assertThat(upload(png(), "image/jpeg").statusCode()).isEqualTo(400);
         assertThat(upload(png(), "text/plain").statusCode()).isEqualTo(400);
@@ -159,6 +160,16 @@ class ProfilePictureTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Profile picture cannot exceed 5 MB"));
         assertThat(storedPath()).isEqualTo(uploadedPath);
+    }
+
+    @Test
+    void rejectsStoredPathsOutsideUploads() throws Exception {
+        Path outsideUploads = checkout.resolve(UUID.randomUUID() + ".png");
+        Files.write(outsideUploads, png());
+        user.setProfilePicturePath("uploads/../" + outsideUploads.getFileName());
+        users.save(user);
+
+        assertThat(retrieve().statusCode()).isEqualTo(404);
     }
 
     private HttpResponse<byte[]> upload(byte[] image, String type) throws Exception {

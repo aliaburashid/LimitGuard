@@ -1,6 +1,9 @@
 package com.example.authservice.security;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.authorization.AuthorizationDecision;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -16,6 +19,9 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import jakarta.servlet.DispatcherType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpMethod;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 // @Bean tells Spring to create and manage this object
 
@@ -35,6 +41,9 @@ public class SecurityConfiguration {
     // This filter protects public endpoints from too many requests
     @Autowired
     private RateLimitFilter rateLimitFilter;
+
+    @Value("${activity-service.notification-recipient-key}")
+    private String activityRecipientKey;
 
     // Creates the password encoder that will hash users passwords
     @Bean
@@ -115,6 +124,11 @@ public class SecurityConfiguration {
                                 "/api/auth/users/password-reset-code/resend",
                                 "/api/auth/users/password-reset-code/verify").permitAll()
 
+                        // This lookup is for Activity's background worker and requires its own key.
+                        .requestMatchers(HttpMethod.GET, "/api/auth/internal/notification-recipient")
+                        .access((authentication, context) -> new AuthorizationDecision(
+                                hasActivityRecipientKey(context.getRequest().getHeader("X-Activity-Service-Key"))))
+
                         // Every other endpoint requires the user to be authenticated
                         .anyRequest().authenticated()
                 )
@@ -134,6 +148,14 @@ public class SecurityConfiguration {
 
         // Builds and returns the security configuration
         return http.build();
+    }
+
+    private boolean hasActivityRecipientKey(String providedKey) {
+
+        // Deny the lookup when the key has not been configured.
+        return !activityRecipientKey.isBlank() && providedKey != null
+                && MessageDigest.isEqual(activityRecipientKey.getBytes(StandardCharsets.UTF_8),
+                        providedKey.getBytes(StandardCharsets.UTF_8));
     }
 
     // Spring Boot normally registers @Component filters automatically

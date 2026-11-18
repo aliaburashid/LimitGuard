@@ -47,18 +47,35 @@ describe("production API boundary", () => {
     expect(fetch.mock.calls[0][1].body).toBe(data);
     expect(fetch.mock.calls[0][1].headers["Content-Type"]).toBeUndefined();
   });
-  it("invalidates expired sessions", async () => {
+  it("preserves the session after a Credit 503 and clears it after a 401", async () => {
     setToken("test-token");
     const dispatchEvent = vi.fn();
     vi.stubGlobal("window", { dispatchEvent });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response("{}", { status: 401 })),
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("{}", { status: 503 }))
+      .mockResolvedValueOnce(new Response("[]"))
+      .mockResolvedValueOnce(new Response("{}", { status: 401 }))
+      .mockResolvedValueOnce(new Response("[]"));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(api("/credit-requests/my")).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(dispatchEvent).not.toHaveBeenCalled();
+    await expect(api("/credit-requests/my")).resolves.toEqual([]);
+    expect(fetch.mock.calls[1][1].headers.Authorization).toBe(
+      "Bearer test-token",
     );
-    await expect(api("/auth/users/profile")).rejects.toThrow(
+
+    await expect(api("/credit-requests/my")).rejects.toThrow(
       "session has expired",
     );
-    expect(dispatchEvent).toHaveBeenCalledOnce();
+    expect(dispatchEvent).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ type: "session-expired" }),
+    );
+    await api("/credit-requests/my");
+    expect(fetch.mock.calls[3][1].headers.Authorization).toBeUndefined();
   });
   it("shows safe domain errors and suppresses implementation failures", () => {
     expect(safeError(400, "Insufficient available headroom")).toBe(

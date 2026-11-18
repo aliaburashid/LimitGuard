@@ -54,12 +54,12 @@ class GroupExposureBreakdownTest {
                 ));
 
         var exposure = service.getGroupExposureBreakdown(4L);
-        assertEquals(new BigDecimal("1000"), exposure.limitAmount());
-        assertEquals(new BigDecimal("375"), exposure.usedAmount());
-        assertEquals(new BigDecimal("200"), exposure.reservedAmount());
-        assertEquals(new BigDecimal("425"), exposure.availableHeadroom());
-        assertEquals(List.of(50L, 51L), exposure.facilities().stream().map(facility -> facility.getCreditLimitId()).toList());
-        assertEquals(new BigDecimal("575"), exposure.facilities().get(0).getAvailableHeadroom());
+        assertEquals(new BigDecimal("1000"), exposure.getLimitAmount());
+        assertEquals(new BigDecimal("375"), exposure.getUsedAmount());
+        assertEquals(new BigDecimal("200"), exposure.getReservedAmount());
+        assertEquals(new BigDecimal("425"), exposure.getAvailableHeadroom());
+        assertEquals(List.of(50L, 51L), exposure.getFacilities().stream().map(facility -> facility.getCreditLimitId()).toList());
+        assertEquals(new BigDecimal("575"), exposure.getFacilities().get(0).getAvailableHeadroom());
     }
 
     @Test

@@ -45,13 +45,13 @@ LOCK TABLE public.approval_decisions, public.audit_logs, public.corporate_group_
     public.password_reset_codes, public.user_tokens, public.users IN SHARE ROW EXCLUSIVE MODE;
 \endif
 
-\ir fixtures.sql
+\ir ../../credit-service/src/main/resources/config/citi-panel/fixtures.sql
 \ir scope.sql
 \ir fingerprints.sql
 \ir schema-guard.sql
 
 \if :approve_write
-\ir seed.sql
+\ir ../../credit-service/src/main/resources/config/citi-panel/seed.sql
 COMMIT;
 \echo 'Citi panel reset committed. Protected rows were checked in the same transaction.'
 \else

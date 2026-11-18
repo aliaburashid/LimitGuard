@@ -383,11 +383,11 @@ public class CreditRequestConcurrencyIntegrationTest {
         assertEquals(history.size() + 1, trend.size());
         assertEquals(history, trend.subList(0, history.size()));
         var live = trend.get(trend.size() - 1);
-        assertTrue(live.current());
-        assertFalse(live.synthetic());
-        assertMoneyEquals(approved, live.limitAmount());
-        assertMoneyEquals(used, live.usedAmount());
-        assertMoneyEquals(reserved, live.reservedAmount());
+        assertTrue(live.isCurrent());
+        assertFalse(live.isSynthetic());
+        assertMoneyEquals(approved, live.getLimitAmount());
+        assertMoneyEquals(used, live.getUsedAmount());
+        assertMoneyEquals(reserved, live.getReservedAmount());
     }
 
     // Creates a credit request directly in the database.
