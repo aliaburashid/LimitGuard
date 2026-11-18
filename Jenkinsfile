@@ -78,8 +78,18 @@ pipeline {
             }
         }
 
-        stage('Test') {
+    stage(‘Test’) {
             when { expression { params.RUN_TESTS } }
+            // Fake values so the services can start inside the tests.
+            // (On a laptop these came from the IDE; the real secrets stay in limitguard-env.)
+            environment {
+                JWT_SECRET                          = ‘ci-test-only-jwt-signing-key-0123456789abcdef’
+                INTERNAL_SERVICE_KEY                = ‘ci-test-only-internal-service-key’
+                ACTIVITY_NOTIFICATION_RECIPIENT_KEY = ‘ci-test-only-activity-key’
+                GMAIL_USERNAME                      = ‘ci-test@example.com’
+                GMAIL_APP_PASSWORD                  = ‘ci-test-only’
+                DB_PASSWORD                         = ‘ci-test-only’
+            }
             stages {
                 stage('Auth Service') {
                     steps { dir('auth-service') { sh 'bash ./mvnw -B -ntp test' } }
